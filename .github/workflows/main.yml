@@ -15,13 +15,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "24.6.0"
+          node-version: '24.6.0'
 
       - name: Install dependencies
         run: npm install
+        shell: bash
 
       - name: Build Electron App
         run: npm run build
+        shell: bash
 
       - name: Get version from package.json
         id: pkg
@@ -30,12 +32,12 @@ jobs:
           VERSION=$(node -e "console.log(require('./package.json').version)")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-
       - name: Generate tag
         id: tag
+        shell: bash
         run: |
           SHORT_SHA=${GITHUB_SHA::5}
-          TAG="v${{ env.VERSION }}-${SHORT_SHA}"
+          TAG="v${VERSION}-${SHORT_SHA}"
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "Generated tag: $TAG"
 
@@ -49,4 +51,3 @@ jobs:
           files: out/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
