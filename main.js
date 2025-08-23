@@ -191,8 +191,9 @@ function setAutoLaunch() {
 function scheduleShutdown() {
     const storedTimes = store.get('shutdownTimes', []);
     const currentTimes = [...storedTimes];
-    const shutdownPlans = []; // 存储详细的关机计划信息
+    const shutdownPlans = [];
 
+    // 清除之前的定时器
     shutdownTimers.forEach(clearTimeout);
     shutdownTimers.length = 0;
 
@@ -205,8 +206,11 @@ function scheduleShutdown() {
 
         const [_, hour, minute] = timeParts;
         const now = new Date();
-        const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
-        if (targetDate <= now) targetDate.setDate(targetDate.getDate() + 1);
+        let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+
+        if (targetDate <= now) {
+            targetDate.setDate(targetDate.getDate() + 1);
+        }
 
         const delay = targetDate - now;
         if (delay <= 0) {
@@ -215,21 +219,73 @@ function scheduleShutdown() {
             return;
         }
 
-        const timerId = setTimeout(() => {
+        // 递归执行关机逻辑，支持多次推迟
+        function scheduleShutdownWithWarning(currentTargetDate) {
+            const now = new Date();
+            const remainingDelay = currentTargetDate - now;
+            
+            if (remainingDelay <= 0) {
+                // 时间已到，执行关机
+                executeShutdown(timeStr, currentTargetDate);
+                return;
+            }
+
+            const warningDelay = remainingDelay - 15 * 1000;
+            
+            if (warningDelay > 0) {
+                const warningTimerId = setTimeout(async () => {
+                    const { response } = await dialog.showMessageBox({
+                        type: 'warning',
+                        title: '即将关机提醒',
+                        message: `系统将在15秒后自动关机。\n计划关机时间: ${currentTargetDate.toLocaleString()}`,
+                        buttons: ['关闭提示', '延长30秒', '延长60秒'],
+                        cancelId: 0
+                    });
+
+                    switch (response) {
+                        case 0: // 关闭提示，不干预
+                            log.info(`用户选择关闭提示，继续执行关机流程`);
+                            // 继续执行关机
+                            setTimeout(() => executeShutdown(timeStr, currentTargetDate), 15 * 1000);
+                            break;
+                        case 1: // 延长30秒
+                            const newTarget30 = new Date(currentTargetDate.getTime() + 30 * 1000);
+                            log.info(`用户选择延长30秒关机，新关机时间: ${newTarget30.toLocaleString()}`);
+                            scheduleShutdownWithWarning(newTarget30); // 递归调用
+                            break;
+                        case 2: // 延长60秒
+                            const newTarget60 = new Date(currentTargetDate.getTime() + 60 * 1000);
+                            log.info(`用户选择延长60秒关机，新关机时间: ${newTarget60.toLocaleString()}`);
+                            scheduleShutdownWithWarning(newTarget60); // 递归调用
+                            break;
+                    }
+                }, warningDelay);
+
+                shutdownTimers.push(warningTimerId);
+            } else {
+                // 如果已经小于15秒，直接设置关机
+                const finalTimerId = setTimeout(() => executeShutdown(timeStr, currentTargetDate), remainingDelay);
+                shutdownTimers.push(finalTimerId);
+            }
+        }
+
+        // 执行实际关机
+        function executeShutdown(originalTime, targetDate) {
             exec('shutdown /s /t 0', (error) => {
                 if (error) {
-                    log.error(`关机失败 (${timeStr}): ${error.message}`);
+                    log.error(`关机失败 (${originalTime}): ${error.message}`);
                     dialog.showMessageBox({
                         title: '关机失败',
                         message: `计划于 ${targetDate.toLocaleString()} 的关机任务失败！\n错误详情: ${error.message}`
                     });
                 } else {
-                    log.info(`成功触发关机 (${timeStr})`);
+                    log.info(`成功触发关机 (${originalTime})，关机时间: ${targetDate.toLocaleString()}`);
                 }
             });
-        }, delay);
+        }
 
-        shutdownTimers.push(timerId);
+        // 启动带提醒的关机调度
+        scheduleShutdownWithWarning(targetDate);
 
         // 记录详细计划信息
         shutdownPlans.push({
@@ -246,7 +302,7 @@ function scheduleShutdown() {
 
     // 显示关机计划提示
     if (shutdownPlans.length > 0) {
-        const messageContent = shutdownPlans.map((plan, index) => 
+        const messageContent = shutdownPlans.map((plan, index) =>
             `• 计划 ${index + 1}:\n` +
             `  原始时间: ${plan.originalTime}\n` +
             `  实际触发时间: ${plan.formattedDate}\n` +
@@ -260,7 +316,6 @@ function scheduleShutdown() {
             cancelId: 0
         });
 
-        // 批量日志记录
         log.info(`成功设置 ${shutdownPlans.length} 个关机计划，具体如下：`);
         shutdownPlans.forEach((plan, index) => {
             log.info(`[${index + 1}] 原始时间: ${plan.originalTime} | 触发时间: ${plan.formattedDate} | 剩余 ${Math.ceil(plan.delay / 1000)} 秒`);
