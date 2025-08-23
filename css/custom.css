@@ -1,0 +1,84 @@
+/* custom.css */
+body {
+    background: linear-gradient(to right, #e6e6e6, #ffffff);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+
+.container {
+    max-width: 800px;
+}
+
+.card {
+    border: none;
+    background-color: #ffffff;
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+
+.btn {
+    margin: 5px;
+    border-radius: 20px;
+    padding: 10px 20px;
+    font-weight: bold;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+.btn-info {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+}
+
+.btn-dark {
+    background-color: #343a40;
+    border-color: #343a40;
+}
+
+.form-check-label {
+    font-weight: bold;
+}
+
+.footer-text {
+    color: #6c757d;
+    margin-top: 20px;
+}
+
+.time-item {
+    transition: all 0.2s ease-in-out;
+}
+
+.time-item:hover {
+    background-color: #f1f3f5;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.delete-btn {
+    transition: color 0.2s;
+}
+
+.delete-btn:hover {
+    color: #c0392b;
+    transform: scale(1.1);
+}

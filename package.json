@@ -1,0 +1,66 @@
+{
+  "name": "electron_class_schedule",
+  "version": "1.1.2",
+  "description": "电子课表",
+  "main": "main.js",
+  "author": "Enigfrank",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64 --publish never",
+    "rebuild": "electron-rebuild"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.4.2",
+    "@electron/rebuild": "^4.0.1",
+    "electron": "^37.3.0",
+    "electron-builder": "^26.0.12",
+    "electron-updater": "^6.6.2",
+    "node-gyp": "^11.3.0"
+  },
+  "dependencies": {
+    "electron-disable-minimize": "^2.1.0",
+    "electron-log": "^5.4.2",
+    "electron-prompt": "^1.7.0",
+    "electron-store": "^8.1.0",
+    "windows-shortcuts": "^0.1.6"
+  },
+  "build": {
+  "asar": false,
+  "appId": "com.enigfrank.electronclassschedule", 
+  "productName": "电子课表",
+  "copyright": "Copyright © 2025 Enigfrank",
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "./image/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  },
+  "files": [
+    "css/**/*",
+    "font/**/*",
+    "image/**/*",
+    "js/**/*",
+    "l1/**/*",
+    "logs",
+    "node_modules/**/*",
+    "GUI.html",
+    "index.html",
+    "loading.html",
+    "main.js",
+    "shutdownManager.html"
+  ],
+  "directories": {  
+    "output": "out"
+  }
+}
+}
