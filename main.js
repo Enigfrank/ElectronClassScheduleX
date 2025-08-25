@@ -29,7 +29,7 @@ if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
 }
 
 // 统一使用 app.getAppPath() 作为日志目录基础路径
-const baseLogsPath = path.join(app.getAppPath(), 'logs');
+const baseLogsPath = path.join(app.getAppPath(), '..', 'app.asar.unpacked', 'logs');
 
 // 确保日志目录存在
 if (!fs.existsSync(baseLogsPath)) {
@@ -537,6 +537,10 @@ ipcMain.on('openShutdownManager', async (event) => {
     });
     
 });
+
+
+
+
 
 // 集中管理IPC事件
 const ipcEvents = {
