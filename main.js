@@ -620,7 +620,7 @@ const ipcEvents = {
             type: 'info',
             buttons: ['OK'],
             title: 'Let us across hell and reach to heaven！',
-            message: '当前版本: ${process.app.getVersion()} '+ '\n' + '\n' + '作者: Enigfrank' + '\n',
+            message: '当前版本: ${process.app.getVersion()} '+ '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Tripoccca/ElectronClassSchedule_Personal',
         });
     },
     'quitApp': () => {
