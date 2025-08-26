@@ -3,6 +3,8 @@
 > 此项目对原版 `ECS V1` 进行了细微更新 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
 
 
+[![Build and Release Electron App](https://github.com/Tripoccca/ElectronClassSchedule_Personal/actions/workflows/main.yml/badge.svg)](https://github.com/Tripoccca/ElectronClassSchedule_Personal/actions/workflows/main.yml)
+
 
 ## 相较于原版新增内容
 
