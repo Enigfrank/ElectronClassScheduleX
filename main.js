@@ -620,7 +620,7 @@ const ipcEvents = {
             type: 'info',
             buttons: ['OK'],
             title: 'Let us across hell and reach to heaven！',
-            message: '当前版本: ${process.app.getVersion()} '+ '\n' + '\n' + '作者: EnderWolf  二开: Enigfrank' + '\n' + '课程配置请在根目录中的js文件夹中的scheduleConfig.js文件进行修改',
+            message: '当前版本: ${process.app.getVersion()} '+ '\n' + '\n' + '作者: Enigfrank' + '\n',
         });
     },
     'quitApp': () => {
