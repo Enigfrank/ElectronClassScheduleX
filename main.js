@@ -79,11 +79,11 @@ app.on('web-contents-created', (event, contents) => {
 function cleanupOldLogs() {
     const logsPath = path.join(app.getAppPath(), 'logs');  // 保持一致
     if (!fs.existsSync(logsPath)) return;
-    
+
     const files = fs.readdirSync(logsPath);
     const now = Date.now();
     const maxAge = 7 * 24 * 60 * 60 * 1000; // 7天
-    
+
     files.forEach(file => {
         if (file.endsWith('.log')) {
             const filePath = path.join(logsPath, file);
@@ -106,14 +106,14 @@ app.whenReady().then(() => {
 
 // 获取资源路径（兼容开发和打包）
 const getAssetPath = (...paths) => {
-  // 无论是否打包，都基于当前文件目录（main.js 所在目录）计算路径
-  const fullPath = path.join(__dirname, ...paths);
-  
-  // 增加路径检查日志（方便调试）
-  if (!fs.existsSync(fullPath)) {
-    log.error(`资源不存在: ${fullPath}`);
-  }
-  return fullPath;
+    // 无论是否打包，都基于当前文件目录（main.js 所在目录）计算路径
+    const fullPath = path.join(__dirname, ...paths);
+
+    // 增加路径检查日志（方便调试）
+    if (!fs.existsSync(fullPath)) {
+        log.error(`资源不存在: ${fullPath}`);
+    }
+    return fullPath;
 };
 
 
@@ -223,7 +223,7 @@ function scheduleShutdown() {
         function scheduleShutdownWithWarning(currentTargetDate) {
             const now = new Date();
             const remainingDelay = currentTargetDate - now;
-            
+
             if (remainingDelay <= 0) {
                 // 时间已到，执行关机
                 executeShutdown(timeStr, currentTargetDate);
@@ -231,7 +231,7 @@ function scheduleShutdown() {
             }
 
             const warningDelay = remainingDelay - 15 * 1000;
-            
+
             if (warningDelay > 0) {
                 const warningTimerId = setTimeout(async () => {
                     const { response } = await dialog.showMessageBox({
@@ -385,7 +385,7 @@ function showGUIWindow() {
     } else {
         testGUIWindow = new BrowserWindow({
             width: 1280,
-            height: 850, // 增加高度以容纳更多内容
+            height: 900, // 增加高度以容纳更多内容
             title: '课表配置界面',
             webPreferences: {
                 nodeIntegration: true,
@@ -535,7 +535,7 @@ ipcMain.on('openShutdownManager', async (event) => {
         const times = store.get('shutdownTimes', []);
         shutdownManagerWindow.webContents.send('shutdownTimesUpdated', times);
     });
-    
+
 });
 
 
@@ -545,11 +545,11 @@ ipcMain.on('openShutdownManager', async (event) => {
 // 集中管理IPC事件
 const ipcEvents = {
     'getWeekIndex': () => {
-    const trayIconPath = getAssetPath('image', 'icon.png');
-    tray = new Tray(trayIconPath);
-    tray.setToolTip('电子课表');
-    tray.on('click', trayClicked);
-    updateTrayMenu();
+        const trayIconPath = getAssetPath('image', 'icon.png');
+        tray = new Tray(trayIconPath);
+        tray.setToolTip('电子课表');
+        tray.on('click', trayClicked);
+        updateTrayMenu();
     },
     'setWeekIndex': (e, index) => {
         win.webContents.send('setWeekIndex', index);
@@ -602,17 +602,43 @@ const ipcEvents = {
     },
     'resetSettings': () => {
         dialog.showMessageBox({
-            title: 'Reset',
+            title: '重置设置',
             message: '请选择重置内容',
-            buttons: ['isFirstRun | 会自动重启', 'other'],
+            buttons: ['恢复初始设置', '其他操作'],
         }).then((data) => {
-            if (data.response === 0) { 
-                store.set('isFirstRun', true); 
-                app.relaunch(); 
-                app.exit(0); 
-            } else if (data.response === 1) { 
-                dialog.showMessageBox(win, { title: '啊哦!', message: `不要乱点!!!` }); 
+            if (data.response === 0) {
+                store.set('isFirstRun', true);
+                app.relaunch();
+                app.exit(0);
+            } else if (data.response === 1) {
+                // 创建恶作剧窗口
+                let amtls = new BrowserWindow({
+                    width: 800,
+                    height: 680,
+                    frame: false,
+                    alwaysOnTop: true,
+                    modal: true,
+                    webPreferences: {
+                        nodeIntegration: true,
+                        contextIsolation: false
+                    }
+                });
+
+                amtls.loadFile('amtls.html');
+
+                // 3秒后自动关闭窗口
+                setTimeout(() => {
+                    if (amtls && !amtls.isDestroyed()) {
+                        amtls.close();
+                    }
+                }, 5000);
+
+                amtls.on('closed', () => {
+                    amtls = null;
+                });
             }
+        }).catch((error) => {
+            console.error('重置设置时出错:', error);
         });
     },
     'showMoreInfo': () => {
@@ -620,7 +646,7 @@ const ipcEvents = {
             type: 'info',
             buttons: ['OK'],
             title: 'Let us across hell and reach to heaven！',
-            message: '当前版本: ${process.app.getVersion()} '+ '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Tripoccca/ElectronClassSchedule_Personal',
+            message: '当前版本: ${process.app.getVersion()} ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Tripoccca/ElectronClassSchedule_Personal',
         });
     },
     'quitApp': () => {
@@ -651,91 +677,91 @@ const ipcEvents = {
         tray.popUpContextMenu();
     },
     'getTimeOffset': (e, arg = 0) => {
-    // 类型安全处理：确保初始值为数字类型
-    const initialOffset = typeof arg === 'number' ? arg : 0;
-    
-    // 对话框配置对象（可抽离为常量提高复用性）
-    const dialogConfig = {
-        title: '计时矫正',
-        label: '请设置课表计时与系统时的偏移秒数(整数)',
-        value: initialOffset.toString(),
-        inputAttrs: {
-            type: 'number',
-            step: '1',       // 限制只能输入整数
-            min: '-86400',   // 最小偏移：-1天（秒）
-            max: '86400'     // 最大偏移：+1天（秒）
-        },
-        type: 'input',
-        height: 200,
-        width: 400,
-        icon: path.join(basePath, 'image', 'clock.png'),
-        buttons: ['取消', '确认'],  // 明确按钮顺序
-        defaultId: 1               // 默认聚焦确认按钮
-    };
+        // 类型安全处理：确保初始值为数字类型
+        const initialOffset = typeof arg === 'number' ? arg : 0;
 
-    prompt(dialogConfig).then((userInput) => {
-        if (userInput === null) {  // 用户点击取消
-            log.info('[时间偏移设置] 用户取消操作');
+        // 对话框配置对象（可抽离为常量提高复用性）
+        const dialogConfig = {
+            title: '计时矫正',
+            label: '请设置课表计时与系统时的偏移秒数(整数)',
+            value: initialOffset.toString(),
+            inputAttrs: {
+                type: 'number',
+                step: '1',       // 限制只能输入整数
+                min: '-86400',   // 最小偏移：-1天（秒）
+                max: '86400'     // 最大偏移：+1天（秒）
+            },
+            type: 'input',
+            height: 200,
+            width: 400,
+            icon: path.join(basePath, 'image', 'clock.png'),
+            buttons: ['取消', '确认'],  // 明确按钮顺序
+            defaultId: 1               // 默认聚焦确认按钮
+        };
+
+        prompt(dialogConfig).then((userInput) => {
+            if (userInput === null) {  // 用户点击取消
+                log.info('[时间偏移设置] 用户取消操作');
+                dialog.showMessageBox(win, {
+                    type: 'warning',
+                    title: '操作取消',
+                    message: '您已取消计时偏移设置'
+                });
+                return;
+            }
+
+            // 输入有效性验证
+            const offsetStr = userInput.trim();
+            if (offsetStr === '') {
+                dialog.showMessageBox(win, {
+                    type: 'error',
+                    title: '输入无效',
+                    message: '偏移秒数不能为空，请输入有效数字'
+                });
+                return;
+            }
+
+            const offset = Number(offsetStr);
+            if (isNaN(offset)) {
+                dialog.showMessageBox(win, {
+                    type: 'error',
+                    title: '输入无效',
+                    message: '请输入有效的数字格式（如：3600 或 -1800）'
+                });
+                return;
+            }
+
+            // 范围校验（可选，根据业务需求调整）
+            if (offset < dialogConfig.inputAttrs.min || offset > dialogConfig.inputAttrs.max) {
+                dialog.showMessageBox(win, {
+                    type: 'warning',
+                    title: '超出范围',
+                    message: `建议偏移范围：${dialogConfig.inputAttrs.min} ~ ${dialogConfig.inputAttrs.max} 秒`
+                });
+                // 这里不阻止设置，仅提示，根据需求决定是否强制限制
+                // return; 
+            }
+
+            // 发送偏移量（保留原始数值，移除可能不必要的取模操作）
+            win.webContents.send('setTimeOffset', offset);
+            log.info(`[时间偏移设置] 成功设置偏移量：${offset} 秒`);
             dialog.showMessageBox(win, {
-                type: 'warning',
-                title: '操作取消',
-                message: '您已取消计时偏移设置'
+                type: 'info',
+                title: '设置成功',
+                message: `计时偏移已更新为 ${offset} 秒`
             });
-            return;
-        }
 
-        // 输入有效性验证
-        const offsetStr = userInput.trim();
-        if (offsetStr === '') {
+        }).catch((err) => {
+            console.error('[时间偏移设置] 对话框操作异常:', err);
+            log.error('[时间偏移设置] 对话框异常:', err.stack);  // 记录完整堆栈
             dialog.showMessageBox(win, {
                 type: 'error',
-                title: '输入无效',
-                message: '偏移秒数不能为空，请输入有效数字'
+                title: '系统错误',
+                message: '设置过程中发生异常，请联系管理员'
             });
-            return;
-        }
-
-        const offset = Number(offsetStr);
-        if (isNaN(offset)) {
-            dialog.showMessageBox(win, {
-                type: 'error',
-                title: '输入无效',
-                message: '请输入有效的数字格式（如：3600 或 -1800）'
-            });
-            return;
-        }
-
-        // 范围校验（可选，根据业务需求调整）
-        if (offset < dialogConfig.inputAttrs.min || offset > dialogConfig.inputAttrs.max) {
-            dialog.showMessageBox(win, {
-                type: 'warning',
-                title: '超出范围',
-                message: `建议偏移范围：${dialogConfig.inputAttrs.min} ~ ${dialogConfig.inputAttrs.max} 秒`
-            });
-            // 这里不阻止设置，仅提示，根据需求决定是否强制限制
-            // return; 
-        }
-
-        // 发送偏移量（保留原始数值，移除可能不必要的取模操作）
-        win.webContents.send('setTimeOffset', offset);
-        log.info(`[时间偏移设置] 成功设置偏移量：${offset} 秒`);
-        dialog.showMessageBox(win, {
-            type: 'info',
-            title: '设置成功',
-            message: `计时偏移已更新为 ${offset} 秒`
         });
-
-    }).catch((err) => {
-        console.error('[时间偏移设置] 对话框操作异常:', err);
-        log.error('[时间偏移设置] 对话框异常:', err.stack);  // 记录完整堆栈
-        dialog.showMessageBox(win, {
-            type: 'error',
-            title: '系统错误',
-            message: '设置过程中发生异常，请联系管理员'
-        });
-    });
     },
-    
+
 };
 
 
