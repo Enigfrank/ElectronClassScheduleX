@@ -5,7 +5,7 @@ let testGUIWindow = undefined; // 新定义的测试GUI窗口变量
 let loadingDialog = undefined; // 添加加载对话框变量
 let shutdownTimers = []; // 添加定时关机计时器数组
 let shutdownManagerWindow = null;
-
+let currentShutdownWarningWindow = null;
 
 const { app, BrowserWindow, Menu, ipcMain, dialog, screen, Tray, shell } = require('electron');
 const path = require('path');
@@ -96,7 +96,6 @@ function cleanupOldLogs() {
     });
 }
 
-// ✅ 在所有配置完成后才记录日志
 log.info('-------------------------日志分割处-------------------------');
 
 // 在应用启动时清理旧日志
@@ -109,7 +108,7 @@ const getAssetPath = (...paths) => {
     // 无论是否打包，都基于当前文件目录（main.js 所在目录）计算路径
     const fullPath = path.join(__dirname, ...paths);
 
-    // 增加路径检查日志（方便调试）
+
     if (!fs.existsSync(fullPath)) {
         log.error(`资源不存在: ${fullPath}`);
     }
@@ -187,7 +186,9 @@ function setAutoLaunch() {
     }
 }
 
-// 定时关机功能
+
+
+
 function scheduleShutdown() {
     const storedTimes = store.get('shutdownTimes', []);
     const currentTimes = [...storedTimes];
@@ -225,40 +226,60 @@ function scheduleShutdown() {
             const remainingDelay = currentTargetDate - now;
 
             if (remainingDelay <= 0) {
-                // 时间已到，执行关机
                 executeShutdown(timeStr, currentTargetDate);
                 return;
             }
 
             const warningDelay = remainingDelay - 15 * 1000;
 
+            // 声明一个变量，用于保存最终关机定时器 ID
+            let finalShutdownTimer = null;
+
             if (warningDelay > 0) {
-                const warningTimerId = setTimeout(async () => {
-                    const { response } = await dialog.showMessageBox({
-                        type: 'warning',
-                        title: '即将关机提醒',
-                        message: `系统将在15秒后自动关机。\n计划关机时间: ${currentTargetDate.toLocaleString()}`,
-                        buttons: ['关闭提示', '延长30秒', '延长60秒'],
-                        cancelId: 0
+                const warningTimerId = setTimeout(() => {
+                    exec('powershell -c "[System.Media.SystemSounds]::Exclamation.Play()"', (err) => {
+                        if (err) log.warn('播放系统提示音失败:', err.message);
                     });
 
-                    switch (response) {
-                        case 0: // 关闭提示，不干预
+                    // 显示提醒窗口
+                    showShutdownWarningWindow(timeStr, currentTargetDate,
+                        // 延长30秒
+                        () => {
+                            if (finalShutdownTimer) {
+                                clearTimeout(finalShutdownTimer);
+                                log.info('已取消原定关机定时器');
+                            }
+
+                            const newTarget = new Date(currentTargetDate.getTime() + 30 * 1000);
+                            log.info(`用户选择延长30秒关机，新关机时间: ${newTarget.toLocaleString()}`);
+                            scheduleShutdownWithWarning(newTarget); // 递归调用新时间
+                        },
+                        // 延长60秒
+                        () => {
+                            // 👇 清除旧的关机定时器！
+                            if (finalShutdownTimer) {
+                                clearTimeout(finalShutdownTimer);
+                                log.info('已取消原定关机定时器');
+                            }
+
+                            const newTarget = new Date(currentTargetDate.getTime() + 60 * 1000);
+                            log.info(`用户选择延长60秒关机，新关机时间: ${newTarget.toLocaleString()}`);
+                            scheduleShutdownWithWarning(newTarget); // 递归调用新时间
+                        },
+                        // 关闭提示（不干预）
+                        () => {
                             log.info(`用户选择关闭提示，继续执行关机流程`);
-                            // 继续执行关机
-                            setTimeout(() => executeShutdown(timeStr, currentTargetDate), 15 * 1000);
-                            break;
-                        case 1: // 延长30秒
-                            const newTarget30 = new Date(currentTargetDate.getTime() + 30 * 1000);
-                            log.info(`用户选择延长30秒关机，新关机时间: ${newTarget30.toLocaleString()}`);
-                            scheduleShutdownWithWarning(newTarget30); // 递归调用
-                            break;
-                        case 2: // 延长60秒
-                            const newTarget60 = new Date(currentTargetDate.getTime() + 60 * 1000);
-                            log.info(`用户选择延长60秒关机，新关机时间: ${newTarget60.toLocaleString()}`);
-                            scheduleShutdownWithWarning(newTarget60); // 递归调用
-                            break;
-                    }
+                        }
+                    );
+
+                    // ⏱️ 设置最终关机定时器（15秒后）
+                    finalShutdownTimer = setTimeout(() => {
+                        executeShutdown(timeStr, currentTargetDate);
+                    }, 15 * 1000);
+
+                    // 👇 保存到全局定时器数组，方便统一清理
+                    shutdownTimers.push(finalShutdownTimer);
+
                 }, warningDelay);
 
                 shutdownTimers.push(warningTimerId);
@@ -271,6 +292,11 @@ function scheduleShutdown() {
 
         // 执行实际关机
         function executeShutdown(originalTime, targetDate) {
+            // 关闭可能还在显示的提醒窗口
+            if (currentShutdownWarningWindow && !currentShutdownWarningWindow.isDestroyed()) {
+                currentShutdownWarningWindow.close();
+            }
+
             exec('shutdown /s /t 0', (error) => {
                 if (error) {
                     log.error(`关机失败 (${originalTime}): ${error.message}`);
@@ -295,12 +321,12 @@ function scheduleShutdown() {
         });
     });
 
-    // 更新存储并处理计划提示
+    // 更新存储
     if (currentTimes.length !== storedTimes.length) {
         store.set('shutdownTimes', currentTimes);
     }
 
-    // 显示关机计划提示
+    // 显示关机计划提示（使用原模态框，不影响倒计时）
     if (shutdownPlans.length > 0) {
         const messageContent = shutdownPlans.map((plan, index) =>
             `• 计划 ${index + 1}:\n` +
@@ -316,7 +342,7 @@ function scheduleShutdown() {
             cancelId: 0
         });
 
-        log.info(`成功设置 ${shutdownPlans.length} 个关机计划，具体如下：`);
+        log.info(`成功设置 ${shutdownPlans.length} 个关机计划`);
         shutdownPlans.forEach((plan, index) => {
             log.info(`[${index + 1}] 原始时间: ${plan.originalTime} | 触发时间: ${plan.formattedDate} | 剩余 ${Math.ceil(plan.delay / 1000)} 秒`);
         });
@@ -327,6 +353,55 @@ function scheduleShutdown() {
             type: 'info'
         });
     }
+}
+
+// 👇 自定义关机提醒窗口函数
+
+function showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, onClose) {
+    if (currentShutdownWarningWindow && !currentShutdownWarningWindow.isDestroyed()) {
+        currentShutdownWarningWindow.close();
+    }
+
+    const shutdownWarningWin = new BrowserWindow({
+        width: 360,
+        height: 220,
+        alwaysOnTop: true,
+        frame: false,
+        resizable: false,
+        movable: true,
+        skipTaskbar: false,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false, 
+        }
+    });
+
+    currentShutdownWarningWindow = shutdownWarningWin;
+
+    const htmlPath = path.join(__dirname, '/htmls/shutdown-warning.html');
+    shutdownWarningWin.loadFile(htmlPath);
+
+    shutdownWarningWin.webContents.on('did-finish-load', () => {
+        shutdownWarningWin.webContents.executeJavaScript(`
+            window.shutdownTargetTime = "${targetDate.toLocaleString()}";
+            if (document.getElementById('targetTime')) {
+                document.getElementById('targetTime').textContent = window.shutdownTargetTime;
+            }
+        `);
+    });
+
+    // 挂载回调函数到窗口实例（不传递给前端）
+    shutdownWarningWin.onDelay30 = onDelay30;
+    shutdownWarningWin.onDelay60 = onDelay60;
+    shutdownWarningWin.onClose = onClose;
+
+    shutdownWarningWin.on('closed', () => {
+        currentShutdownWarningWindow = null;
+        // 清理引用，避免内存泄漏
+        shutdownWarningWin.onDelay30 = null;
+        shutdownWarningWin.onDelay60 = null;
+        shutdownWarningWin.onClose = null;
+    });
 }
 
 // 定义取消定时关机的函数
@@ -375,7 +450,7 @@ function showLoadingDialog() {
     });
 
     // 加载自定义的加载界面，可以放一个简单的 HTML 文件
-    loadingDialog.loadFile(path.join(__dirname, 'loading.html'));
+    loadingDialog.loadFile(path.join(__dirname, '/htmls/loading.html'));
 }
 
 // 创建GUI窗口
@@ -393,7 +468,7 @@ function showGUIWindow() {
                 enableRemoteModule: true
             }
         });
-        testGUIWindow.loadFile(path.join(__dirname, 'GUI.html'));
+        testGUIWindow.loadFile(path.join(__dirname, '/htmls/GUI.html'));
         testGUIWindow.on('close', () => {
             testGUIWindow = null;
         });
@@ -481,6 +556,32 @@ app.whenReady().then(async () => {
 
 
 
+ipcMain.on('shutdown-action', (event, action) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    if (!win || win.isDestroyed()) return;
+
+    // 根据窗口上挂载的回调函数执行对应操作
+    switch (action) {
+        case 'delay30':
+            if (typeof win.onDelay30 === 'function') {
+                win.onDelay30();
+            }
+            break;
+        case 'delay60':
+            if (typeof win.onDelay60 === 'function') {
+                win.onDelay60();
+            }
+            break;
+        case 'close':
+            if (typeof win.onClose === 'function') {
+                win.onClose();
+            }
+            break;
+        default:
+            console.warn('未知的关机操作:', action);
+    }
+});
 
 
 app.on('before-quit', () => {
@@ -527,7 +628,7 @@ ipcMain.on('openShutdownManager', async (event) => {
         }
     });
 
-    shutdownManagerWindow.loadFile('shutdownManager.html');
+    shutdownManagerWindow.loadFile(path.join(__dirname, '/htmls/shutdownManager.html'));
     shutdownManagerWindow.on('closed', () => {
         shutdownManagerWindow = null;
     });
@@ -624,7 +725,7 @@ const ipcEvents = {
                     }
                 });
 
-                amtls.loadFile('amtls.html');
+                amtls.loadFile('html/amtls.html');
 
                 // 3秒后自动关闭窗口
                 setTimeout(() => {

@@ -1,12 +1,12 @@
 {
   "name": "electron_class_schedule",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "description": "电子课表",
   "main": "main.js",
   "author": "Enigfrank",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
+    "start": "chcp 65001 && electron .",
     "build": "electron-builder --win --x64 --publish never",
     "rebuild": "electron-rebuild"
   },
@@ -46,20 +46,18 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true
   },
-  "files": [
-    "css/**/*",
-    "font/**/*",
-    "image/**/*",
-    "js/**/*",
-    "l1/**/*",
-    "logs",
-    "node_modules/**/*",
-    "GUI.html",
-    "index.html",
-    "loading.html",
-    "main.js",
-    "shutdownManager.html"
-  ],
+    "files": [
+      "css/**/*",
+      "font/**/*",
+      "image/**/*",
+      "js/**/*",
+      "l1/**/*",
+      "logs",
+      "node_modules/**/*",
+      "html/**/*",
+      "index.html",
+      "main.js"
+    ],
   "directories": {  
     "output": "out"
   }
