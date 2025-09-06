@@ -378,7 +378,7 @@ function showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, on
 
     currentShutdownWarningWindow = shutdownWarningWin;
 
-    const htmlPath = path.join(__dirname, '/htmls/shutdown-warning.html');
+    const htmlPath = path.join(__dirname,'htmls','shutdown-warning.html');
     shutdownWarningWin.loadFile(htmlPath);
 
     shutdownWarningWin.webContents.on('did-finish-load', () => {
@@ -450,7 +450,7 @@ function showLoadingDialog() {
     });
 
     // 加载自定义的加载界面，可以放一个简单的 HTML 文件
-    loadingDialog.loadFile(path.join(__dirname, '/htmls/loading.html'));
+    loadingDialog.loadFile(path.join(__dirname, 'htmls', 'loading.html'));
 }
 
 // 创建GUI窗口
@@ -468,7 +468,7 @@ function showGUIWindow() {
                 enableRemoteModule: true
             }
         });
-        testGUIWindow.loadFile(path.join(__dirname, '/htmls/GUI.html'));
+        testGUIWindow.loadFile(path.join(__dirname, 'htmls', 'GUI.html'));
         testGUIWindow.on('close', () => {
             testGUIWindow = null;
         });
@@ -628,7 +628,7 @@ ipcMain.on('openShutdownManager', async (event) => {
         }
     });
 
-    shutdownManagerWindow.loadFile(path.join(__dirname, '/htmls/shutdownManager.html'));
+    shutdownManagerWindow.loadFile(path.join(__dirname, 'htmls', 'shutdownManager.html'));
     shutdownManagerWindow.on('closed', () => {
         shutdownManagerWindow = null;
     });
