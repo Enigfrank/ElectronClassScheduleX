@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>定时关机管理</title>
+    <link rel="stylesheet" href="./css/custom.css">
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .header {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 2rem;
+        }
+
+        .time-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 2rem;
+            border: 1px solid #eaeaea;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .time-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .time-item:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.3s;
+        }
+
+        .delete-btn:hover {
+            color: #c0392b;
+        }
+
+        .input-group {
+            margin-bottom: 2rem;
+        }
+
+        .add-btn {
+            background: #3498db;
+            border-color: #3498db;
+            transition: all 0.3s;
+        }
+
+        .add-btn:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+        }
+
+        .error-message {
+            color: #e74c3c;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            animation: fadeInOut 2.5s forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            25% { opacity: 1; }
+            75% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>定时关机时间设置</h1>
+            <p>By Enigfrank</p>
+            <p>建议设置下课后一分钟</p>
+            <p>EG:12:10下课,则设置12:11</p>
+        </div>
+
+        <div class="time-list" id="shutdownList">
+            <!-- 动态生成时间项 -->
+        </div>
+
+        <div class="input-group">
+            <input type="text" id="newTime" class="form-control" 
+                   placeholder="输入时间 (HH:mm)" required autofocus>
+            <button class="btn add-btn" id="addTime">添加时间</button>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+    </div>
+
+<script>
+    const { ipcRenderer } = require('electron');
+
+    // UI组件初始化
+    const timeList = document.getElementById('shutdownList');
+    const newTimeInput = document.getElementById('newTime');
+    const addTimeBtn = document.getElementById('addTime');
+    const errorMessage = document.getElementById('errorMessage');
+
+    // 加载现有时间
+    ipcRenderer.on('shutdownTimesUpdated', (event, times) => {
+        timeList.innerHTML = ''; // 清空现有内容
+        times.forEach((time, index) => {
+            createTimeItem(time, index);
+        });
+        newTimeInput.focus();
+    });
+
+    // 创建时间项
+    function createTimeItem(time, index) {
+        const item = document.createElement('div');
+        item.className = 'time-item';
+        item.innerHTML = `
+            <span>${time}</span>
+            <button class="delete-btn" data-index="${index}">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        timeList.appendChild(item);
+    }
+
+    // 添加新时间
+    addTimeBtn.addEventListener('click', () => {
+        const time = newTimeInput.value.trim();
+        if (/^\d{2}:\d{2}$/.test(time)) {
+            ipcRenderer.send('addShutdownTime', time);
+            newTimeInput.value = '';
+            newTimeInput.focus();
+        } else {
+            showError('请输入正确的时间格式 (HH:mm)');
+        }
+    });
+
+    // 键盘事件支持
+    newTimeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addTimeBtn.click();
+        }
+    });
+
+    // 错误提示
+    function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.style.display = 'block';
+        setTimeout(() => {
+            errorMessage.style.display = 'none';
+            newTimeInput.focus();
+        }, 3500);
+    }
+
+    // 删除时间
+    timeList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-btn')) {
+            const index = e.target.dataset.index;
+            ipcRenderer.send('deleteShutdownTime', index);
+            e.target.closest('.time-item').remove();
+        }
+    });
+
+    // 页面加载时聚焦输入框
+    window.addEventListener('DOMContentLoaded', () => {
+        newTimeInput.focus();
+    });
+</script>
+</body>
+</html>

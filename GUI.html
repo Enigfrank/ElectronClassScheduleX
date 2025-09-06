@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>课表配置界面</title>
+    <link rel="stylesheet" type="text/css" href="./css/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="./css/custom.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: Arial, sans-serif;
+            padding: 0;
+            /*background-image: url('https://www.loliapi.com/acg/');  这里使用LoliAPI的URL */
+            background-image: url(./image/background.png);
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+
+        .container {
+            margin-top: 50px;
+            background-color: rgba(255, 255, 255, 0.8); /* 透明背景层 */
+            padding: 30px;
+            border-radius: 15px;
+        }
+
+        .card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn {
+            margin: 5px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .footer-text {
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 class="text-center mb-5">Console</h1>
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">功能选项</h5>
+            <div class="d-flex flex-wrap justify-content-center">
+                <button id="week1" class="btn btn-primary mr-2 mb-2">第一周</button>
+                <button id="week2" class="btn btn-primary mr-2 mb-2">第二周</button>
+                <button id="openSetting" class="btn btn-secondary mr-2 mb-2">配置课表</button>
+                <button id="correctTime" class="btn btn-secondary mr-2 mb-2">矫正计时</button>
+                <button id="toggleSchedule" class="btn btn-secondary mr-2 mb-2">切换日程</button>
+                <button id="manageShutdown" class="btn btn-secondary mr-2 mb-2">管理定时关机</button>
+            </div>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">设置选项</h5>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="classCountdown">
+                <label class="form-check-label" for="classCountdown">课上计时</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="windowAlwaysOnTop">
+                <label class="form-check-label" for="windowAlwaysOnTop">窗口置顶</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="classHidden">
+                <label class="form-check-label" for="classHidden">上课隐藏</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="autoLaunch">
+                <label class="form-check-label" for="autoLaunch">开机启动</label>
+            </div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="scheduleShutdown">
+                <label class="form-check-label" for="scheduleShutdown">定时关机</label>
+            </div>
+        </div>
+    </div>
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">其他工具</h5>
+            <div class="d-flex flex-wrap justify-content-center">
+                <button id="undefined" class="btn btn-success">Undefined</button>
+                <button id="devTools" class="btn btn-warning mr-2 mb-2">开发者工具</button>
+                <button id="resetSettings" class="btn btn-danger mr-2 mb-2">重置设置</button>
+                <button id="moreInfo" class="btn btn-info mr-2 mb-2">更多信息</button>
+                <button id="quitApp" class="btn btn-dark mr-2 mb-2">退出程序</button>
+            </div>
+        </div>
+    </div>
+    <footer class="text-center">
+        <p class="footer-text">&copy; <span id="year"></span> Enigfrank 版权所有</p>
+    </footer>
+</div>
+
+<script>
+    document.getElementById("year").innerHTML = new Date().getFullYear();
+
+    const { ipcRenderer } = require('electron');
+
+    ipcRenderer.on('init', (event, data) => {
+        document.getElementById('classCountdown').checked = data.isDuringClassCountdown;
+        document.getElementById('windowAlwaysOnTop').checked = data.isWindowAlwaysOnTop;
+        document.getElementById('classHidden').checked = data.isDuringClassHidden;
+        document.getElementById('autoLaunch').checked = data.isAutoLaunch;
+        document.getElementById('scheduleShutdown').checked = data.scheduleShutdown;
+    });
+
+    ipcRenderer.on('updateCheckbox', (event, data) => {
+        const checkbox = document.getElementById(data.id);
+        if (checkbox) {
+            checkbox.checked = data.checked;
+        }
+    });
+
+    document.getElementById('manageShutdown').addEventListener('click', () => {
+        ipcRenderer.send('openShutdownManager');
+    });
+
+    // 添加定时关机管理界面数据同步
+    ipcRenderer.on('shutdownTimesUpdated', (event, times) => {
+    const shutdownList = document.getElementById('shutdownList');
+    shutdownList.innerHTML = ''; // 清空现有列表
+
+    times.forEach((time, index) => {
+        const item = document.createElement('div');
+        item.className = 'time-item';
+        item.textContent = time;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '删除';
+        deleteBtn.addEventListener('click', () => {
+            ipcRenderer.send('deleteShutdownTime', index);
+            item.remove();
+        });
+        
+        item.appendChild(deleteBtn);
+        shutdownList.appendChild(item);
+    });
+    });
+
+    // 页面加载时初始化定时关机列表
+    window.addEventListener('DOMContentLoaded', () => {
+    ipcRenderer.invoke('getShutdownTimes').then(times => {
+        const shutdownList = document.getElementById('shutdownList');
+        shutdownList.innerHTML = '';
+        times.forEach(time => {
+            const item = document.createElement('div');
+            item.className = 'time-item';
+            item.textContent = time;
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '删除';
+            deleteBtn.addEventListener('click', () => {
+                ipcRenderer.send('deleteShutdownTime', times.indexOf(time));
+                item.remove();
+            });
+            
+            item.appendChild(deleteBtn);
+            shutdownList.appendChild(item);
+            });
+        });
+    });
+
+    document.getElementById('week1').addEventListener('click', () => {
+        ipcRenderer.send('setWeekIndex', 0);
+    });
+    document.getElementById('week2').addEventListener('click', () => {
+        ipcRenderer.send('setWeekIndex', 1);
+    });
+    document.getElementById('openSetting').addEventListener('click', () => {
+        ipcRenderer.send('openSettingDialog');
+    });
+    document.getElementById('correctTime').addEventListener('click', () => {
+        ipcRenderer.send('getTimeOffset', 0);
+    });
+    document.getElementById('toggleSchedule').addEventListener('click', () => {
+        ipcRenderer.send('setDayOffset');
+    });
+    document.getElementById('classCountdown').addEventListener('change', (e) => {
+        ipcRenderer.send('setClassCountdown', e.target.checked);
+    });
+    document.getElementById('windowAlwaysOnTop').addEventListener('change', (e) => {
+        ipcRenderer.send('setWindowAlwaysOnTop', e.target.checked);
+    });
+    document.getElementById('classHidden').addEventListener('change', (e) => {
+        ipcRenderer.send('setDuringClassHidden', e.target.checked);
+    });
+    document.getElementById('autoLaunch').addEventListener('change', (e) => {
+        ipcRenderer.send('setAutoLaunch', e.target.checked);
+    });
+    document.getElementById('scheduleShutdown').addEventListener('change', (e) => {
+        ipcRenderer.send('setScheduleShutdown', e.target.checked);
+    });
+    document.getElementById('devTools').addEventListener('click', () => {
+        ipcRenderer.send('openDevTools');
+    });
+    document.getElementById('resetSettings').addEventListener('click', () => {
+        ipcRenderer.send('resetSettings');
+    });
+    document.getElementById('moreInfo').addEventListener('click', () => {
+        ipcRenderer.send('showMoreInfo');
+    });
+    document.getElementById('quitApp').addEventListener('click', () => {
+        ipcRenderer.send('quitApp');
+    });
+</script>
+
+</body>
+</html>

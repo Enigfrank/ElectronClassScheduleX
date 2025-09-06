@@ -103,12 +103,12 @@ app.whenReady().then(() => {
     cleanupOldLogs();
 });
 
-// 获取资源路径（兼容开发和打包）
+
 const getAssetPath = (...paths) => {
     // 无论是否打包，都基于当前文件目录（main.js 所在目录）计算路径
     const fullPath = path.join(__dirname, ...paths);
 
-
+    // 增加路径检查日志（方便调试）
     if (!fs.existsSync(fullPath)) {
         log.error(`资源不存在: ${fullPath}`);
     }
@@ -148,6 +148,8 @@ const createWindow = () => {
             enableRemoteModule: true
         },
     });
+
+
     win.loadFile(path.join(__dirname, 'index.html')).catch(err => {
         console.error('Failed to load index.html:', err);
         log.error('Failed to load index.html:', err);
@@ -372,13 +374,12 @@ function showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, on
         skipTaskbar: false,
         webPreferences: {
             nodeIntegration: true,
-            contextIsolation: false, 
+            contextIsolation: false,
         }
     });
 
     currentShutdownWarningWindow = shutdownWarningWin;
-
-    const htmlPath = path.join(__dirname,'htmls','shutdown-warning.html');
+    const htmlPath = path.join(__dirname, 'shutdown-warning.html');
     shutdownWarningWin.loadFile(htmlPath);
 
     shutdownWarningWin.webContents.on('did-finish-load', () => {
@@ -450,7 +451,7 @@ function showLoadingDialog() {
     });
 
     // 加载自定义的加载界面，可以放一个简单的 HTML 文件
-    loadingDialog.loadFile(path.join(__dirname, 'htmls', 'loading.html'));
+    loadingDialog.loadFile(path.join(__dirname, 'loading.html'));
 }
 
 // 创建GUI窗口
@@ -468,7 +469,7 @@ function showGUIWindow() {
                 enableRemoteModule: true
             }
         });
-        testGUIWindow.loadFile(path.join(__dirname, 'htmls', 'GUI.html'));
+        testGUIWindow.loadFile(path.join(__dirname, 'GUI.html'));
         testGUIWindow.on('close', () => {
             testGUIWindow = null;
         });
@@ -628,7 +629,7 @@ ipcMain.on('openShutdownManager', async (event) => {
         }
     });
 
-    shutdownManagerWindow.loadFile(path.join(__dirname, 'htmls', 'shutdownManager.html'));
+    shutdownManagerWindow.loadFile('shutdownManager.html');
     shutdownManagerWindow.on('closed', () => {
         shutdownManagerWindow = null;
     });
@@ -725,7 +726,7 @@ const ipcEvents = {
                     }
                 });
 
-                amtls.loadFile('html/amtls.html');
+                amtls.loadFile('amtls.html');
 
                 // 3秒后自动关闭窗口
                 setTimeout(() => {
