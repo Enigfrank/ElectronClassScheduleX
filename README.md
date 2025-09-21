@@ -1,6 +1,6 @@
 
 
-> 此项目对原版 `ECS V1` 进行了细微更新 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
+> 此项目对原版 `ECS V1` 进行了魔改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
 
 
 
@@ -13,9 +13,13 @@
 - 日志记录
 - 算法优化
 
-## Warning
+## ⚠️注意
 
-个人原因此版本不提供技术支持,有BUG请提交issue
+本软件无可用性保障!
+
+使用ECS_X需要有一定的技术能力(使用方法与原版ECS大致相同)
+
+有BUG请提交issue
 
 
 ## 开源协议
