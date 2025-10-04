@@ -27,3 +27,5 @@
 ## 开源协议
 
 本软件遵循 `MIT` 开源协议
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Enigfrank/ElectronClassScheduleX&type=Date)](https://www.star-history.com/#Enigfrank/ElectronClassScheduleX&Date)
