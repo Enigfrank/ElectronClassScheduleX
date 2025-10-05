@@ -49,6 +49,33 @@
             transition: all 0.3s ease;
         }
 
+        .time-item.disabled {
+            opacity: 0.6;
+            background-color: #e9ecef;
+        }
+
+        .time-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .time-checkbox {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .time-text {
+            font-size: 14px;
+            color: #495057;
+        }
+
+        .time-text.disabled {
+            color: #6c757d;
+            text-decoration: line-through;
+        }
+
         .time-item:hover {
             background: #e9ecef;
             transform: translateY(-2px);
@@ -132,23 +159,48 @@
 
     // 加载现有时间
     ipcRenderer.on('shutdownTimesUpdated', (event, times) => {
-        timeList.innerHTML = ''; // 清空现有内容
-        times.forEach((time, index) => {
-            createTimeItem(time, index);
-        });
+        updateDisplay(times);
         newTimeInput.focus();
     });
 
+    // 更新显示
+    function updateDisplay(times) {
+        timeList.innerHTML = '';
+        times.forEach((timeItem, index) => {
+            createTimeItem(timeItem, index);
+        });
+    }
+
     // 创建时间项
-    function createTimeItem(time, index) {
+    function createTimeItem(timeItem, index) {
         const item = document.createElement('div');
         item.className = 'time-item';
-        item.innerHTML = `
-            <span>${time}</span>
-            <button class="delete-btn" data-index="${index}">
-                <i class="fas fa-times"></i>
-            </button>
-        `;
+        if (!timeItem.enabled) item.classList.add('disabled');
+
+        const timeLeft = document.createElement('div');
+        timeLeft.className = 'time-left';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'time-checkbox';
+        checkbox.checked = timeItem.enabled;
+        checkbox.onchange = () => toggleTime(index);
+
+        const timeText = document.createElement('span');
+        timeText.className = 'time-text';
+        if (!timeItem.enabled) timeText.classList.add('disabled');
+        timeText.textContent = timeItem.time || timeItem;
+
+        timeLeft.appendChild(checkbox);
+        timeLeft.appendChild(timeText);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.dataset.index = index;
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+
+        item.appendChild(timeLeft);
+        item.appendChild(deleteBtn);
         timeList.appendChild(item);
     }
 
@@ -156,7 +208,7 @@
     addTimeBtn.addEventListener('click', () => {
         const time = newTimeInput.value.trim();
         if (/^\d{2}:\d{2}$/.test(time)) {
-            ipcRenderer.send('addShutdownTime', time);
+            ipcRenderer.send('addShutdownTime', { time, enabled: true });
             newTimeInput.value = '';
             newTimeInput.focus();
         } else {
@@ -189,6 +241,11 @@
             e.target.closest('.time-item').remove();
         }
     });
+
+    // 切换时间启用/禁用状态
+    function toggleTime(index) {
+        ipcRenderer.send('toggleShutdownTime', index);
+    }
 
     // 页面加载时聚焦输入框
     window.addEventListener('DOMContentLoaded', () => {
