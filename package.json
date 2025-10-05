@@ -27,7 +27,7 @@
   },
   "build": {
   "asar": true,
-  "asarUnpack": ["js/scheduleConfig.js","logs/**/*"],
+  "asarUnpack": ["js/scheduleConfig.js","logs/example.log"],
   "appId": "com.enigfrank.electronclassschedule", 
   "productName": "电子课表",
   "copyright": "Copyright © 2025 Enigfrank",
@@ -53,7 +53,7 @@
       "image/**/*",
       "js/**/*",
       "l1/**/*",
-      "logs",
+      "logs/**/*",
       "node_modules/**/*",
       "index.html",
       "shutdownManager.html",

@@ -26,14 +26,37 @@ let loadingDialog = undefined;
 let appInitialized = false; // 标记应用是否已初始化
 
 // 初始化模块
-const logger = new Logger();
-const configManager = new ConfigManager();
-const utils = new Utils();
-const windowManager = new WindowManager(configManager, logger);
-const trayManager = new TrayManager(configManager, logger, windowManager);
-const shutdownScheduler = new ShutdownScheduler(configManager, logger);
-const autoLaunchManager = new AutoLaunchManager(configManager, logger);
-const ipcManager = new IpcManager(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager);
+let logger;
+let configManager;
+let utils;
+let windowManager;
+let trayManager;
+let shutdownScheduler;
+let autoLaunchManager;
+let ipcManager;
+
+// 初始化函数
+function initializeModules() {
+    try {
+        logger = new Logger();
+        configManager = new ConfigManager();
+        utils = new Utils();
+        windowManager = new WindowManager(configManager, logger);
+        trayManager = new TrayManager(configManager, logger, windowManager);
+        shutdownScheduler = new ShutdownScheduler(configManager, logger);
+        autoLaunchManager = new AutoLaunchManager(configManager, logger);
+        ipcManager = new IpcManager(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager);
+        
+        if (logger) {
+            logger.info('所有模块初始化完成');
+        }
+    } catch (error) {
+        console.error('模块初始化失败:', error);
+        if (logger) {
+            logger.error('模块初始化失败: ' + error.message);
+        }
+    }
+}
 
 // 检查单例锁
 if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
@@ -72,12 +95,26 @@ function showLoadingDialog() {
 function initializeApp() {
     // 防止重复初始化
     if (appInitialized) {
-        logger.warn('应用已经初始化，跳过重复初始化');
+        if (logger) {
+            logger.warn('应用已经初始化，跳过重复初始化');
+        } else {
+            console.warn('应用已经初始化，跳过重复初始化');
+        }
         return;
     }
     
     appInitialized = true;
-    logger.info('开始初始化应用');
+    
+    // 确保模块已初始化
+    if (!logger) {
+        initializeModules();
+    }
+    
+    if (logger) {
+        logger.info('开始初始化应用');
+    } else {
+        console.log('开始初始化应用');
+    }
     
     // 创建主窗口
     win = windowManager.createMainWindow();
@@ -100,11 +137,27 @@ function initializeApp() {
     const iconPath = utils.getAssetPath('image', 'icon.png');
     tray = trayManager.createTray(iconPath);
     
-    logger.info('应用初始化完成');
+    if (logger) {
+        logger.info('应用初始化完成');
+    } else {
+        console.log('应用初始化完成');
+    }
 }
 
 // 应用启动逻辑
 app.whenReady().then(async () => {
+    console.log('应用准备就绪，开始初始化...');
+    
+    // 确保应用完全准备好后再初始化模块
+    initializeModules();
+    
+    // 记录日志系统状态
+    if (logger) {
+        const logStatus = logger.getStatus();
+        logger.info(`日志系统状态: ${JSON.stringify(logStatus)}`);
+        logger.info('应用启动完成，开始加载配置...');
+    }
+    
     const isFirstRun = configManager.getIsFirstRun();
     
     if (isFirstRun) {
@@ -150,12 +203,22 @@ ipcMain.on('shutdown-action', (event, action) => {
             }
             break;
         default:
-            logger.warn('未知的关机操作:', action);
+            if (logger) {
+                logger.warn('未知的关机操作:', action);
+            } else {
+                console.warn('未知的关机操作:', action);
+            }
     }
 });
 
 // 应用退出前清理
 app.on('before-quit', () => {
+    if (logger) {
+        logger.info('应用正在退出...');
+        logger.flush(); // 刷新日志确保所有日志都被写入
+        logger.cleanupOldLogs(); // 清理旧日志
+    }
+    
     if (testGUIWindow) {
         testGUIWindow.close();
         shutdownScheduler.cancelScheduledShutdown();

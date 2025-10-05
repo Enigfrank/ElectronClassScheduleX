@@ -4,7 +4,7 @@ const { dialog } = require('electron');
 
 class Utils {
     constructor() {
-        this.basePath = process.cwd();
+        this.basePath = path.join(__dirname, '..');
     }
 
     // 获取资源路径

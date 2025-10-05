@@ -35,7 +35,7 @@ class WindowManager {
             },
         });
 
-        win.loadFile(path.join(process.cwd(), 'index.html')).catch(err => {
+        win.loadFile(path.join(__dirname, '..', 'index.html')).catch(err => {
             this.logger.error('Failed to load index.html:', err);
         });
 
@@ -65,7 +65,7 @@ class WindowManager {
             }
         });
 
-        guiWindow.loadFile(path.join(process.cwd(), 'GUI.html'));
+        guiWindow.loadFile(path.join(__dirname, '..', 'GUI.html'));
         
         guiWindow.on('close', () => {
             this.windows.gui = null;
@@ -101,7 +101,7 @@ class WindowManager {
             }
         });
 
-        loadingDialog.loadFile(path.join(process.cwd(), 'loading.html'));
+        loadingDialog.loadFile(path.join(__dirname, '..', 'loading.html'));
         this.windows.loading = loadingDialog;
         return loadingDialog;
     }
