@@ -86,6 +86,45 @@ class WindowManager {
         return guiWindow;
     }
 
+    // 创建React GUI窗口
+    createReactGUIWindow() {
+        if (this.windows.gui && !this.windows.gui.isDestroyed()) {
+            this.windows.gui.show();
+            return this.windows.gui;
+        }
+
+        const guiWindow = new BrowserWindow({
+            width: 980,
+            height: 800,
+            title: '课表配置界面 - React',
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false,
+                enableRemoteModule: true
+            }
+        });
+
+        guiWindow.loadFile(path.join(__dirname, '..', 'GUI-react.html'));
+        
+        guiWindow.on('close', () => {
+            this.windows.gui = null;
+        });
+
+        // 在窗口加载完成后，发送初始化数据
+        guiWindow.webContents.on('did-finish-load', () => {
+            guiWindow.webContents.send('init', {
+                isDuringClassCountdown: this.configManager.get('isDuringClassCountdown', true),
+                isWindowAlwaysOnTop: this.configManager.getWindowAlwaysOnTop(),
+                isDuringClassHidden: this.configManager.get('isDuringClassHidden', true),
+                isAutoLaunch: this.configManager.getAutoLaunch(),
+                scheduleShutdown: this.configManager.get('scheduleShutdown', false)
+            });
+        });
+
+        this.windows.gui = guiWindow;
+        return guiWindow;
+    }
+
     // 创建加载对话框
     createLoadingDialog(parentWindow) {
         const loadingDialog = new BrowserWindow({

@@ -180,6 +180,12 @@ app.whenReady().then(async () => {
 });
 
 // IPC 事件处理
+ipcMain.on('openReactGUI', () => {
+    if (windowManager) {
+        windowManager.createReactGUIWindow();
+    }
+});
+
 ipcMain.on('shutdown-action', (event, action) => {
     const win = BrowserWindow.fromWebContents(event.sender);
 

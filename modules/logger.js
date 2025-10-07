@@ -108,14 +108,6 @@ class Logger {
                         log.error('应用程序错误:', error);
                     }
                 });
-            } else if (log.catchErrors) {
-                // 向后兼容
-                log.catchErrors({
-                    showDialog: false,
-                    onError: (error) => {
-                        log.error('应用程序错误:', error);
-                    }
-                });
             }
 
             // 捕获未处理的 Promise 拒绝

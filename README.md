@@ -1,6 +1,6 @@
 
 
-> 此项目对原版 `ECS V1` 进行了魔改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
+> 此项目对原版 `ECS V1` 进行了大量更改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
 
 
 
@@ -22,6 +22,8 @@
 使用ECS_X需要有一定的技术能力(使用方法与原版ECS大致相同)
 
 有BUG请提交issue
+
+
 
 
 ## 开源协议

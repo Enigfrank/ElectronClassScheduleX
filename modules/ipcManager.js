@@ -158,6 +158,10 @@ class IpcManager {
             }
         });
 
+        ipcMain.on('openReactGUI', () => {
+            this.windowManager.createReactGUIWindow();
+        });
+
         ipcMain.on('setDayOffset', () => {
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -213,7 +217,7 @@ class IpcManager {
                 type: 'info',
                 buttons: ['OK'],
                 title: 'Let us across hell and reach to heaven！',
-                message: '当前版本: ${process.app.getVersion()} ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Tripoccca/ElectronClassSchedule_Personal',
+                message: '当前版本: 1.3.2 ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Enigfrank/ElectronClassScheduleX',
             });
         });
 
