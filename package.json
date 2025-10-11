@@ -1,6 +1,6 @@
 {
   "name": "electron_class_schedule",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "电子课表",
   "main": "main.js",
   "author": "Enigfrank",
@@ -35,7 +35,7 @@
     ],
     "appId": "com.enigfrank.electronclassschedule",
     "productName": "电子课表",
-    "copyright": "Copyright © 2025 Enigfrank",
+    "copyright": "Copyright © Enigfrank",
     "win": {
       "target": [
         {

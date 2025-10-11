@@ -1,4 +1,5 @@
-const { exec, dialog, BrowserWindow } = require('electron');
+const { dialog, BrowserWindow } = require('electron');
+const { exec } = require('child_process');
 const path = require('path');
 
 class ShutdownScheduler {
