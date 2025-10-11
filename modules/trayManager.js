@@ -29,7 +29,7 @@ class TrayManager {
 
     // 托盘点击事件处理
     onTrayClick() {
-        this.windowManager.createGUIWindow();
+        this.windowManager.createReactGUIWindow();
     }
 
     // 更新托盘菜单
@@ -46,7 +46,7 @@ class TrayManager {
             {
                 icon: this.getAssetPath('image', 'setting.png'),
                 label: '打开旧GUI界面',
-                click: () => this.onTrayClick()
+                click: () => this.windowManager.createGUIWindow()
             },
             {
                 icon: this.getAssetPath('image', 'setting.png'),

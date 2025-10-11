@@ -187,25 +187,32 @@ ipcMain.on('openReactGUI', () => {
 });
 
 ipcMain.on('shutdown-action', (event, action) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
+    // 从全局导出的对象中获取调度器实例
+    if (typeof shutdownScheduler === 'undefined' || !shutdownScheduler) {
+        console.error('Shutdown scheduler not available');
+        return;
+    }
 
-    if (!win || win.isDestroyed()) return;
+    let actionExecuted = false;
 
-    // 根据窗口上挂载的回调函数执行对应操作
+    // 根据存储在调度器中的回调函数执行对应操作
     switch (action) {
         case 'delay30':
-            if (typeof win.onDelay30 === 'function') {
-                win.onDelay30();
+            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onDelay30 === 'function') {
+                shutdownScheduler.currentCallbacks.onDelay30();
+                actionExecuted = true;
             }
             break;
         case 'delay60':
-            if (typeof win.onDelay60 === 'function') {
-                win.onDelay60();
+            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onDelay60 === 'function') {
+                shutdownScheduler.currentCallbacks.onDelay60();
+                actionExecuted = true;
             }
             break;
         case 'close':
-            if (typeof win.onClose === 'function') {
-                win.onClose();
+            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onClose === 'function') {
+                shutdownScheduler.currentCallbacks.onClose();
+                actionExecuted = true;
             }
             break;
         default:
@@ -214,6 +221,15 @@ ipcMain.on('shutdown-action', (event, action) => {
             } else {
                 console.warn('未知的关机操作:', action);
             }
+    }
+    
+    if (actionExecuted && logger) {
+        logger.info(`关机操作已执行: ${action}`);
+    }
+    
+    // 关闭警告窗口
+    if (shutdownScheduler.currentShutdownWarningWindow) {
+        shutdownScheduler.currentShutdownWarningWindow.close();
     }
 });
 

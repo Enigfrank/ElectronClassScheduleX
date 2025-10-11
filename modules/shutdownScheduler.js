@@ -119,7 +119,13 @@ class ShutdownScheduler {
     handleDelayOption(currentTargetDate, delaySeconds) {
         const newTarget = new Date(currentTargetDate.getTime() + delaySeconds * 1000);
         this.logger.info(`用户选择延长${delaySeconds}秒关机，新关机时间: ${newTarget.toLocaleString()}`);
-        this.scheduleShutdownWithWarning('', newTarget);
+        
+        // 清除之前的定时器
+        this.clearShutdownTimers();
+        
+        // 使用格式化的时间字符串而不是null
+        const timeStr = `${newTarget.getHours().toString().padStart(2, '0')}:${newTarget.getMinutes().toString().padStart(2, '0')}`;
+        this.scheduleShutdownWithWarning(timeStr, newTarget);
     }
 
     // 执行关机
@@ -165,28 +171,32 @@ class ShutdownScheduler {
         });
 
         this.currentShutdownWarningWindow = shutdownWarningWin;
-        const htmlPath = path.join(process.cwd(), 'shutdown-warning.html');
+        const htmlPath = path.join(__dirname, '../shutdown-warning.html');
         shutdownWarningWin.loadFile(htmlPath);
 
         shutdownWarningWin.webContents.on('did-finish-load', () => {
+            const targetTimeStr = targetDate.toLocaleString();
             shutdownWarningWin.webContents.executeJavaScript(`
-                window.shutdownTargetTime = "${targetDate.toLocaleString()}";
-                if (document.getElementById('targetTime')) {
-                    document.getElementById('targetTime').textContent = window.shutdownTargetTime;
+                window.shutdownTargetTime = "${targetTimeStr}";
+                const targetTimeEl = document.getElementById('targetTime');
+                if (targetTimeEl) {
+                    targetTimeEl.textContent = window.shutdownTargetTime;
                 }
-            `);
+            `).catch(err => {
+                this.logger.warn('设置目标时间失败:', err.message);
+            });
         });
 
-        // 挂载回调函数
-        shutdownWarningWin.onDelay30 = onDelay30;
-        shutdownWarningWin.onDelay60 = onDelay60;
-        shutdownWarningWin.onClose = onClose;
+        // 将回调函数存储在调度器中，而不是窗口对象上
+        this.currentCallbacks = {
+            onDelay30: onDelay30,
+            onDelay60: onDelay60,
+            onClose: onClose
+        };
 
         shutdownWarningWin.on('closed', () => {
             this.currentShutdownWarningWindow = null;
-            shutdownWarningWin.onDelay30 = null;
-            shutdownWarningWin.onDelay60 = null;
-            shutdownWarningWin.onClose = null;
+            this.currentCallbacks = null;
         });
     }
 

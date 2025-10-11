@@ -47,11 +47,13 @@
 
         let seconds = 15;
         let interval;
+        let targetTime = null;
 
         window.addEventListener('DOMContentLoaded', () => {
             const targetTimeEl = document.getElementById('targetTime');
             if (window.shutdownTargetTime) {
                 targetTimeEl.textContent = window.shutdownTargetTime;
+                targetTime = new Date(window.shutdownTargetTime);
             }
 
             startCountdown();
@@ -59,9 +61,12 @@
 
         function startCountdown() {
             const countdownEl = document.querySelector('.countdown');
+            
             interval = setInterval(() => {
                 seconds--;
                 countdownEl.textContent = seconds;
+                
+                // 目标时间显示保持不变，只显示倒计时
                 if (seconds <= 0) {
                     clearInterval(interval);
                     window.close();
@@ -72,19 +77,22 @@
         document.getElementById('btn30').addEventListener('click', () => {
             clearInterval(interval);
             ipcRenderer.send('shutdown-action', 'delay30');
-            window.close();
+            // 延迟关闭窗口，确保IPC消息被发送
+            setTimeout(() => window.close(), 100);
         });
 
         document.getElementById('btn60').addEventListener('click', () => {
             clearInterval(interval);
             ipcRenderer.send('shutdown-action', 'delay60');
-            window.close();
+            // 延迟关闭窗口，确保IPC消息被发送
+            setTimeout(() => window.close(), 100);
         });
 
         document.getElementById('btnClose').addEventListener('click', () => {
             clearInterval(interval);
             ipcRenderer.send('shutdown-action', 'close');
-            window.close();
+            // 延迟关闭窗口，确保IPC消息被发送
+            setTimeout(() => window.close(), 100);
         });
     </script>
 </body>
