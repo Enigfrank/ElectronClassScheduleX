@@ -29,7 +29,7 @@ class TrayManager {
 
     // 托盘点击事件处理
     onTrayClick() {
-        this.windowManager.createReactGUIWindow();
+        this.windowManager.createGUIWindow();
     }
 
     // 更新托盘菜单
