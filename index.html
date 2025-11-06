@@ -116,10 +116,17 @@ let hintTimer = null; // 用于清除提示的定时器
     if (scheduleData.currentHighlight.type === 'current' && scheduleData.currentHighlight.countdown === 600 && !isHintShown) {
         const nextClass = getNextClassInfo();
         if (nextClass) {
-            // 显示提示
-          nextClassHint.innerHTML = `<span class="hint-label">下节课</span>: ${nextClass.name}`;
+            // 显示提示 - 先设置内容和位置
+            nextClassHint.innerHTML = `<span class="hint-label">下节</span>: ${nextClass.name}`;
             nextClassHint.style.left = `calc(45% + ${miniCountdown.offsetWidth}px)`; // 定位在miniCountdown右侧
+            
+            // 先移除淡出类，确保可以重新触发淡入动画
+            nextClassHint.classList.remove('fadeOut');
             nextClassHint.style.display = 'block';
+            
+            // 强制重排，确保动画可以重新触发
+            void nextClassHint.offsetHeight;
+            
             isHintShown = true;
 
             // 15秒后隐藏提示

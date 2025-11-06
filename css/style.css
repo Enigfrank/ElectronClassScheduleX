@@ -32,6 +32,8 @@
     -webkit-user-select: none;
     user-select: none;
     line-height: 1.2;
+    -webkit-tap-highlight-color: transparent; /* 移除触摸高亮 */
+    touch-action: manipulation; /* 优化触摸响应 */
 }
 
 :root {
@@ -44,6 +46,9 @@
     padding: var(--container-bg-padding);
     font-size: var(--center-font-size);
     font-weight: 600;
+    /* 触摸设备优化 */
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 .classContainer {
@@ -195,8 +200,34 @@
 .nextClassHint {
     transition: opacity 0.5s;
     border: 2px solid #4CAF50; /* 绿色边框突出提示 */
+    opacity: 0;
+    animation: fadeIn 0.5s ease-in-out forwards;
 }
 
 .nextClassHint.fadeOut {
     opacity: 0;
+    animation: fadeOut 0.5s ease-in-out forwards;
 }
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
