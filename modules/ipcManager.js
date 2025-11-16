@@ -217,7 +217,7 @@ class IpcManager {
                 type: 'info',
                 buttons: ['OK'],
                 title: 'Let us across hell and reach to heaven！',
-                message: '当前版本: 1.3.2 ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Enigfrank/ElectronClassScheduleX',
+                message: '当前版本: 1.3.4 ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Enigfrank/ElectronClassScheduleX',
             });
         });
 
