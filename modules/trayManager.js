@@ -45,11 +45,6 @@ class TrayManager {
         return [
             {
                 icon: this.getAssetPath('image', 'setting.png'),
-                label: '打开旧GUI界面',
-                click: () => this.windowManager.createGUIWindow()
-            },
-            {
-                icon: this.getAssetPath('image', 'setting.png'),
                 label: '打开配置界面',
                 click: () => this.windowManager.createReactGUIWindow()
             },

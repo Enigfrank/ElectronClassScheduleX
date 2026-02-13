@@ -1,4 +1,4 @@
-const { ipcMain, dialog, BrowserWindow, Tray } = require('electron');
+const { ipcMain, dialog, BrowserWindow, Tray, shell } = require('electron');
 const path = require('path');
 const prompt = require('electron-prompt');
 
@@ -253,6 +253,15 @@ class IpcManager {
 
         ipcMain.on('getTimeOffset', (e, arg = 0) => {
             this.handleTimeOffsetSetting(e, arg);
+        });
+
+        // 打开外部链接
+        ipcMain.on('open-external-link', (event, url) => {
+            this.logger.info(`[外部链接] 正在打开: ${url}`);
+            shell.openExternal(url).catch((err) => {
+                this.logger.error(`[外部链接] 打开失败: ${err.message}`);
+                dialog.showErrorBox('打开链接失败', `无法打开链接: ${url}\n错误: ${err.message}`);
+            });
         });
     }
 

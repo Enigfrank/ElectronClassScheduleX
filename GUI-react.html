@@ -1,24 +1,184 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-    <title>课表配置界面 - React</title>
-    <link rel="stylesheet" type="text/css" href="./css/bootstrap.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课程表管理系统</title>
     <style>
-        body {
-            background-color: #f8f9fa;
-            font-family: Arial, sans-serif;
-            padding: 0;
-            background-image: url(./image/background.png);
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
+        * {
             margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f5f5f5;
+        }
+
+        /* 加载动画 */
+        .loading-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f6cbd 0%, #115ea3 100%);
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* 根容器 */
+        #root {
+            height: 100%;
+            width: 100%;
+        }
+
+        /* 错误提示 */
+        .error-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .error-container.visible {
+            display: flex;
+        }
+
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .error-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #d13438;
+            margin-bottom: 8px;
+        }
+
+        .error-message {
+            font-size: 14px;
+            color: #616161;
+            max-width: 400px;
+            line-height: 1.5;
         }
     </style>
 </head>
 <body>
+    <!-- 加载动画 -->
+    <div class="loading-container" id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载...</div>
+    </div>
+
+    <!-- 错误提示 -->
+    <div class="error-container" id="error">
+        <div class="error-icon">&#x26A0;</div>
+        <div class="error-title">加载失败</div>
+        <div class="error-message" id="error-message">
+            无法加载应用程序，请重新启动应用。
+        </div>
+    </div>
+
+    <!-- React 应用挂载点 -->
     <div id="root"></div>
+
+    <!-- 主应用脚本 -->
     <script src="./dist/react-gui.bundle.js"></script>
+
+    <script>
+        // 隐藏加载动画
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                var loading = document.getElementById('loading');
+                if (loading) {
+                    loading.classList.add('hidden');
+                }
+            }, 500);
+        });
+
+        // 错误处理
+        window.addEventListener('error', function(e) {
+            console.error('应用加载错误:', e);
+            var loading = document.getElementById('loading');
+            var error = document.getElementById('error');
+            var errorMessage = document.getElementById('error-message');
+
+            if (loading) {
+                loading.classList.add('hidden');
+            }
+            if (error) {
+                error.classList.add('visible');
+            }
+            if (errorMessage && e.message) {
+                errorMessage.textContent = '错误: ' + e.message;
+            }
+        });
+
+        // 检查 React 是否正确加载
+        setTimeout(function() {
+            var root = document.getElementById('root');
+            if (root && root.children.length === 0) {
+                var loading = document.getElementById('loading');
+                var error = document.getElementById('error');
+
+                if (loading) {
+                    loading.classList.add('hidden');
+                }
+                if (error) {
+                    error.classList.add('visible');
+                }
+            }
+        }, 10000);
+    </script>
 </body>
 </html>

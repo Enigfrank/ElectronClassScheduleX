@@ -96,9 +96,9 @@ class ShutdownScheduler {
             const warningTimerId = setTimeout(() => {
                 this.playWarningSound();
                 this.showShutdownWarningWindow(timeStr, targetDate, 
-                    () => this.handleDelayOption(targetDate, 30),
+                    () => this.handleDelayOption(targetDate, 30), 
                     () => this.handleDelayOption(targetDate, 60),
-                    () => this.logger.info('用户选择关闭提示，继续执行关机流程')
+                    () => this.cancelScheduledShutdown(),
                 );
 
                 finalShutdownTimer = setTimeout(() => {
@@ -164,11 +164,17 @@ class ShutdownScheduler {
             resizable: false,
             movable: true,
             skipTaskbar: false,
+            focusable: true,
+            type: 'notification',
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
             }
         });
+
+        shutdownWarningWin.setAlwaysOnTop(true, 'screen-saver');
+        shutdownWarningWin.setVisibleOnAllWorkspaces(true);
+        shutdownWarningWin.focus();
 
         this.currentShutdownWarningWindow = shutdownWarningWin;
         const htmlPath = path.join(__dirname, '../shutdown-warning.html');
