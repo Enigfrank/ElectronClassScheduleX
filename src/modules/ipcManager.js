@@ -1,6 +1,7 @@
-const { ipcMain, dialog, BrowserWindow, Tray, shell } = require('electron');
+const { ipcMain, dialog, BrowserWindow, shell, app } = require('electron');
 const path = require('path');
 const prompt = require('electron-prompt');
+const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
 
 class IpcManager {
     constructor(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager) {
@@ -17,18 +18,18 @@ class IpcManager {
         this.setupIpcEvents();
     }
 
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     setupIpcEvents() {
-        // 关机相关事件
         this.setupShutdownEvents();
-        
-        // 配置相关事件
         this.setupConfigEvents();
-        
-        // 窗口相关事件
         this.setupWindowEvents();
-        
-        // 工具相关事件
         this.setupUtilityEvents();
+        this.log('info', '[IPC管理] IPC事件监听器设置完成');
     }
 
     setupShutdownEvents() {
@@ -37,6 +38,7 @@ class IpcManager {
         });
 
         ipcMain.on('addShutdownTime', (event, timeItem) => {
+            this.log('info', `[IPC管理] 添加关机时间: ${JSON.stringify(timeItem)}`);
             const times = this.configManager.getShutdownTimes();
             times.push(timeItem);
             this.configManager.setShutdownTimes(times);
@@ -45,6 +47,7 @@ class IpcManager {
         });
 
         ipcMain.on('deleteShutdownTime', (event, index) => {
+            this.log('info', `[IPC管理] 删除关机时间，索引: ${index}`);
             const times = this.configManager.getShutdownTimes();
             times.splice(index, 1);
             this.configManager.setShutdownTimes(times);
@@ -56,6 +59,7 @@ class IpcManager {
             const times = this.configManager.getShutdownTimes();
             if (times[index]) {
                 times[index].enabled = !times[index].enabled;
+                this.log('info', `[IPC管理] 切换关机时间状态，索引: ${index}, 启用: ${times[index].enabled}`);
                 this.configManager.setShutdownTimes(times);
                 this.shutdownScheduler.scheduleShutdown();
                 event.sender.send('shutdownTimesUpdated', times);
@@ -63,8 +67,9 @@ class IpcManager {
         });
 
         ipcMain.on('openShutdownManager', async (event) => {
+            this.log('info', '[IPC管理] 打开关机管理窗口');
             if (this.shutdownManagerWindow) {
-                this.shutdownManagerWindow.focus();
+                this.shutdownManagerWindow.show();
                 return;
             }
             
@@ -80,9 +85,10 @@ class IpcManager {
                 }
             });
 
-            this.shutdownManagerWindow.loadFile('shutdownManager.html');
+            this.shutdownManagerWindow.loadFile(path.join(__dirname, '..', 'shutdownManager.html'));
             this.shutdownManagerWindow.on('closed', () => {
                 this.shutdownManagerWindow = null;
+                this.log('info', '[IPC管理] 关机管理窗口已关闭');
             });
             
             this.shutdownManagerWindow.webContents.on('did-finish-load', () => {
@@ -94,12 +100,11 @@ class IpcManager {
 
     setupConfigEvents() {
         ipcMain.on('getWeekIndex', () => {
-            // 只更新托盘菜单，不再创建新的托盘图标
-            // 托盘图标已经在主程序初始化时创建
             this.trayManager.updateTrayMenu();
         });
 
         ipcMain.on('setWeekIndex', (e, index) => {
+            this.log('info', `[IPC管理] 设置周索引: ${index}`);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
                 mainWindow.webContents.send('setWeekIndex', index);
@@ -107,6 +112,7 @@ class IpcManager {
         });
 
         ipcMain.on('setClassCountdown', (e, checked) => {
+            this.log('info', `[IPC管理] 设置课间倒计时: ${checked}`);
             this.configManager.set('isDuringClassCountdown', checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -116,6 +122,7 @@ class IpcManager {
         });
 
         ipcMain.on('setWindowAlwaysOnTop', (e, checked) => {
+            this.log('info', `[IPC管理] 设置窗口置顶: ${checked}`);
             this.configManager.setWindowAlwaysOnTop(checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -125,6 +132,7 @@ class IpcManager {
         });
 
         ipcMain.on('setDuringClassHidden', (e, checked) => {
+            this.log('info', `[IPC管理] 设置上课时隐藏: ${checked}`);
             this.configManager.set('isDuringClassHidden', checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -134,12 +142,14 @@ class IpcManager {
         });
 
         ipcMain.on('setAutoLaunch', (e, checked) => {
+            this.log('info', `[IPC管理] 设置开机自启: ${checked}`);
             this.configManager.setAutoLaunch(checked);
             this.autoLaunchManager.setAutoLaunch();
             this.trayManager.updateTrayMenu();
         });
 
         ipcMain.on('setScheduleShutdown', (e, checked) => {
+            this.log('info', `[IPC管理] 设置定时关机: ${checked}`);
             this.configManager.set('scheduleShutdown', checked);
             if (checked) {
                 this.shutdownScheduler.scheduleShutdown();
@@ -152,6 +162,7 @@ class IpcManager {
 
     setupWindowEvents() {
         ipcMain.on('openSettingDialog', () => {
+            this.log('info', '[IPC管理] 打开设置对话框');
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
                 mainWindow.webContents.send('openSettingDialog');
@@ -159,10 +170,12 @@ class IpcManager {
         });
 
         ipcMain.on('openReactGUI', () => {
+            this.log('info', '[IPC管理] 打开React GUI窗口');
             this.windowManager.createReactGUIWindow();
         });
 
         ipcMain.on('setDayOffset', () => {
+            this.log('info', '[IPC管理] 设置日期偏移');
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
                 mainWindow.webContents.send('setDayOffset');
@@ -170,6 +183,7 @@ class IpcManager {
         });
 
         ipcMain.on('openDevTools', () => {
+            this.log('info', '[IPC管理] 打开开发者工具');
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
                 if (mainWindow.webContents.isDevToolsOpened()) {
@@ -179,7 +193,7 @@ class IpcManager {
                 }
             }
         });
-
+        // 设置鼠标穿透
         ipcMain.on('setIgnore', (e, arg) => {
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -194,34 +208,39 @@ class IpcManager {
 
     setupUtilityEvents() {
         ipcMain.on('resetSettings', () => {
+            this.log('info', '[IPC管理] 重置设置');
             dialog.showMessageBox({
                 title: '重置设置',
                 message: '请选择重置内容',
                 buttons: ['恢复初始设置', '其他操作'],
             }).then((data) => {
                 if (data.response === 0) {
+                    this.log('info', '[IPC管理] 用户选择恢复初始设置');
                     this.configManager.set('isFirstRun', true);
                     const { app } = require('electron');
                     app.relaunch();
                     app.exit(0);
                 } else if (data.response === 1) {
+                    this.log('info', '[IPC管理] 用户选择其他操作');
                     this.showAmtlsWindow();
                 }
             }).catch((error) => {
-                this.logger.error('重置设置时出错:', error);
+                this.log('error', `[IPC管理] 重置设置时出错: ${error.message}`);
             });
         });
 
         ipcMain.on('showMoreInfo', () => {
+            this.log('info', '[IPC管理] 显示更多信息');
             dialog.showMessageBox({
                 type: 'info',
                 buttons: ['OK'],
                 title: 'Let us across hell and reach to heaven！',
-                message: '当前版本: 1.3.4 ' + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Enigfrank/ElectronClassScheduleX',
+                message: '当前版本: ' + app.getVersion() + '\n' + '\n' + '作者: Enigfrank' + '\n' + '项目地址:https://github.com/Enigfrank/ElectronClassScheduleX',
             });
         });
 
         ipcMain.on('quitApp', () => {
+            this.log('info', '[IPC管理] 退出应用请求');
             const mainWindow = this.windowManager.getWindow('main');
             dialog.showMessageBox(mainWindow, {
                 title: '请确认',
@@ -229,6 +248,7 @@ class IpcManager {
                 buttons: ['取消', '确定']
             }).then((data) => {
                 if (data.response) {
+                    this.log('info', '[IPC管理] 用户确认退出应用');
                     const { app } = require('electron');
                     app.quit();
                 }
@@ -236,7 +256,7 @@ class IpcManager {
         });
 
         ipcMain.on('log', (e, arg) => {
-            this.logger.info(arg);
+            this.log('info', `[渲染进程] ${arg}`);
         });
 
         ipcMain.on('dialog', (e, arg) => {
@@ -246,23 +266,29 @@ class IpcManager {
             });
         });
 
-        ipcMain.on('pop', (e, arg) => {
-            // 托盘弹出菜单
-            // 需要根据具体实现调整
-        });
 
         ipcMain.on('getTimeOffset', (e, arg = 0) => {
             this.handleTimeOffsetSetting(e, arg);
         });
 
-        // 打开外部链接
-        ipcMain.on('open-external-link', (event, url) => {
-            this.logger.info(`[外部链接] 正在打开: ${url}`);
+        ipcMain.on('open-external-link', (url) => {
+            this.log('info', `[IPC管理] 打开外部链接: ${url}`);
             shell.openExternal(url).catch((err) => {
-                this.logger.error(`[外部链接] 打开失败: ${err.message}`);
+                this.log('error', `[IPC管理] 打开外部链接失败: ${err.message}`);
                 dialog.showErrorBox('打开链接失败', `无法打开链接: ${url}\n错误: ${err.message}`);
             });
         });
+
+        ipcMain.on('open-config-folder', () => {
+            this.log('info', '[IPC管理] 打开配置文件夹');
+            const configExtractor = new ScheduleConfigExtractor(this.logger);
+            const configDir = configExtractor.getConfigDir();
+            shell.openPath(configDir).catch((err) => {
+                this.log('error', `[IPC管理] 打开配置文件夹失败: ${err.message}`);
+                dialog.showErrorBox('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${err.message}`);
+            });
+        });
+
     }
 
     handleTimeOffsetSetting(e, arg = 0) {
@@ -289,7 +315,7 @@ class IpcManager {
 
         prompt(dialogConfig).then((userInput) => {
             if (userInput === null) {
-                this.logger.info('[时间偏移设置] 用户取消操作');
+                this.log('info', '[时间偏移设置] 用户取消操作');
                 dialog.showMessageBox(mainWindow, {
                     type: 'warning',
                     title: '操作取消',
@@ -300,6 +326,7 @@ class IpcManager {
 
             const offsetStr = userInput.trim();
             if (offsetStr === '') {
+                this.log('warn', '[时间偏移设置] 输入为空');
                 dialog.showMessageBox(mainWindow, {
                     type: 'error',
                     title: '输入无效',
@@ -310,6 +337,7 @@ class IpcManager {
 
             const offset = Number(offsetStr);
             if (isNaN(offset)) {
+                this.log('warn', '[时间偏移设置] 输入不是有效数字');
                 dialog.showMessageBox(mainWindow, {
                     type: 'error',
                     title: '输入无效',
@@ -322,7 +350,7 @@ class IpcManager {
                 mainWindow.webContents.send('setTimeOffset', offset);
             }
             
-            this.logger.info(`[时间偏移设置] 成功设置偏移量：${offset} 秒`);
+            this.log('info', `[时间偏移设置] 成功设置偏移量: ${offset} 秒`);
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
                 title: '设置成功',
@@ -330,7 +358,7 @@ class IpcManager {
             });
 
         }).catch((err) => {
-            this.logger.error('[时间偏移设置] 对话框异常:', err.stack);
+            this.log('error', `[时间偏移设置] 对话框异常: ${err.stack}`);
             dialog.showMessageBox(mainWindow, {
                 type: 'error',
                 title: '系统错误',
@@ -340,6 +368,7 @@ class IpcManager {
     }
 
     showAmtlsWindow() {
+        this.log('info', '[IPC管理] 显示彩蛋窗口');
         this.amtlsWindow = new BrowserWindow({
             width: 800,
             height: 680,
@@ -352,7 +381,7 @@ class IpcManager {
             }
         });
 
-        this.amtlsWindow.loadFile('amtls.html');
+        this.amtlsWindow.loadFile(path.join(__dirname, '..', 'amtls.html'));
 
         setTimeout(() => {
             if (this.amtlsWindow && !this.amtlsWindow.isDestroyed()) {

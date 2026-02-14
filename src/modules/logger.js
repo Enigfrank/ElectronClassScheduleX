@@ -30,8 +30,8 @@ class Logger {
                 
                 // 检查是否在打包环境中运行
                 if (appPath.includes('app.asar')) {
-                    // 在生产环境中，使用 app.asar.unpacked 目录
-                    const prodPath = path.join(appPath, '..', 'app.asar.unpacked', 'logs');
+                    // 在生产环境中，使用 app.asar 同级目录的 logs 文件夹
+                    const prodPath = path.join(appPath, '..', 'logs');
                     return prodPath;
                 }
             }

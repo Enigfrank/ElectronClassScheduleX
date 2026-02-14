@@ -1,4 +1,4 @@
-const { Tray, Menu } = require('electron');
+const { Tray, Menu ,app} = require('electron');
 
 class TrayManager {
     constructor(configManager, logger, windowManager) {
@@ -8,39 +8,44 @@ class TrayManager {
         this.tray = null;
     }
 
-    // 创建托盘
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     createTray(iconPath) {
-        // 如果已存在托盘实例，先销毁
         if (this.tray) {
             this.tray.destroy();
             this.tray = null;
         }
         
+        this.log('info', '[托盘管理] 开始创建系统托盘');
+        
         this.tray = new Tray(iconPath);
         this.updateTrayMenu();
         
-        // 托盘点击事件
         this.tray.on('click', () => {
             this.onTrayClick();
         });
 
+        this.log('info', '[托盘管理] 系统托盘创建成功');
         return this.tray;
     }
 
-    // 托盘点击事件处理
     onTrayClick() {
+        this.log('info', '[托盘管理] 托盘图标被点击');
         this.windowManager.createReactGUIWindow();
     }
 
-    // 更新托盘菜单
     updateTrayMenu() {
         if (this.tray) {
             const contextMenu = Menu.buildFromTemplate(this.getTrayMenuTemplate());
             this.tray.setContextMenu(contextMenu);
+            this.log('info', '[托盘管理] 托盘菜单已更新');
         }
     }
 
-    // 获取托盘菜单模板
     getTrayMenuTemplate() {
         return [
             {
@@ -57,8 +62,9 @@ class TrayManager {
         ];
     }
 
-    // 显示退出确认对话框
     showQuitConfirmation() {
+        this.log('info', '[托盘管理] 显示退出确认对话框');
+        
         const { dialog } = require('electron');
         const mainWindow = this.windowManager.getWindow('main');
         
@@ -68,30 +74,31 @@ class TrayManager {
             buttons: ['取消', '确定']
         }).then((data) => { 
             if (data.response) {
-                const { app } = require('electron');
+                this.log('info', '[托盘管理] 用户确认退出程序');
                 app.quit();
+            } else {
+                this.log('info', '[托盘管理] 用户取消退出程序');
             }
         });
     }
 
-    // 获取资源路径
     getAssetPath(...paths) {
         const path = require('path');
         return path.join(__dirname, '..', ...paths);
     }
 
-    // 销毁托盘
     destroy() {
         if (this.tray) {
             this.tray.destroy();
             this.tray = null;
+            this.log('info', '[托盘管理] 托盘已销毁');
         }
     }
 
-    // 设置托盘提示
     setToolTip(tooltip) {
         if (this.tray) {
             this.tray.setToolTip(tooltip);
+            this.log('info', `[托盘管理] 设置托盘提示: ${tooltip}`);
         }
     }
 }

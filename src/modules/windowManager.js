@@ -13,8 +13,15 @@ class WindowManager {
         };
     }
 
-    // 创建主窗口
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     createMainWindow() {
+        this.log('info', '[窗口管理] 开始创建主窗口');
+        
         const win = new BrowserWindow({
             x: 0,
             y: 0,
@@ -36,7 +43,7 @@ class WindowManager {
         });
 
         win.loadFile(path.join(__dirname, '..', 'index.html')).catch(err => {
-            this.logger.error('Failed to load index.html:', err);
+            this.log('error', `[窗口管理] 加载主窗口页面失败: ${err.message}`);
         });
 
         if (this.configManager.getWindowAlwaysOnTop()) {
@@ -44,15 +51,18 @@ class WindowManager {
         }
 
         this.windows.main = win;
+        this.log('info', '[窗口管理] 主窗口创建成功');
         return win;
     }
 
-    // 创建React GUI窗口
     createReactGUIWindow() {
         if (this.windows.gui && !this.windows.gui.isDestroyed()) {
             this.windows.gui.show();
+            this.log('info', '[窗口管理] 显示已存在的GUI窗口');
             return this.windows.gui;
         }
+
+        this.log('info', '[窗口管理] 开始创建GUI窗口');
 
         const guiWindow = new BrowserWindow({
             width: 1280,
@@ -70,18 +80,18 @@ class WindowManager {
             }
         });
 
-        guiWindow.loadFile(path.join(__dirname, '..', 'GUI-react.html'));
+        guiWindow.loadFile(path.join(__dirname, '..', 'GUI.html'));
 
-        // 窗口准备好显示时再展示，避免白屏
         guiWindow.once('ready-to-show', () => {
             guiWindow.show();
+            this.log('info', '[窗口管理] GUI窗口已显示');
         });
 
         guiWindow.on('close', () => {
+            this.log('info', '[窗口管理] GUI窗口已关闭');
             this.windows.gui = null;
         });
 
-        // 在窗口加载完成后，发送初始化数据
         guiWindow.webContents.on('did-finish-load', () => {
             guiWindow.webContents.send('init', {
                 isDuringClassCountdown: this.configManager.get('isDuringClassCountdown', true),
@@ -93,11 +103,13 @@ class WindowManager {
         });
 
         this.windows.gui = guiWindow;
+        this.log('info', '[窗口管理] GUI窗口创建成功');
         return guiWindow;
     }
 
-    // 创建加载对话框
     createLoadingDialog(parentWindow) {
+        this.log('info', '[窗口管理] 创建加载对话框');
+        
         const loadingDialog = new BrowserWindow({
             width: 600,
             height: 400,
@@ -116,33 +128,32 @@ class WindowManager {
         return loadingDialog;
     }
 
-    // 关闭加载对话框
     closeLoadingDialog() {
         if (this.windows.loading && !this.windows.loading.isDestroyed()) {
             this.windows.loading.close();
             this.windows.loading = null;
+            this.log('info', '[窗口管理] 加载对话框已关闭');
         }
     }
 
-    // 设置窗口置顶
     setWindowAlwaysOnTop(win, alwaysOnTop) {
         if (win && !win.isDestroyed()) {
             win.setAlwaysOnTop(alwaysOnTop, 'screen-saver');
+            this.log('info', `[窗口管理] 设置窗口置顶: ${alwaysOnTop}`);
         }
     }
 
-    // 隐藏菜单栏
     hideMenuBar() {
         Menu.setApplicationMenu(null);
+        this.log('info', '[窗口管理] 菜单栏已隐藏');
     }
 
-    // 获取窗口实例
     getWindow(type) {
         return this.windows[type];
     }
 
-    // 关闭所有窗口
     closeAllWindows() {
+        this.log('info', '[窗口管理] 关闭所有窗口');
         Object.values(this.windows).forEach(window => {
             if (window && !window.isDestroyed()) {
                 window.close();
@@ -156,7 +167,6 @@ class WindowManager {
         };
     }
 
-    // 检查窗口是否存在
     windowExists(type) {
         return this.windows[type] && !this.windows[type].isDestroyed();
     }

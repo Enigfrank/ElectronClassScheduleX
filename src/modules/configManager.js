@@ -1,7 +1,8 @@
-const Store = require('electron-store');
+const Store = require('electron-store').default;
 
 class ConfigManager {
-    constructor() {
+    constructor(logger = null) {
+        this.logger = logger;
         this.store = new Store();
         this.defaultConfig = {
             isDuringClassCountdown: true,
@@ -14,6 +15,12 @@ class ConfigManager {
         };
     }
 
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     get(key, defaultValue = null) {
         const value = this.store.get(key);
         return value !== undefined ? value : (defaultValue !== null ? defaultValue : this.defaultConfig[key]);
@@ -21,6 +28,7 @@ class ConfigManager {
 
     set(key, value) {
         this.store.set(key, value);
+        this.log('info', `[配置管理] 设置 ${key} = ${JSON.stringify(value)}`);
     }
 
     getAll() {
@@ -35,6 +43,7 @@ class ConfigManager {
         for (const key in this.defaultConfig) {
             this.store.delete(key);
         }
+        this.log('info', '[配置管理] 已重置所有配置为默认值');
     }
 
     // 获取关机时间配置（兼容旧格式）

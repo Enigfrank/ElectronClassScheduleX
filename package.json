@@ -1,28 +1,30 @@
 {
-  "name": "electron_class_schedule",
-  "version": "1.4.0",
+  "name": "electron-class-schedule-x",
+  "version": "1.4.1",
   "description": "电子课表",
-  "main": "main.js",
-  "author": "Enigfrank",
-  "license": "MIT",
+  "main": "src/main.js",
+  "author": {
+    "name": "Enigfrank",
+    "email": "xrh3248486103@vip.qq.com"
+  },
+  "license": "GPLv3",
   "scripts": {
     "start": "chcp 65001 && electron .",
     "build": "electron-builder --win --x64 --publish never",
     "rebuild": "electron-rebuild"
   },
   "devDependencies": {
-    "@electron/packager": "^18.4.4",
-    "@electron/rebuild": "^4.0.1",
-    "electron": "^38.0.0",
-    "electron-builder": "^26.0.12",
-    "electron-updater": "^6.6.7",
-    "node-gyp": "^11.4.1"
+    "@electron/packager": "^19.0.5",
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^39.6.0",
+    "electron-builder": "^26.7.0",
+    "node-gyp": "^12.2.0"
   },
   "dependencies": {
     "electron-disable-minimize": "^2.1.0",
     "electron-log": "^5.4.3",
     "electron-prompt": "^1.7.0",
-    "electron-store": "^8.1.0",
+    "electron-store": "^11.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "windows-shortcuts": "^0.1.6"
@@ -30,10 +32,9 @@
   "build": {
     "asar": true,
     "asarUnpack": [
-      "js/scheduleConfig.js",
-      "logs/example.log"
+
     ],
-    "appId": "com.enigfrank.electronclassschedule",
+    "appId": "com.enigfrank.ElectronClassScheduleX",
     "productName": "电子课表",
     "copyright": "Copyright © Enigfrank",
     "win": {
@@ -45,30 +46,18 @@
           ]
         }
       ],
-      "icon": "./image/icon.ico"
+      "icon": "src/image/icon.ico"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "license": "LICENSE.rtf",
+      "runAfterFinish": false,
+      "shortcutName": "电子课表"
+
     },
     "files": [
-      "css/**/*",
-      "dist/**/*",
-      "modules/**/*",
-      "font/**/*",
-      "image/**/*",
-      "js/**/*",
-      "l1/**/*",
-      "logs/**/*",
-      "node_modules/**/*",
-      "index.html",
-      "shutdownManager.html",
-      "GUI.html",
-      "GUI-react.html",
-      "loading.html",
-      "shutdown-warning.html",
-      "amtls.html",
-      "main.js"
+      "src/**/*"
     ],
     "directories": {
       "output": "out"

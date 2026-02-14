@@ -3,17 +3,22 @@ const fs = require('fs');
 const { dialog } = require('electron');
 
 class Utils {
-    constructor() {
+    constructor(logger = null) {
         this.basePath = path.join(__dirname, '..');
+        this.logger = logger;
     }
 
-    // 获取资源路径
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     getAssetPath(...paths) {
         const fullPath = path.join(this.basePath, ...paths);
         
-        // 增加路径检查
         if (!fs.existsSync(fullPath)) {
-            console.error(`资源不存在: ${fullPath}`);
+            this.log('error', `[工具类] 资源不存在: ${fullPath}`);
         }
         return fullPath;
     }

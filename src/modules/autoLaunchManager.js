@@ -11,24 +11,30 @@ class AutoLaunchManager {
         this.shortcutName = '电子课表(请勿重命名).lnk';
     }
 
-    // 设置自启动
+    log(level, message) {
+        if (this.logger) {
+            this.logger[level](message);
+        }
+    }
+
     setAutoLaunch() {
+        this.log('info', '[自启动管理] 开始设置自启动');
         const { app } = require('electron');
         
-        // 先禁用 Electron 内置的自启动
         app.setLoginItemSettings({
             openAtLogin: false,
             openAsHidden: false
         });
 
         if (this.configManager.getAutoLaunch()) {
+            this.log('info', '[自启动管理] 自启动已启用，创建快捷方式');
             this.createStartupShortcut();
         } else {
+            this.log('info', '[自启动管理] 自启动已禁用，删除快捷方式');
             this.removeStartupShortcut();
         }
     }
 
-    // 创建启动快捷方式
     createStartupShortcut() {
         const { app } = require('electron');
         
@@ -37,37 +43,35 @@ class AutoLaunchManager {
             workingDir: path.dirname(app.getPath('exe')),
         }, (err) => {
             if (err) {
-                this.logger.error('Error creating shortcut:', err);
+                this.log('error', `[自启动管理] 创建快捷方式失败: ${err.message}`);
                 const { dialog } = require('electron');
                 dialog.showErrorBox('错误', '创建快捷方式时出错: ' + err.message);
             } else {
-                this.logger.info('Startup shortcut created successfully');
+                this.log('info', '[自启动管理] 启动快捷方式创建成功');
             }
         });
     }
 
-    // 删除启动快捷方式
     removeStartupShortcut() {
         fs.unlink(path.join(this.startupFolderPath, this.shortcutName), (err) => {
             if (err) {
-                if (err.code !== 'ENOENT') { // 文件不存在不是错误
-                    this.logger.error('Error deleting shortcut:', err);
+                if (err.code !== 'ENOENT') {
+                    this.log('error', `[自启动管理] 删除快捷方式失败: ${err.message}`);
                     const { dialog } = require('electron');
                     dialog.showErrorBox('错误', '删除快捷方式时出错: ' + err.message);
                 }
             } else {
-                this.logger.info('Startup shortcut removed successfully');
+                this.log('info', '[自启动管理] 启动快捷方式删除成功');
             }
         });
     }
 
-    // 检查自启动状态
     isAutoLaunchEnabled() {
         return fs.existsSync(path.join(this.startupFolderPath, this.shortcutName));
     }
 
-    // 更新自启动设置
     updateAutoLaunch(enabled) {
+        this.log('info', `[自启动管理] 更新自启动设置: ${enabled}`);
         this.configManager.setAutoLaunch(enabled);
         this.setAutoLaunch();
     }

@@ -7,16 +7,13 @@ const ShutdownScheduler = require('./modules/shutdownScheduler');
 const AutoLaunchManager = require('./modules/autoLaunchManager');
 const Utils = require('./modules/utils');
 const IpcManager = require('./modules/ipcManager');
+const ScheduleConfigExtractor = require('./modules/scheduleConfigExtractor');
 
 // 导入 Electron 模块
-const { app, BrowserWindow, Menu, ipcMain, dialog, screen, Tray, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const createShortcut = require('windows-shortcuts');
-const prompt = require('electron-prompt');
 const { DisableMinimize } = require('electron-disable-minimize');
-const { exec } = require('child_process');
+const { net } = require('electron');
 
 // 全局变量
 let win = undefined;
@@ -34,13 +31,15 @@ let trayManager;
 let shutdownScheduler;
 let autoLaunchManager;
 let ipcManager;
+let scheduleConfigExtractor;
 
 // 初始化函数
 function initializeModules() {
     try {
         logger = new Logger();
-        configManager = new ConfigManager();
-        utils = new Utils();
+        scheduleConfigExtractor = new ScheduleConfigExtractor(logger);
+        configManager = new ConfigManager(logger);
+        utils = new Utils(logger);
         windowManager = new WindowManager(configManager, logger);
         trayManager = new TrayManager(configManager, logger, windowManager);
         shutdownScheduler = new ShutdownScheduler(configManager, logger);
@@ -63,13 +62,39 @@ if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
     app.quit();
 }
 
+// 注册自定义协议用于访问配置文件
+function registerConfigProtocol() {
+    protocol.handle('config', (request) => {
+        const url = request.url.substr(8);
+        const configDir = scheduleConfigExtractor.getConfigDir();
+        const filePath = path.join(configDir, url);
+        
+        return net.fetch(`file://${filePath}`);
+    });
+}
+
+// 确保配置文件存在
+function ensureScheduleConfig() {
+    if (!scheduleConfigExtractor) {
+        scheduleConfigExtractor = new ScheduleConfigExtractor(logger);
+    }
+    const result = scheduleConfigExtractor.ensureConfigExists();
+    if (!result.success) {
+        if (logger) {
+            logger.error('配置文件提取失败: ' + result.error);
+        }
+        return false;
+    }
+    return true;
+}
+
 // 欢迎对话框
 async function firstopen() {
     return await dialog.showMessageBox({
         type: 'info',
         buttons: ['OK'],
         title: '欢迎使用!',
-        message: '欢迎使用电子课表,课程配置请在根目录中的js文件夹中的scheduleConfig.js文件进行修改' + '\n' + '\n' + '祝您使用愉快!(本提示只显示一次)' + '\n' + 'Developer : Enigfrank'
+        message: '欢迎使用电子课表,修改课表请点击右下角托盘图标在管理界面进行操作' + '\n' + '\n' + '祝您使用愉快!(本提示只显示一次)' + '\n' + 'Developer : Enigfrank'
     });
 }
 
@@ -151,6 +176,12 @@ app.whenReady().then(async () => {
     // 确保应用完全准备好后再初始化模块
     initializeModules();
     
+    // 注册自定义协议
+    registerConfigProtocol();
+    
+    // 确保配置文件存在
+    ensureScheduleConfig();
+    
     // 记录日志系统状态
     if (logger) {
         const logStatus = logger.getStatus();
@@ -186,7 +217,7 @@ ipcMain.on('openReactGUI', () => {
     }
 });
 
-ipcMain.on('shutdown-action', (event, action) => {
+ipcMain.on('shutdown-action', (action) => {
     // 从全局导出的对象中获取调度器实例
     if (typeof shutdownScheduler === 'undefined' || !shutdownScheduler) {
         console.error('Shutdown scheduler not available');
@@ -260,6 +291,7 @@ module.exports = {
     trayManager,
     shutdownScheduler,
     autoLaunchManager,
-    utils
+    utils,
+    scheduleConfigExtractor
 };
 
