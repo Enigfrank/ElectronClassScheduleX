@@ -1,6 +1,12 @@
 
 
-> 此项目对原版 `ECS V1` 进行了大量更改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
+> 此项目对原版 `ECS V1` 进行更改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
+
+## 📋 功能说明
+- 显示每日/每周课程安排
+- 支持多周课表轮换
+- 窗口置顶、点击穿透
+- 本地存储，无需联网
 
 ## 构建方法
  - 1. 下载本仓库
@@ -8,13 +14,18 @@
  - 3. 调试使用 npm start 构建使用npm run build
 
 
-## ⚠️注意
+## 🔐 隐私政策
+本程序为纯本地应用，**不会收集、存储或传输任何用户数据**到网络系统。所有课表数据仅保存在用户本地设备。
 
-本软件无可用性保障!
+## 📜 Code signing policy
+Free code signing provided by SignPath.io, certificate by SignPath Foundation
 
-使用ECSX需要有一定的技术能力(使用方法与原版ECS大致相同)
+### 团队角色
+| 角色 | 成员 |
+|------|------|
+| Author/Reviewer/Approver | [@Enigfrank](https://github.com/Enigfrank) |
 
-有BUG请提交issue
+> 注：本项目为个人维护的开源项目，所有代码变更与签名请求均由单一维护者负责。
 
 
 

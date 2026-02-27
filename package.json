@@ -5,7 +5,7 @@
   "main": "src/main.js",
   "author": {
     "name": "Enigfrank",
-    "email": "xrh3248486103@vip.qq.com"
+    "email": "enigfrank@ecso.top"
   },
   "license": "GPLv3",
   "scripts": {
@@ -36,11 +36,14 @@
     ],
     "appId": "com.enigfrank.ElectronClassScheduleX",
     "productName": "电子课表",
+    "compression": "maximum",
     "copyright": "Copyright © Enigfrank",
     "win": {
       "target": [
         {
           "target": "nsis",
+          "signingHashAlgorithms": ["sha256"], 
+          "rfc3161TimeStampServer": "http://timestamp.digicert.com",
           "arch": [
             "x64"
           ]
