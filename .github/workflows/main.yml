@@ -40,6 +40,10 @@ jobs:
         run: npm ci
         shell: bash
 
+      - name: Rebuild native modules
+        run: npx electron-rebuild
+        shell: bash
+
       - name: Build Electron App
         run: npm run build
         shell: bash
