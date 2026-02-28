@@ -1,6 +1,6 @@
 {
   "name": "electron-class-schedule-x",
-  "version": "1.5.0 ",
+  "version": "1.5.0",
   "description": "电子课表",
   "main": "src/main.js",
   "author": {
@@ -42,14 +42,12 @@
       "target": [
         {
           "target": "nsis",
-          "signingHashAlgorithms": ["sha256"], 
-          "rfc3161TimeStampServer": "http://timestamp.digicert.com",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
-      "icon": "src/image/icon.ico"
+      "icon": "src/image/icon.ico",
+      "signingHashAlgorithms": ["sha256"],
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com"
     },
     "nsis": {
       "oneClick": false,
