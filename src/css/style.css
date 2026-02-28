@@ -32,8 +32,10 @@
     -webkit-user-select: none;
     user-select: none;
     line-height: 1.2;
-    -webkit-tap-highlight-color: transparent; /* 移除触摸高亮 */
-    touch-action: manipulation; /* 优化触摸响应 */
+    -webkit-tap-highlight-color: transparent;
+    /* 移除触摸高亮 */
+    touch-action: manipulation;
+    /* 优化触摸响应 */
 }
 
 :root {
@@ -51,6 +53,49 @@
     touch-action: manipulation;
 }
 
+/* 触摸屏悬停状态 - 仅对鼠标设备生效 */
+@media (hover: hover) and (pointer: fine) {
+    .background:hover {
+        background-color: rgba(0, 0, 0, calc(var(--global-bg-opacity) + 0.1));
+    }
+}
+
+/* 触摸屏优化：增加点击区域大小 */
+@media (pointer: coarse) {
+    .background {
+        min-height: 44px;
+        /* 最小触摸目标尺寸 */
+        min-width: 44px;
+    }
+
+    .class {
+        padding: 8px 12px;
+        /* 增加触摸区域 */
+    }
+
+    .sidebar {
+        padding: 12px 16px;
+        /* 增加侧边栏触摸区域 */
+    }
+}
+
+/* 防止触摸屏上的文本选择 */
+@media (pointer: coarse) {
+    * {
+        -webkit-touch-callout: none;
+        /* iOS Safari */
+        -webkit-user-select: none;
+        /* Safari */
+        -khtml-user-select: none;
+        /* Konqueror HTML */
+        -moz-user-select: none;
+        /* Firefox */
+        -ms-user-select: none;
+        /* Internet Explorer/Edge */
+        user-select: none;
+    }
+}
+
 .classContainer {
     font-family: JNMYT;
     position: relative;
@@ -63,6 +108,9 @@
 
 .countdownContainer {
     position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
     transition: all 2s;
     padding: var(--container-bg-padding);
 }
@@ -176,13 +224,16 @@
     font-family: JETB;
     color: #FFF;
     display: none;
-    border: 2px solid #4CAF50; /* 绿色边框突出提示 */
+    border: 2px solid #4CAF50;
+    /* 绿色边框突出提示 */
 
 }
 
 .hint-label {
-  color: rgba(0, 255, 10, 1); /* 自定义颜色 */
-   font-weight: bold; /* 可选：加粗突出 */
+    color: rgba(0, 255, 10, 1);
+    /* 自定义颜色 */
+    font-weight: bold;
+    /* 可选：加粗突出 */
 }
 
 .divider {
@@ -199,7 +250,8 @@
 
 .nextClassHint {
     transition: opacity 0.5s;
-    border: 2px solid #4CAF50; /* 绿色边框突出提示 */
+    border: 2px solid #4CAF50;
+    /* 绿色边框突出提示 */
     opacity: 0;
     animation: fadeIn 0.5s ease-in-out forwards;
 }
@@ -214,6 +266,7 @@
         opacity: 0;
         transform: translateY(-10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -225,9 +278,9 @@
         opacity: 1;
         transform: translateY(0);
     }
+
     to {
         opacity: 0;
         transform: translateY(-10px);
     }
 }
-

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN" id="html">
+
+<head>
+  <title>作业列表</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script type="text/javascript" src="js/jquery.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="css/assignment.css">
+</head>
+
+<body>
+  <div class="assignment-container" id="assignmentContainer">
+    <div class="assignment-header">
+      <span class="header-icon">📚</span>
+      <span class="header-title">作业列表</span>
+      <span class="assignment-count" id="assignmentCount">0 项作业</span>
+    </div>
+    <div class="assignment-list" id="assignmentList">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📭</div>
+        <div class="empty-text">暂无作业</div>
+      </div>
+    </div>
+  </div>
+</body>
+
+<script>
+  const { ipcRenderer } = require('electron');
+
+  /**
+   * 存储当前作业数据
+   */
+  let currentAssignments = [];
+
+  /**
+   * 获取DOM元素引用
+   */
+  const assignmentList = document.getElementById('assignmentList');
+  const assignmentCount = document.getElementById('assignmentCount');
+  const emptyState = document.getElementById('emptyState');
+  const assignmentContainer = document.getElementById('assignmentContainer');
+
+  /**
+   * 格式化时间为友好显示格式
+   * @param {string} dateString - ISO格式的时间字符串
+   * @returns {string} 格式化后的时间字符串
+   */
+  function formatTime(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return '刚刚';
+    if (diffMins < 60) return `${diffMins} 分钟前`;
+    if (diffHours < 24) return `${diffHours} 小时前`;
+    if (diffDays < 7) return `${diffDays} 天前`;
+
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${month}月${day}日 ${hours}:${minutes}`;
+  }
+
+  /**
+   * 创建单个作业卡片的HTML元素
+   * @param {Object} assignment - 作业数据对象
+   * @param {number} index - 卡片索引，用于动画延迟
+   * @returns {HTMLElement} 作业卡片DOM元素
+   */
+  function createAssignmentCard(assignment, index) {
+    const card = document.createElement('div');
+    card.className = 'assignment-card';
+    card.style.animationDelay = `${index * 0.08}s`;
+    card.dataset.id = assignment.id;
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="subject-tag" style="background-color: ${assignment.subject_color}">
+          ${assignment.subject_name}
+        </div>
+      </div>
+      <div class="card-title">${assignment.title}</div>
+      <div class="card-content">${assignment.content || ''}</div>
+      <div class="card-footer">
+        <div class="teacher-name">
+          <span class="footer-icon">👨‍🏫</span>
+          ${assignment.teacher_name}
+        </div>
+        <div class="publish-time">
+          <span class="footer-icon">🕐</span>
+          ${formatTime(assignment.created_at)}
+        </div>
+      </div>
+    `;
+
+    return card;
+  }
+
+  /**
+   * 渲染作业列表
+   * @param {Array} assignments - 作业数据数组
+   */
+  function renderAssignments(assignments) {
+    currentAssignments = assignments || [];
+
+    assignmentList.innerHTML = '';
+
+    if (currentAssignments.length === 0) {
+      assignmentList.innerHTML = `
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📭</div>
+          <div class="empty-text">暂无作业</div>
+        </div>
+      `;
+      assignmentCount.textContent = '0 项作业';
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    currentAssignments.forEach((assignment, index) => {
+      const card = createAssignmentCard(assignment, index);
+      fragment.appendChild(card);
+    });
+
+    assignmentList.appendChild(fragment);
+    assignmentCount.textContent = `${currentAssignments.length} 项作业`;
+  }
+
+
+
+  /**
+   * 监听IPC事件：接收作业数据
+   */
+  ipcRenderer.on('update-assignments', (event, assignments) => {
+    renderAssignments(assignments);
+  });
+
+  /**
+   * 监听IPC事件：更新单条作业
+   */
+  ipcRenderer.on('assignment-update', (event, assignment) => {
+    const index = currentAssignments.findIndex(a => a.id === assignment.id);
+    if (index !== -1) {
+      currentAssignments[index] = assignment;
+      renderAssignments(currentAssignments);
+    }
+  });
+
+  /**
+   * 监听IPC事件：添加新作业
+   */
+  ipcRenderer.on('assignment-add', (event, assignment) => {
+    currentAssignments.unshift(assignment);
+    renderAssignments(currentAssignments);
+  });
+
+  /**
+   * 监听IPC事件：删除作业
+   */
+  ipcRenderer.on('assignment-remove', (event, assignmentId) => {
+    currentAssignments = currentAssignments.filter(a => a.id !== assignmentId);
+    renderAssignments(currentAssignments);
+  });
+
+  /**
+   * 监听IPC事件：清空所有作业
+   */
+  ipcRenderer.on('assignment-clear', () => {
+    currentAssignments = [];
+    renderAssignments([]);
+  });
+
+  /**
+   * 页面加载完成后通知主进程
+   */
+  document.addEventListener('DOMContentLoaded', () => {
+    ipcRenderer.send('assignment-window-ready');
+  });
+</script>
+
+</html>

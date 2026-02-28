@@ -1,37 +1,72 @@
 const { ipcMain, dialog, BrowserWindow, shell, app } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const prompt = require('electron-prompt');
 const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
 
+/**
+ * IPC通信管理模块
+ * 负责主进程与渲染进程之间的通信管理
+ */
 class IpcManager {
-    constructor(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager) {
+    /**
+     * 构造函数
+     * @param {ConfigManager} configManager - 配置管理器实例
+     * @param {AssignmentConfigManager} assignmentConfigManager - 作业配置管理器实例
+     * @param {Logger} logger - 日志记录器实例
+     * @param {WindowManager} windowManager - 窗口管理器实例
+     * @param {TrayManager} trayManager - 托盘管理器实例
+     * @param {ShutdownScheduler} shutdownScheduler - 关机调度器实例
+     * @param {AutoLaunchManager} autoLaunchManager - 自启动管理器实例
+     * @param {ClientManager} clientManager - 客户端管理器实例
+     * @param {AssignmentWindowManager} assignmentWindowManager - 作业窗口管理器实例
+     */
+    constructor(configManager, assignmentConfigManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager, clientManager = null, assignmentWindowManager = null) {
         this.configManager = configManager;
+        this.assignmentConfigManager = assignmentConfigManager;
         this.logger = logger;
         this.windowManager = windowManager;
         this.trayManager = trayManager;
         this.shutdownScheduler = shutdownScheduler;
         this.autoLaunchManager = autoLaunchManager;
-        
+        this.clientManager = clientManager;
+        this.assignmentWindowManager = assignmentWindowManager;
+
         this.shutdownManagerWindow = null;
         this.amtlsWindow = null;
-        
+
+        this.setupClientManagerCallbacks();
         this.setupIpcEvents();
+        this.setupOobeEvents();
     }
 
+    /**
+     * 记录日志
+     * @param {string} level - 日志级别
+     * @param {string} message - 日志消息
+     */
     log(level, message) {
         if (this.logger) {
             this.logger[level](message);
         }
     }
 
+    /**
+     * 设置所有IPC事件监听器
+     */
     setupIpcEvents() {
         this.setupShutdownEvents();
         this.setupConfigEvents();
         this.setupWindowEvents();
         this.setupUtilityEvents();
+        this.setupClientEvents();
+        this.setupAssignmentWindowEvents();
         this.log('info', '[IPC管理] IPC事件监听器设置完成');
     }
 
+    /**
+     * 设置关机相关IPC事件监听器
+     */
     setupShutdownEvents() {
         ipcMain.handle('getShutdownTimes', () => {
             return this.configManager.getShutdownTimes();
@@ -72,7 +107,7 @@ class IpcManager {
                 this.shutdownManagerWindow.show();
                 return;
             }
-            
+
             this.shutdownManagerWindow = new BrowserWindow({
                 width: 650,
                 height: 650,
@@ -90,7 +125,7 @@ class IpcManager {
                 this.shutdownManagerWindow = null;
                 this.log('info', '[IPC管理] 关机管理窗口已关闭');
             });
-            
+
             this.shutdownManagerWindow.webContents.on('did-finish-load', () => {
                 const times = this.configManager.getShutdownTimes();
                 this.shutdownManagerWindow.webContents.send('shutdownTimesUpdated', times);
@@ -98,6 +133,9 @@ class IpcManager {
         });
     }
 
+    /**
+     * 设置配置相关IPC事件监听器
+     */
     setupConfigEvents() {
         ipcMain.on('getWeekIndex', () => {
             this.trayManager.updateTrayMenu();
@@ -160,6 +198,9 @@ class IpcManager {
         });
     }
 
+    /**
+     * 设置窗口相关IPC事件监听器
+     */
     setupWindowEvents() {
         ipcMain.on('openSettingDialog', () => {
             this.log('info', '[IPC管理] 打开设置对话框');
@@ -186,10 +227,12 @@ class IpcManager {
             this.log('info', '[IPC管理] 打开开发者工具');
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
-                if (mainWindow.webContents.isDevToolsOpened()) {
-                    mainWindow.webContents.closeDevTools();
+                if (this.windowManager.windowExists('devTools')) {
+                    // 如果开发者工具窗口已存在，则关闭它
+                    this.windowManager.closeDevToolsWindow();
                 } else {
-                    mainWindow.webContents.openDevTools();
+                    // 创建独立的开发者工具窗口
+                    this.windowManager.createDevToolsWindow(mainWindow);
                 }
             }
         });
@@ -204,8 +247,21 @@ class IpcManager {
                 }
             }
         });
+
+        // 设置窗口全屏宽度
+        ipcMain.on('setWindowFullScreen', () => {
+            this.windowManager.setWindowFullScreenWidth();
+        });
+
+        // 设置窗口动态宽度
+        ipcMain.on('setWindowDynamicWidth', () => {
+            this.windowManager.setWindowDynamicWidth();
+        });
     }
 
+    /**
+     * 设置工具类IPC事件监听器
+     */
     setupUtilityEvents() {
         ipcMain.on('resetSettings', () => {
             this.log('info', '[IPC管理] 重置设置');
@@ -271,7 +327,7 @@ class IpcManager {
             this.handleTimeOffsetSetting(e, arg);
         });
 
-        ipcMain.on('open-external-link', (url) => {
+        ipcMain.on('open-external-link', (event, url) => {
             this.log('info', `[IPC管理] 打开外部链接: ${url}`);
             shell.openExternal(url).catch((err) => {
                 this.log('error', `[IPC管理] 打开外部链接失败: ${err.message}`);
@@ -289,8 +345,222 @@ class IpcManager {
             });
         });
 
+
+
+        ipcMain.handle('get-logs', async () => {
+            try {
+                const logsDir = path.join(__dirname, '..', 'logs');
+                const files = fs.readdirSync(logsDir).filter(file => file.endsWith('.log'));
+
+                if (files.length === 0) {
+                    return { success: true, logs: ['暂无日志文件'] };
+                }
+
+                // 读取最新的日志文件
+                const latestLogFile = files.sort().reverse()[0];
+                const logPath = path.join(logsDir, latestLogFile);
+                const logContent = fs.readFileSync(logPath, 'utf8');
+
+                // 将日志内容按行分割，并限制显示最近100行
+                const logLines = logContent.split('\n').filter(line => line.trim()).slice(-100);
+
+                return { success: true, logs: logLines };
+            } catch (error) {
+                this.log('error', `[IPC管理] 读取日志失败: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.on('open-logs-folder', () => {
+            this.log('info', '[IPC管理] 打开日志文件夹');
+            const logsDir = path.join(__dirname, '..', 'logs');
+            shell.openPath(logsDir).catch((err) => {
+                this.log('error', `[IPC管理] 打开日志文件夹失败: ${err.message}`);
+                dialog.showErrorBox('打开文件夹失败', `无法打开日志文件夹: ${logsDir}\n错误: ${err.message}`);
+            });
+        });
+
     }
 
+    /**
+     * 设置客户端管理器的回调函数
+     */
+    setupClientManagerCallbacks() {
+        if (!this.clientManager) return;
+
+        this.clientManager.setOnWsStatus((status) => {
+            this.sendWsStatusToRenderer(status);
+        });
+
+        this.log('info', '[IPC管理] 客户端管理器回调设置完成');
+    }
+
+    /**
+     * 向渲染进程发送WebSocket状态
+     * @param {string} status - WebSocket状态
+     */
+    sendWsStatusToRenderer(status) {
+        const mainWindow = this.windowManager.getWindow('main');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('ws-status', status);
+            this.log('info', `[IPC管理] 发送WebSocket状态: ${status}`);
+        }
+    }
+
+    /**
+     * 设置客户端相关IPC事件处理
+     */
+    setupClientEvents() {
+        ipcMain.handle('getAssignmentConfig', async () => {
+            try {
+                const config = {
+                    assignmentEnabled: this.assignmentConfigManager.getAssignmentEnabled(),
+                    serverURL: this.assignmentConfigManager.getServerURL(),
+                    wsURL: this.assignmentConfigManager.getWsURL(),
+                    clientId: this.assignmentConfigManager.getClientId(),
+                    clientName: this.assignmentConfigManager.getClientName(),
+                    assignmentDisplayPeriod: this.assignmentConfigManager.getAssignmentDisplayPeriod()
+                };
+                this.log('info', '[IPC管理] 获取作业配置');
+                return { success: true, data: config };
+            } catch (error) {
+                this.log('error', `[IPC管理] 获取作业配置失败: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.handle('saveAssignmentConfig', async (event, config) => {
+            try {
+                this.log('info', `[IPC管理] 保存作业配置: ${JSON.stringify(config)}`);
+
+                const savedClientId = this.assignmentConfigManager.getClientId();
+                const savedClientName = this.assignmentConfigManager.getClientName();
+
+                this.assignmentConfigManager.setAssignmentEnabled(config.assignmentEnabled || false);
+                this.assignmentConfigManager.setServerURL(config.serverURL);
+                this.assignmentConfigManager.setWsURL(config.wsURL);
+                if (config.assignmentDisplayPeriod !== undefined) {
+                    this.assignmentConfigManager.setAssignmentDisplayPeriod(config.assignmentDisplayPeriod);
+                }
+
+                if (this.clientManager) {
+                    if (config.clientName && !savedClientId) {
+                        try {
+                            const result = await this.clientManager.registerClient({ name: config.clientName });
+                            this.log('info', `[IPC管理] 客户端注册成功: ${result.client_id}`);
+                            return { success: true, clientId: result.client_id };
+                        } catch (registerError) {
+                            this.log('error', `[IPC管理] 客户端注册失败: ${registerError.message}`);
+                            return { success: false, error: `注册失败: ${registerError.message}` };
+                        }
+                    } else if (savedClientId) {
+                        if (config.clientName && config.clientName !== savedClientName) {
+                            this.assignmentConfigManager.setClientName(config.clientName);
+                        }
+                    }
+                }
+
+                return { success: true, clientId: savedClientId };
+            } catch (error) {
+                this.log('error', `[IPC管理] 保存作业配置失败: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.handle('testServerConnection', async (event, serverURL) => {
+            try {
+                this.log('info', `[IPC管理] 测试服务器连接: ${serverURL}`);
+                if (!this.clientManager) {
+                    return { success: false, error: '客户端管理器未初始化' };
+                }
+                const result = await this.clientManager.testConnection(serverURL);
+                return { success: true, data: result };
+            } catch (error) {
+                this.log('error', `[IPC管理] 测试服务器连接失败: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.handle('getWsStatus', () => {
+            try {
+                const status = this.clientManager ? this.clientManager.getWsStatus() : 'disconnected';
+                this.log('info', `[IPC管理] 获取WebSocket状态: ${status}`);
+                return { success: true, status };
+            } catch (error) {
+                this.log('error', `[IPC管理] 获取WebSocket状态失败: ${error.message}`);
+                return { success: false, status: 'disconnected', error: error.message };
+            }
+        });
+
+        ipcMain.on('setAssignmentEnabled', (event, enabled) => {
+            try {
+                this.log('info', `[IPC管理] 设置作业功能启用状态: ${enabled}`);
+                this.assignmentConfigManager.setAssignmentEnabled(enabled);
+
+                if (enabled) {
+                    if (this.clientManager) {
+                        this.clientManager.connect();
+                    }
+                } else {
+                    if (this.clientManager) {
+                        this.clientManager.disconnect();
+                    }
+                    if (this.assignmentWindowManager) {
+                        this.assignmentWindowManager.hideWindow();
+                    }
+                }
+            } catch (error) {
+                this.log('error', `[IPC管理] 设置作业功能启用状态失败: ${error.message}`);
+            }
+        });
+    }
+
+    /**
+     * 设置作业窗口相关IPC事件处理
+     */
+    setupAssignmentWindowEvents() {
+        ipcMain.on('showAssignmentWindow', () => {
+            try {
+                this.log('info', '[IPC管理] 显示作业窗口');
+                if (this.assignmentWindowManager) {
+                    const assignments = this.assignmentWindowManager.getCurrentAssignments();
+                    this.assignmentWindowManager.showWindow(assignments);
+                }
+            } catch (error) {
+                this.log('error', `[IPC管理] 显示作业窗口失败: ${error.message}`);
+            }
+        });
+
+        ipcMain.on('hideAssignmentWindow', () => {
+            try {
+                this.log('info', '[IPC管理] 隐藏作业窗口');
+                if (this.assignmentWindowManager) {
+                    this.assignmentWindowManager.hideWindow();
+                }
+            } catch (error) {
+                this.log('error', `[IPC管理] 隐藏作业窗口失败: ${error.message}`);
+            }
+        });
+
+        ipcMain.on('updateAssignments', (event, assignments) => {
+            try {
+                this.log('info', `[IPC管理] 更新作业列表，数量: ${assignments ? assignments.length : 0}`);
+                if (this.assignmentWindowManager) {
+                    this.assignmentWindowManager.updateAssignments(assignments);
+                }
+            } catch (error) {
+                this.log('error', `[IPC管理] 更新作业列表失败: ${error.message}`);
+            }
+        });
+
+
+    }
+
+    /**
+     * 处理时间偏移设置对话框
+     * @param {Electron.IpcMainEvent} e - IPC事件对象
+     * @param {number} arg - 初始偏移值
+     */
     handleTimeOffsetSetting(e, arg = 0) {
         const initialOffset = typeof arg === 'number' ? arg : 0;
         const mainWindow = this.windowManager.getWindow('main');
@@ -349,7 +619,7 @@ class IpcManager {
             if (mainWindow) {
                 mainWindow.webContents.send('setTimeOffset', offset);
             }
-            
+
             this.log('info', `[时间偏移设置] 成功设置偏移量: ${offset} 秒`);
             dialog.showMessageBox(mainWindow, {
                 type: 'info',
@@ -367,6 +637,9 @@ class IpcManager {
         });
     }
 
+    /**
+     * 显示彩蛋窗口
+     */
     showAmtlsWindow() {
         this.log('info', '[IPC管理] 显示彩蛋窗口');
         this.amtlsWindow = new BrowserWindow({
@@ -394,8 +667,87 @@ class IpcManager {
         });
     }
 
+    /**
+     * 获取资源文件路径
+     * @param {...string} paths - 路径片段
+     * @returns {string} 完整的资源路径
+     */
     getAssetPath(...paths) {
         return path.join(process.cwd(), ...paths);
+    }
+
+    /**
+     * 设置OOBE相关IPC事件处理
+     */
+    setupOobeEvents() {
+        // OOBE完成事件
+        ipcMain.on('oobe-complete', () => {
+            this.log('info', '[IPC管理] OOBE完成，准备启动主应用');
+            // 标记OOBE已完成
+            this.configManager.setOobeCompleted(true);
+            // 关闭OOBE窗口
+            this.windowManager.closeOobeWindow();
+            // 通知主进程启动主应用
+            const { ipcMain } = require('electron');
+            // 使用setImmediate确保窗口关闭后再触发事件
+            setImmediate(() => {
+                ipcMain.emit('oobe-finished');
+            });
+        });
+
+        // OOBE打开配置文件夹
+        ipcMain.on('oobe-open-config-folder', () => {
+            this.log('info', '[IPC管理] OOBE中打开配置文件夹');
+            const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
+            const configExtractor = new ScheduleConfigExtractor(this.logger);
+            const configDir = configExtractor.getConfigDir();
+            shell.openPath(configDir).catch((err) => {
+                this.log('error', `[IPC管理] 打开配置文件夹失败: ${err.message}`);
+                dialog.showErrorBox('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${err.message}`);
+            });
+        });
+
+        // OOBE保存作业配置
+        ipcMain.handle('oobe-save-assignment-config', async (event, config) => {
+            try {
+                this.log('info', `[IPC管理] OOBE保存作业配置: ${JSON.stringify(config)}`);
+
+                this.assignmentConfigManager.setAssignmentEnabled(config.enabled || false);
+                if (config.serverUrl) {
+                    this.assignmentConfigManager.setServerURL(config.serverUrl);
+                    this.assignmentConfigManager.setWsURL(config.serverUrl.replace('http', 'ws'));
+                }
+                if (config.clientName) {
+                    this.assignmentConfigManager.setClientName(config.clientName);
+                }
+
+                // 如果启用了作业功能且提供了客户端名称，尝试注册
+                if (config.enabled && config.clientName && this.clientManager) {
+                    try {
+                        const result = await this.clientManager.registerClient({ name: config.clientName });
+                        this.log('info', `[IPC管理] OOBE中客户端注册成功: ${result.client_id}`);
+                        return { success: true, clientId: result.client_id };
+                    } catch (registerError) {
+                        this.log('error', `[IPC管理] OOBE中客户端注册失败: ${registerError.message}`);
+                        // 即使注册失败也返回成功，因为配置已保存
+                        return { success: true, warning: `注册失败: ${registerError.message}` };
+                    }
+                }
+
+                return { success: true };
+            } catch (error) {
+                this.log('error', `[IPC管理] OOBE保存作业配置失败: ${error.message}`);
+                return { success: false, error: error.message };
+            }
+        });
+
+        // 从GUI打开OOBE
+        ipcMain.on('open-oobe', () => {
+            this.log('info', '[IPC管理] 从GUI打开OOBE');
+            this.windowManager.createOobeWindow();
+        });
+
+        this.log('info', '[IPC管理] OOBE事件监听器设置完成');
     }
 }
 

@@ -14,26 +14,33 @@
 
 <body>
   <div class="globalContainer" id="globalContainer">
-    <div class="classContainer background" id="classContainer" style="position: relative;"> <!-- 添加 position: relative -->
+    <div class="classContainer background" id="classContainer" style="position: relative;">
+      <!-- 添加 position: relative -->
       <div class="class">加</div>
       <div class="class">载</div>
       <div class="class">中</div>
     </div>
-    
-    <!-- 修改 countdownContainer 的位置 -->
-    <div class="countdownContainer" id="countdownContainer" style="display: block; position: absolute; left: 100%; top: 0;">
+
+    <!-- countdownContainer 位置由CSS控制 -->
+    <div class="countdownContainer" id="countdownContainer">
       <div class="countdowner" id="countdowner">
         <div class="currentClass" id="currentFullName">Loading</div>
         <div class="countdown" id="countdownText">00:00</div>
       </div>
     </div>
-    
-    <div class="leftSidebar sidebar background" id="leftSidebar"><span id="weekEN" class="t">Load</span><div class="corner options notIgnoreClick" id="weekCH">ing</div></div>
-    <div class="rightSidebar sidebar background" id="rightSidebar"><span id="countdownDays" class="t">000</span><div class="corner">天</div></div>
+
+    <div class="leftSidebar sidebar background" id="leftSidebar"><span id="weekEN" class="t">Load</span>
+      <div class="corner options" id="weekCH">ing</div>
+    </div>
+    <div class="rightSidebar sidebar background" id="rightSidebar"><span id="countdownDays" class="t">000</span>
+      <div class="corner">天</div>
+    </div>
   </div>
   <div class="miniCountdown" id="miniCountdown">00:00</div>
-  <div class="nextClassHint" id="nextClassHint" style="display: none; position: fixed; top: var(--top-space); border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF; margin-left: 10px;"></div>
-      </div>
+  <div class="nextClassHint" id="nextClassHint"
+    style="display: none; position: fixed; top: var(--top-space); border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF; margin-left: 10px;">
+  </div>
+  </div>
 
 </body>
 
@@ -56,6 +63,15 @@
   let root = document.querySelector(':root');
   let isClassCountdown = true
   let isClassHidden = true
+
+  // 拖动相关变量
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let miniCountdownInitialX = 0;
+  let miniCountdownInitialY = 0;
+  let miniCountdownHasMoved = false;
+
   let lastScheduleData = {
     currentHighlight: {
       index: null,
@@ -68,10 +84,10 @@
     timetable: null,
     divider: [null, null]
   }
-  
-let nextClassHint = document.getElementById('nextClassHint');
-let isHintShown = false; // 标记提示是否已显示
-let hintTimer = null; // 用于清除提示的定时器
+
+  let nextClassHint = document.getElementById('nextClassHint');
+  let isHintShown = false; // 标记提示是否已显示
+  let hintTimer = null; // 用于清除提示的定时器
 
 
 
@@ -112,34 +128,34 @@ let hintTimer = null; // 用于清除提示的定时器
     currentFullName.style.color = scheduleData.currentHighlight.type === 'current' ? 'rgba(0, 255, 10, 1)' : 'rgba(255, 255, 5, 1)'
     countdownText.innerText = scheduleData.currentHighlight.countdownText;
 
-        // 核心：检查是否距离下课还有10分钟（600秒）
+    // 核心：检查是否距离下课还有10分钟（600秒）
     if (scheduleData.currentHighlight.type === 'current' && scheduleData.currentHighlight.countdown === 600 && !isHintShown) {
-        const nextClass = getNextClassInfo();
-        if (nextClass) {
-            // 显示提示 - 先设置内容和位置
-            nextClassHint.innerHTML = `<span class="hint-label">下节</span>: ${nextClass.name}`;
-            nextClassHint.style.left = `calc(45% + ${miniCountdown.offsetWidth}px)`; // 定位在miniCountdown右侧
-            
-            // 先移除淡出类，确保可以重新触发淡入动画
-            nextClassHint.classList.remove('fadeOut');
-            nextClassHint.style.display = 'block';
-            
-            // 强制重排，确保动画可以重新触发
-            void nextClassHint.offsetHeight;
-            
-            isHintShown = true;
+      const nextClass = getNextClassInfo();
+      if (nextClass) {
+        // 显示提示 - 先设置内容和位置
+        nextClassHint.innerHTML = `<span class="hint-label">下节</span>: ${nextClass.name}`;
+        nextClassHint.style.left = `calc(45% + ${miniCountdown.offsetWidth}px)`; // 定位在miniCountdown右侧
 
-            // 15秒后隐藏提示
-            clearTimeout(hintTimer);
-            hintTimer = setTimeout(() => {
-                nextClassHint.classList.add('fadeOut'); // 淡出动画
-                setTimeout(() => {
-                    nextClassHint.style.display = 'none';
-                    nextClassHint.classList.remove('fadeOut');
-                    isHintShown = false; // 重置状态，允许下次触发
-                }, 500); // 等待淡出动画完成
-            }, 15000);
-        }
+        // 先移除淡出类，确保可以重新触发淡入动画
+        nextClassHint.classList.remove('fadeOut');
+        nextClassHint.style.display = 'block';
+
+        // 强制重排，确保动画可以重新触发
+        void nextClassHint.offsetHeight;
+
+        isHintShown = true;
+
+        // 15秒后隐藏提示
+        clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => {
+          nextClassHint.classList.add('fadeOut'); // 淡出动画
+          setTimeout(() => {
+            nextClassHint.style.display = 'none';
+            nextClassHint.classList.remove('fadeOut');
+            isHintShown = false; // 重置状态，允许下次触发
+          }, 500); // 等待淡出动画完成
+        }, 12500);
+      }
     }
 
     if (scheduleData.currentHighlight.type === 'current') {
@@ -148,22 +164,60 @@ let hintTimer = null; // 用于清除提示的定时器
           countdownContainer.style.display = 'none'
           miniCountdown.style.display = 'block'
           miniCountdown.innerHTML = `<div class="currentClass">${currentFullName.innerText = scheduleData.currentHighlight.fullName}</div><div class="countdown" style="margin-left:5px">${scheduleData.currentHighlight.countdownText}</div>`
+
+          // 迷你倒计时显示时，保持鼠标穿透，但通过位置检测动态控制
+          ipcRenderer.send('setIgnore', true);
+
+          // 设置窗口为全屏宽度
+          ipcRenderer.send('setWindowFullScreen');
+
+          // 如果迷你倒计时之前没有移动过，确保它在初始位置
+          if (!miniCountdownHasMoved) {
+            resetMiniCountdownPosition();
+          }
         } else { // 上课 并且开启了倒计时 并且 不隐藏主体 -> 正常计时
           countdownContainer.style.display = 'block'
           miniCountdown.style.display = 'none'
+
+          // 重置迷你倒计时位置
+          resetMiniCountdownPosition();
+
+          // 重新启用鼠标穿透，允许触碰隐藏
+          ipcRenderer.send('setIgnore', true);
+
+          // 设置窗口为动态宽度
+          ipcRenderer.send('setWindowDynamicWidth');
         }
       } else { // 上课 并且关闭了倒计时 -> 都不显示
         countdownContainer.style.display = 'none'
         miniCountdown.style.display = 'none'
+
+        // 重置迷你倒计时位置
+        resetMiniCountdownPosition();
+
+        // 重新启用鼠标穿透，允许触碰隐藏
+        ipcRenderer.send('setIgnore', true);
+
+        // 设置窗口为动态宽度
+        ipcRenderer.send('setWindowDynamicWidth');
       }
     }
     else { // 下课正常显示
       countdownContainer.style.display = 'block';
-      miniCountdown.style.display = 'none'
+      miniCountdown.style.display = 'none';
+
+      // 重置迷你倒计时位置
+      resetMiniCountdownPosition();
+
+      // 重新启用鼠标穿透，允许触碰隐藏
+      ipcRenderer.send('setIgnore', true);
+
+      // 设置窗口为动态宽度
+      ipcRenderer.send('setWindowDynamicWidth');
     }
   }
 
-   function setCountdownerPosition() {
+  function setCountdownerPosition() {
     let highlightElement = document.getElementById('highlighted')
     let offset = {}
     if (scheduleData.currentHighlight.type === 'current') {
@@ -192,6 +246,222 @@ let hintTimer = null; // 用于清除提示的定时器
     }
   }
 
+  /**
+   * 初始化迷你倒计时的拖动功能
+   * 支持鼠标和触摸屏拖动
+   */
+  function initMiniCountdownDrag() {
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    // 鼠标拖动事件
+    miniCountdown.addEventListener('mousedown', handleDragStart);
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+
+    // 触摸屏拖动事件
+    miniCountdown.addEventListener('touchstart', handleTouchDragStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchDragMove, { passive: false });
+    document.addEventListener('touchend', handleTouchDragEnd);
+
+    // 添加动态鼠标穿透控制
+    initDynamicMouseIgnore();
+  }
+
+  /**
+   * 初始化动态鼠标穿透控制
+   * 根据鼠标/触摸位置动态切换穿透状态
+   */
+  function initDynamicMouseIgnore() {
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    // 鼠标移动事件
+    document.addEventListener('mousemove', (event) => {
+      // 只有在迷你倒计时显示时才进行检测
+      if (miniCountdown.style.display === 'block') {
+        const isInMiniCountdown = isPointInElement(event.clientX, event.clientY, miniCountdown);
+
+        // 根据位置动态切换鼠标穿透状态
+        if (isInMiniCountdown) {
+          // 在迷你倒计时区域内，禁用穿透
+          ipcRenderer.send('setIgnore', false);
+        } else {
+          // 在迷你倒计时区域外，启用穿透
+          ipcRenderer.send('setIgnore', true);
+        }
+      }
+    });
+
+    // 触摸移动事件
+    document.addEventListener('touchmove', (event) => {
+      // 只有在迷你倒计时显示时才进行检测
+      if (miniCountdown.style.display === 'block' && event.touches.length === 1) {
+        const touch = event.touches[0];
+        const isInMiniCountdown = isPointInElement(touch.clientX, touch.clientY, miniCountdown);
+
+        // 根据位置动态切换鼠标穿透状态
+        if (isInMiniCountdown) {
+          // 在迷你倒计时区域内，禁用穿透
+          ipcRenderer.send('setIgnore', false);
+        } else {
+          // 在迷你倒计时区域外，启用穿透
+          ipcRenderer.send('setIgnore', true);
+        }
+      }
+    });
+  }
+
+  /**
+   * 检测点是否在元素区域内
+   * @param {number} x 点的X坐标
+   * @param {number} y 点的Y坐标
+   * @param {HTMLElement} element 目标元素
+   * @returns {boolean} 是否在元素区域内
+   */
+  function isPointInElement(x, y, element) {
+    const rect = element.getBoundingClientRect();
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  /**
+   * 处理鼠标拖动开始
+   */
+  function handleDragStart(event) {
+    // 只有在迷你倒计时显示时才允许拖动
+    if (document.getElementById('miniCountdown').style.display === 'block') {
+      isDragging = true;
+      dragStartX = event.clientX;
+      dragStartY = event.clientY;
+
+      const miniCountdown = document.getElementById('miniCountdown');
+      const rect = miniCountdown.getBoundingClientRect();
+      miniCountdownInitialX = rect.left;
+      miniCountdownInitialY = rect.top;
+
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * 处理鼠标拖动移动
+   */
+  function handleDragMove(event) {
+    if (isDragging) {
+      const deltaX = event.clientX - dragStartX;
+      const deltaY = event.clientY - dragStartY;
+
+      const miniCountdown = document.getElementById('miniCountdown');
+
+      // 计算新位置
+      let newX = miniCountdownInitialX + deltaX;
+      let newY = miniCountdownInitialY + deltaY;
+
+      // 获取窗口尺寸
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      // 获取迷你倒计时尺寸
+      const miniWidth = miniCountdown.offsetWidth;
+      const miniHeight = miniCountdown.offsetHeight;
+
+      // 限制在窗口范围内
+      newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
+      newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
+
+      miniCountdown.style.left = newX + 'px';
+      miniCountdown.style.top = newY + 'px';
+      miniCountdown.style.transform = 'none'; // 移除居中变换
+
+      miniCountdownHasMoved = true;
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * 处理鼠标拖动结束
+   */
+  function handleDragEnd(event) {
+    if (isDragging) {
+      isDragging = false;
+    }
+  }
+
+  /**
+   * 处理触摸屏拖动开始
+   */
+  function handleTouchDragStart(event) {
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    // 只有在迷你倒计时显示时才允许拖动
+    if (miniCountdown.style.display === 'block' && event.touches.length === 1) {
+      isDragging = true;
+      const touch = event.touches[0];
+      dragStartX = touch.clientX;
+      dragStartY = touch.clientY;
+
+      const rect = miniCountdown.getBoundingClientRect();
+      miniCountdownInitialX = rect.left;
+      miniCountdownInitialY = rect.top;
+
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * 处理触摸屏拖动移动
+   */
+  function handleTouchDragMove(event) {
+    if (isDragging && event.touches.length === 1) {
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - dragStartX;
+      const deltaY = touch.clientY - dragStartY;
+
+      const miniCountdown = document.getElementById('miniCountdown');
+
+      // 计算新位置
+      let newX = miniCountdownInitialX + deltaX;
+      let newY = miniCountdownInitialY + deltaY;
+
+      // 获取窗口尺寸
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      // 获取迷你倒计时尺寸
+      const miniWidth = miniCountdown.offsetWidth;
+      const miniHeight = miniCountdown.offsetHeight;
+
+      // 限制在窗口范围内
+      newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
+      newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
+
+      miniCountdown.style.left = newX + 'px';
+      miniCountdown.style.top = newY + 'px';
+      miniCountdown.style.transform = 'none'; // 移除居中变换
+
+      miniCountdownHasMoved = true;
+      event.preventDefault();
+    }
+  }
+
+  /**
+   * 处理触摸屏拖动结束
+   */
+  function handleTouchDragEnd(event) {
+    if (isDragging) {
+      isDragging = false;
+    }
+  }
+
+  /**
+   * 重置迷你倒计时位置到初始状态
+   */
+  function resetMiniCountdownPosition() {
+    const miniCountdown = document.getElementById('miniCountdown');
+    miniCountdown.style.left = '50%';
+    miniCountdown.style.top = 'var(--top-space)';
+    miniCountdown.style.transform = 'translateX(-50%)';
+    miniCountdownHasMoved = false;
+  }
+
   function setSidebar() {
     let date = getCurrentEditedDate()
     let week = date.getDay()
@@ -210,8 +480,8 @@ let hintTimer = null; // 用于清除提示的定时器
   function tick(reset = false) {
     scheduleData = getScheduleData();
     if (scheduleData.currentHighlight.fullName !== lastScheduleData.currentHighlight.fullName) {
-        isHintShown = false;
-        clearTimeout(hintTimer);
+      isHintShown = false;
+      clearTimeout(hintTimer);
     }
     setCountdownerContent()
     if (JSON.stringify(scheduleData.scheduleArray) != JSON.stringify(lastScheduleData.scheduleArray) ||
@@ -228,7 +498,7 @@ let hintTimer = null; // 用于清除提示的定时器
 
 
   // 获取下一节课信息
-function getNextClassInfo() {
+  function getNextClassInfo() {
     const currentSchedule = getCurrentDaySchedule();
     const dayOfWeek = getCurrentEditedDay(getCurrentEditedDate());
     const timetable = scheduleConfig.daily_class[dayOfWeek].timetable;
@@ -238,30 +508,30 @@ function getNextClassInfo() {
 
     // 找到当前课程的下一个课程
     for (let i = 0; i < timeKeys.length; i++) {
-        const timeRange = timeKeys[i];
-        const [startTime, endTime] = timeRange.split('-');
-        const classIndex = dayTimetable[timeRange];
+      const timeRange = timeKeys[i];
+      const [startTime, endTime] = timeRange.split('-');
+      const classIndex = dayTimetable[timeRange];
 
-        // 如果当前时间在本节课内，查找下一节
-        if (typeof classIndex === 'number' && isClassCurrent(startTime, endTime, currentTime)) {
-            // 从下一个时间段开始找下一节课
-            for (let j = i + 1; j < timeKeys.length; j++) {
-                const nextTimeRange = timeKeys[j];
-                const nextClassIndex = dayTimetable[nextTimeRange];
-                if (typeof nextClassIndex === 'number' && nextClassIndex < currentSchedule.length) {
-                    const nextSubject = currentSchedule[nextClassIndex];
-                    console.log("找到下节课：", nextSubject, nextTimeRange);
-                    return {
-                        name: scheduleConfig.subject_name[nextSubject], // 下节课全称
-                        time: nextTimeRange.split('-')[0] // 下节课开始时间
-                    };
-                }
-            }
-            break;
+      // 如果当前时间在本节课内，查找下一节
+      if (typeof classIndex === 'number' && isClassCurrent(startTime, endTime, currentTime)) {
+        // 从下一个时间段开始找下一节课
+        for (let j = i + 1; j < timeKeys.length; j++) {
+          const nextTimeRange = timeKeys[j];
+          const nextClassIndex = dayTimetable[nextTimeRange];
+          if (typeof nextClassIndex === 'number' && nextClassIndex < currentSchedule.length) {
+            const nextSubject = currentSchedule[nextClassIndex];
+            console.log("找到下节课：", nextSubject, nextTimeRange);
+            return {
+              name: scheduleConfig.subject_name[nextSubject], // 下节课全称
+              time: nextTimeRange.split('-')[0] // 下节课开始时间
+            };
+          }
         }
+        break;
+      }
     }
     return null; // 没有下一节课
-}
+  }
 
 
   let lastTickTime = new Date().getTime()
@@ -276,25 +546,86 @@ function getNextClassInfo() {
     root.style.setProperty(key, scheduleConfig.css_style[key])
   }
 
+  // 初始化迷你倒计时拖动功能
+  initMiniCountdownDrag();
+
   let timer = undefined
-  window.addEventListener("mousemove", event => {
-    if (event.target.className && event.target.className.indexOf('notIgnoreClick') == -1) {
-      root.style.opacity = '0'
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        root.style.opacity = '1'
-      }, 7500);
-    } else {
-      clearTimeout(timer)
-      root.style.opacity = '1'
-    }
-    if (event.target.className.indexOf('notIgnoreClick') == -1) {
-      ipcRenderer.send('setIgnore', true)
-    } else {
-      ipcRenderer.send('setIgnore', false)
+  let isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+  /**
+   * 处理指针移动事件（兼容鼠标和触摸屏）
+   * 根据显示状态智能控制触碰隐藏
+   * @param {Event} event 指针事件
+   */
+  function handlePointerMove(event) {
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    // 如果迷你倒计时显示中，不触发隐藏
+    if (miniCountdown.style.display === 'block') {
+      return;
     }
 
-  });
+    // 只有在globalContainer显示时才触发隐藏
+    root.style.opacity = '0'
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      root.style.opacity = '1'
+    }, 2500);
+
+    // 启用鼠标穿透
+    ipcRenderer.send('setIgnore', true)
+  }
+
+  /**
+   * 处理触摸开始事件 - 实现触碰隐藏功能
+   * 根据显示状态智能控制触碰隐藏
+   * @param {TouchEvent} event 触摸事件
+   */
+  function handleTouchStart(event) {
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    // 如果迷你倒计时显示中，不触发隐藏（允许拖动）
+    if (miniCountdown.style.display === 'block') {
+      return;
+    }
+
+    // 阻止默认行为，避免浏览器默认的触摸处理
+    event.preventDefault();
+
+    // 只有在globalContainer显示时才触发隐藏
+    root.style.opacity = '0';
+    clearTimeout(timer);
+
+    // 设置定时器，5秒后自动显示界面
+    timer = setTimeout(() => {
+      root.style.opacity = '1';
+    }, 2500);
+
+    // 启用鼠标穿透
+    ipcRenderer.send('setIgnore', true);
+  }
+
+  /**
+   * 处理触摸结束事件
+   * @param {TouchEvent} event 触摸事件
+   */
+  function handleTouchEnd(event) {
+    // 所有区域都保持隐藏状态，等待定时器自动显示
+    // 不进行任何操作，让定时器控制显示
+  }
+
+  // 注册事件监听器
+  if (isTouchDevice) {
+    // 触摸屏设备：使用触摸事件
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchmove', handlePointerMove);
+
+    // 移除长按手势支持，所有区域都触发触碰隐藏
+  } else {
+    // 非触摸屏设备：使用鼠标事件
+    window.addEventListener('mousemove', handlePointerMove);
+  }
   ipcRenderer.send('setIgnore', true)
 
   function setScheduleDialog() {
@@ -340,11 +671,7 @@ function getNextClassInfo() {
     setScheduleDialog()
   })
 
-  document.addEventListener("click", function (event) {
-    if (event.target.className.indexOf('options') != -1) {
-      ipcRenderer.send('pop')
-    }
-  });
+  // 移除点击功能，所有区域都触发触碰隐藏
 
   ipcRenderer.on('setWeekIndex', (e, arg) => {
     scheduleConfig = JSON.parse(JSON.stringify(_scheduleConfig))

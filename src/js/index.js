@@ -178,5 +178,45 @@ function formatCountdown(countdownSeconds) {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
+/**
+ * 动态计算并设置countdownContainer的位置
+ * 确保countdownContainer在globalContainer右边且水平居中对齐
+ */
+function setCountdownerPosition() {
+    const globalContainer = document.getElementById('globalContainer');
+    const countdownContainer = document.getElementById('countdownContainer');
+    const countdowner = document.getElementById('countdowner');
+    
+    if (globalContainer && countdownContainer && countdowner) {
+        // 获取globalContainer的宽度
+        const globalWidth = globalContainer.offsetWidth;
+        
+        // 获取countdowner的宽度
+        const countdownerWidth = countdowner.offsetWidth;
+        
+        // 计算countdownContainer应该距离globalContainer右边的距离
+        // 使用margin-left而不是left定位，确保水平对齐
+        const marginLeft = globalWidth + 20; // 20px的间距
+        
+        // 设置countdownContainer的位置
+        countdownContainer.style.marginLeft = marginLeft + 'px';
+        
+        // 确保countdownContainer垂直居中
+        countdownContainer.style.top = '50%';
+        countdownContainer.style.transform = 'translateY(-50%)';
+    }
+}
+
+// 页面加载完成后初始化位置
+window.addEventListener('load', function() {
+    setCountdownerPosition();
+    
+    // 监听窗口大小变化，动态调整位置
+    window.addEventListener('resize', setCountdownerPosition);
+    
+    // 监听课程内容变化，动态调整位置
+    // 这里可以添加对课程内容变化的监听
+});
+
 
 

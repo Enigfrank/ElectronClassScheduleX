@@ -1,11 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import { app } from 'electron';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
 
 const APP_NAME = 'electron-class-schedule-x';
 const CONFIG_DIR_NAME = 'config';
@@ -116,4 +111,4 @@ class ScheduleConfigExtractor {
     }
 }
 
-export default ScheduleConfigExtractor;
+module.exports = ScheduleConfigExtractor;

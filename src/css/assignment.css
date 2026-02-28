@@ -1,0 +1,248 @@
+@font-face {
+    font-family: JETB;
+    src: url("../font/JETBRAINSMONO-BOLD.TTF");
+}
+
+@font-face {
+    font-family: YouYuan;
+    src: url("../font/SIMYOU.TTF");
+}
+
+@font-face {
+    font-family: Ali;
+    src: url("../font/AlimamaDongFangDaKai.TTF");
+}
+
+@font-face {
+    font-family: Sou;
+    src: url("../font/SourceHanSansCN-Bold.otf");
+}
+
+@font-face {
+    font-family: JNMYT;
+    src: url("../font/JingNanMaiYuanTi.otf");
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
+    line-height: 1.4;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+:root {
+    --bg-opacity: 0.75;
+    --border-radius: 12px;
+    --card-border-radius: 10px;
+    --transition-speed: 0.3s;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+}
+
+.assignment-container {
+    width: 100%;
+    height: 100%;
+    background: rgba(20, 20, 30, var(--bg-opacity));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.assignment-header {
+    display: flex;
+    align-items: center;
+    padding: 18px 24px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.header-icon {
+    font-size: 32px;
+    margin-right: 12px;
+}
+
+.header-title {
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 28px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.95);
+    flex: 1;
+}
+
+.assignment-count {
+    font-family: JETB, monospace;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 6px 14px;
+    border-radius: 20px;
+}
+
+.assignment-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.assignment-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.assignment-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.assignment-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    transition: background var(--transition-speed);
+}
+
+.assignment-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.assignment-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--card-border-radius);
+    padding: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: all var(--transition-speed) ease;
+    animation: cardFadeIn 0.4s ease forwards;
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.assignment-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes cardFadeIn {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.subject-tag {
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 22px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.95);
+    padding: 8px 16px;
+    border-radius: 8px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.card-title {
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 26px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.95);
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.card-content {
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 22px;
+    color: rgba(255, 255, 255, 0.75);
+    margin-bottom: 16px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.teacher-name,
+.publish-time {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.footer-icon {
+    font-size: 16px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.empty-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    opacity: 0.8;
+}
+
+.empty-text {
+    font-family: Sou, 'Microsoft YaHei', sans-serif;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .assignment-card {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+
+    .assignment-card:hover {
+        transform: none;
+    }
+}
