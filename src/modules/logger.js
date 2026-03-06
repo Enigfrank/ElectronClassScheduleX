@@ -21,22 +21,15 @@ class Logger {
 
     getLogsPath() {
         try {
-            // 尝试获取应用路径
-            let appPath;
-            
             // 检查是否存在全局 app 对象
-            if (typeof app !== 'undefined' && app && app.getAppPath) {
-                appPath = app.getAppPath();
-                
-                // 检查是否在打包环境中运行
-                if (appPath.includes('app.asar')) {
-                    // 在生产环境中，使用 app.asar 同级目录的 logs 文件夹
-                    const prodPath = path.join(appPath, '..', 'logs');
-                    return prodPath;
-                }
+            if (typeof app !== 'undefined' && app && app.getPath) {
+                // 使用 userData 目录存储日志，确保在打包环境中可写
+                const userDataPath = app.getPath('userData');
+                const logsPath = path.join(userDataPath, 'logs');
+                return logsPath;
             }
             
-            // 在开发环境中，使用项目根目录的 logs 文件夹
+            // 在开发环境或无法获取 app 时，使用项目根目录的 logs 文件夹
             const devPath = path.join(__dirname, '..', 'logs');
             return devPath;
             

@@ -20,8 +20,6 @@ class TrayManager {
             this.tray = null;
         }
         
-        this.log('info', '[托盘管理] 开始创建系统托盘');
-        
         this.tray = new Tray(iconPath);
         this.updateTrayMenu();
         
@@ -29,12 +27,10 @@ class TrayManager {
             this.onTrayClick();
         });
 
-        this.log('info', '[托盘管理] 系统托盘创建成功');
         return this.tray;
     }
 
     onTrayClick() {
-        this.log('info', '[托盘管理] 托盘图标被点击');
         this.windowManager.createReactGUIWindow();
     }
 
@@ -42,7 +38,6 @@ class TrayManager {
         if (this.tray) {
             const contextMenu = Menu.buildFromTemplate(this.getTrayMenuTemplate());
             this.tray.setContextMenu(contextMenu);
-            this.log('info', '[托盘管理] 托盘菜单已更新');
         }
     }
 
@@ -63,8 +58,6 @@ class TrayManager {
     }
 
     showQuitConfirmation() {
-        this.log('info', '[托盘管理] 显示退出确认对话框');
-        
         const { dialog } = require('electron');
         const mainWindow = this.windowManager.getWindow('main');
         
@@ -74,10 +67,7 @@ class TrayManager {
             buttons: ['取消', '确定']
         }).then((data) => { 
             if (data.response) {
-                this.log('info', '[托盘管理] 用户确认退出程序');
                 app.quit();
-            } else {
-                this.log('info', '[托盘管理] 用户取消退出程序');
             }
         });
     }
@@ -89,16 +79,22 @@ class TrayManager {
 
     destroy() {
         if (this.tray) {
-            this.tray.destroy();
-            this.tray = null;
-            this.log('info', '[托盘管理] 托盘已销毁');
+            try {
+                // 移除所有事件监听器
+                this.tray.removeAllListeners();
+                // 销毁托盘图标
+                this.tray.destroy();
+            } catch (error) {
+                this.log('error', `[托盘管理] 销毁托盘时出错: ${error.message}`);
+            } finally {
+                this.tray = null;
+            }
         }
     }
 
     setToolTip(tooltip) {
         if (this.tray) {
             this.tray.setToolTip(tooltip);
-            this.log('info', `[托盘管理] 设置托盘提示: ${tooltip}`);
         }
     }
 }

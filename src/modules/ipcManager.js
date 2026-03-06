@@ -61,7 +61,6 @@ class IpcManager {
         this.setupUtilityEvents();
         this.setupClientEvents();
         this.setupAssignmentWindowEvents();
-        this.log('info', '[IPC管理] IPC事件监听器设置完成');
     }
 
     /**
@@ -73,7 +72,6 @@ class IpcManager {
         });
 
         ipcMain.on('addShutdownTime', (event, timeItem) => {
-            this.log('info', `[IPC管理] 添加关机时间: ${JSON.stringify(timeItem)}`);
             const times = this.configManager.getShutdownTimes();
             times.push(timeItem);
             this.configManager.setShutdownTimes(times);
@@ -82,7 +80,6 @@ class IpcManager {
         });
 
         ipcMain.on('deleteShutdownTime', (event, index) => {
-            this.log('info', `[IPC管理] 删除关机时间，索引: ${index}`);
             const times = this.configManager.getShutdownTimes();
             times.splice(index, 1);
             this.configManager.setShutdownTimes(times);
@@ -94,7 +91,6 @@ class IpcManager {
             const times = this.configManager.getShutdownTimes();
             if (times[index]) {
                 times[index].enabled = !times[index].enabled;
-                this.log('info', `[IPC管理] 切换关机时间状态，索引: ${index}, 启用: ${times[index].enabled}`);
                 this.configManager.setShutdownTimes(times);
                 this.shutdownScheduler.scheduleShutdown();
                 event.sender.send('shutdownTimesUpdated', times);
@@ -102,7 +98,6 @@ class IpcManager {
         });
 
         ipcMain.on('openShutdownManager', async (event) => {
-            this.log('info', '[IPC管理] 打开关机管理窗口');
             if (this.shutdownManagerWindow) {
                 this.shutdownManagerWindow.show();
                 return;
@@ -123,7 +118,6 @@ class IpcManager {
             this.shutdownManagerWindow.loadFile(path.join(__dirname, '..', 'shutdownManager.html'));
             this.shutdownManagerWindow.on('closed', () => {
                 this.shutdownManagerWindow = null;
-                this.log('info', '[IPC管理] 关机管理窗口已关闭');
             });
 
             this.shutdownManagerWindow.webContents.on('did-finish-load', () => {
@@ -142,7 +136,6 @@ class IpcManager {
         });
 
         ipcMain.on('setWeekIndex', (e, index) => {
-            this.log('info', `[IPC管理] 设置周索引: ${index}`);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
                 mainWindow.webContents.send('setWeekIndex', index);
@@ -150,7 +143,6 @@ class IpcManager {
         });
 
         ipcMain.on('setClassCountdown', (e, checked) => {
-            this.log('info', `[IPC管理] 设置课间倒计时: ${checked}`);
             this.configManager.set('isDuringClassCountdown', checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -160,7 +152,6 @@ class IpcManager {
         });
 
         ipcMain.on('setWindowAlwaysOnTop', (e, checked) => {
-            this.log('info', `[IPC管理] 设置窗口置顶: ${checked}`);
             this.configManager.setWindowAlwaysOnTop(checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -170,7 +161,6 @@ class IpcManager {
         });
 
         ipcMain.on('setDuringClassHidden', (e, checked) => {
-            this.log('info', `[IPC管理] 设置上课时隐藏: ${checked}`);
             this.configManager.set('isDuringClassHidden', checked);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow) {
@@ -180,14 +170,12 @@ class IpcManager {
         });
 
         ipcMain.on('setAutoLaunch', (e, checked) => {
-            this.log('info', `[IPC管理] 设置开机自启: ${checked}`);
             this.configManager.setAutoLaunch(checked);
             this.autoLaunchManager.setAutoLaunch();
             this.trayManager.updateTrayMenu();
         });
 
         ipcMain.on('setScheduleShutdown', (e, checked) => {
-            this.log('info', `[IPC管理] 设置定时关机: ${checked}`);
             this.configManager.set('scheduleShutdown', checked);
             if (checked) {
                 this.shutdownScheduler.scheduleShutdown();
@@ -248,14 +236,89 @@ class IpcManager {
             }
         });
 
-        // 设置窗口全屏宽度
-        ipcMain.on('setWindowFullScreen', () => {
-            this.windowManager.setWindowFullScreenWidth();
+        // 交互区域更新
+        let interactiveRect = null;
+        let checkTimer = null;
+        let isDragging = false;
+        const { screen } = require('electron');
+
+        const checkMousePosition = () => {
+            if (isDragging) return; // 拖动中不进行检查
+
+            const mainWindow = this.windowManager.getWindow('main');
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                if (checkTimer) {
+                    clearInterval(checkTimer);
+                    checkTimer = null;
+                }
+                return;
+            }
+
+            try {
+                const point = screen.getCursorScreenPoint();
+                const bounds = mainWindow.getBounds();
+                
+                // 计算绝对坐标区域
+                // 注意：bounds.x/y 是窗口左上角在屏幕上的坐标
+                if (interactiveRect) {
+                    const absoluteRect = {
+                        x: bounds.x + interactiveRect.x,
+                        y: bounds.y + interactiveRect.y,
+                        width: interactiveRect.width,
+                        height: interactiveRect.height
+                    };
+
+                    // 扩大一点判定区域，防止边缘闪烁
+                    const padding = 5;
+                    if (point.x >= absoluteRect.x - padding && 
+                        point.x <= absoluteRect.x + absoluteRect.width + padding &&
+                        point.y >= absoluteRect.y - padding && 
+                        point.y <= absoluteRect.y + absoluteRect.height + padding) {
+                        // 在区域内，禁用穿透
+                        mainWindow.setIgnoreMouseEvents(false);
+                    } else {
+                        // 在区域外，启用穿透
+                        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+                    }
+                }
+            } catch (error) {
+                // 忽略可能的错误
+            }
+        };
+
+        ipcMain.on('updateInteractiveRect', (event, rect) => {
+            interactiveRect = rect;
+            if (rect) {
+                if (!checkTimer) {
+                    // 启动定时检查，50ms一次
+                    checkTimer = setInterval(checkMousePosition, 50);
+                }
+            } else {
+                if (checkTimer) {
+                    clearInterval(checkTimer);
+                    checkTimer = null;
+                    
+                    // 确保恢复穿透
+                    const mainWindow = this.windowManager.getWindow('main');
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.setIgnoreMouseEvents(true, { forward: true });
+                    }
+                }
+            }
         });
 
-        // 设置窗口动态宽度
-        ipcMain.on('setWindowDynamicWidth', () => {
-            this.windowManager.setWindowDynamicWidth();
+        ipcMain.on('setDragState', (event, state) => {
+            isDragging = state;
+            const mainWindow = this.windowManager.getWindow('main');
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (isDragging) {
+                    // 拖动开始，强制不穿透
+                    mainWindow.setIgnoreMouseEvents(false);
+                } else {
+                    // 拖动结束，立即检查一次位置
+                    checkMousePosition();
+                }
+            }
         });
     }
 
@@ -349,7 +412,14 @@ class IpcManager {
 
         ipcMain.handle('get-logs', async () => {
             try {
-                const logsDir = path.join(__dirname, '..', 'logs');
+                // 使用与logger模块相同的路径逻辑
+                const logsDir = app.getPath('userData') ? path.join(app.getPath('userData'), 'logs') : path.join(__dirname, '..', 'logs');
+                
+                // 确保日志目录存在
+                if (!fs.existsSync(logsDir)) {
+                    return { success: true, logs: ['暂无日志文件'] };
+                }
+                
                 const files = fs.readdirSync(logsDir).filter(file => file.endsWith('.log'));
 
                 if (files.length === 0) {
@@ -373,7 +443,8 @@ class IpcManager {
 
         ipcMain.on('open-logs-folder', () => {
             this.log('info', '[IPC管理] 打开日志文件夹');
-            const logsDir = path.join(__dirname, '..', 'logs');
+            // 使用与logger模块相同的路径逻辑
+            const logsDir = app.getPath('userData') ? path.join(app.getPath('userData'), 'logs') : path.join(__dirname, '..', 'logs');
             shell.openPath(logsDir).catch((err) => {
                 this.log('error', `[IPC管理] 打开日志文件夹失败: ${err.message}`);
                 dialog.showErrorBox('打开文件夹失败', `无法打开日志文件夹: ${logsDir}\n错误: ${err.message}`);

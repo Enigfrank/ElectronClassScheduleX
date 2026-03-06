@@ -344,7 +344,13 @@ app.whenReady().then(async () => {
     registerConfigProtocol();
 
     // 确保配置文件存在
-    ensureScheduleConfig();
+    if (!ensureScheduleConfig()) {
+        const msg = '配置文件初始化失败，程序无法继续运行。';
+        if (logger) logger.error(msg);
+        dialog.showErrorBox('启动错误', msg);
+        app.quit();
+        return;
+    }
 
     // 记录日志系统状态
     if (logger) {
@@ -365,12 +371,23 @@ app.whenReady().then(async () => {
     } else {
         // 非首次启动,显示加载对话框后初始化
         showLoadingDialog();
-        setTimeout(() => {
-            if (loadingDialog) {
-                loadingDialog.close();
-            }
-            initializeApp();
-        }, 1000);
+        
+        // 使用 Promise 确保初始化流程的顺序
+        new Promise(resolve => setTimeout(resolve, 1000))
+            .then(() => {
+                try {
+                    initializeApp();
+                    if (loadingDialog && !loadingDialog.isDestroyed()) {
+                        loadingDialog.close();
+                    }
+                } catch (error) {
+                    const msg = `初始化失败: ${error.message}`;
+                    if (logger) logger.error(msg);
+                    console.error(msg);
+                    dialog.showErrorBox('启动错误', msg);
+                    app.quit();
+                }
+            });
     }
 });
 
@@ -468,8 +485,12 @@ app.on('before-quit', () => {
     }
 
     // 清理托盘
+    if (trayManager) {
+        trayManager.destroy();
+    }
     if (tray) {
         tray.destroy();
+        tray = null;
     }
 });
 

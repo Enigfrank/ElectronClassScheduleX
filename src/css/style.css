@@ -32,10 +32,7 @@
     -webkit-user-select: none;
     user-select: none;
     line-height: 1.2;
-    -webkit-tap-highlight-color: transparent;
-    /* 移除触摸高亮 */
-    touch-action: manipulation;
-    /* 优化触摸响应 */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* 增加文字阴影以提高透明背景下的可读性 */
 }
 
 :root {
@@ -48,9 +45,8 @@
     padding: var(--container-bg-padding);
     font-size: var(--center-font-size);
     font-weight: 600;
-    /* 触摸设备优化 */
-    cursor: pointer;
-    touch-action: manipulation;
+    backdrop-filter: blur(5px); /* 添加背景模糊效果 */
+    transition: background-color 0.3s ease;
 }
 
 /* 触摸屏悬停状态 - 仅对鼠标设备生效 */
@@ -79,23 +75,6 @@
     }
 }
 
-/* 防止触摸屏上的文本选择 */
-@media (pointer: coarse) {
-    * {
-        -webkit-touch-callout: none;
-        /* iOS Safari */
-        -webkit-user-select: none;
-        /* Safari */
-        -khtml-user-select: none;
-        /* Konqueror HTML */
-        -moz-user-select: none;
-        /* Firefox */
-        -ms-user-select: none;
-        /* Internet Explorer/Edge */
-        user-select: none;
-    }
-}
-
 .classContainer {
     font-family: JNMYT;
     position: relative;
@@ -105,21 +84,12 @@
     width: auto;
 }
 
-
-.countdownContainer {
-    position: absolute;
-    left: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    transition: all 2s;
-    padding: var(--container-bg-padding);
-}
-
 .globalContainer {
     position: fixed;
     top: var(--top-space);
     left: 50%;
     transform: translateX(-50%);
+    transition: opacity 0.5s ease, transform 0.5s ease; /* 添加过渡效果 */
 }
 
 .class {
@@ -159,15 +129,9 @@
     font-family: Ali;
 }
 
-.rightSidebar {
-    right: 0;
-    color: #FF3a3a;
-    transform: translateX(calc(100% + var(--container-space)));
-}
-
-.leftSidebar {
+.countdownSidebar {
     left: 0;
-    color: rgb(0, 238, 255);
+    color: #FF3a3a;
     transform: translateX(calc(-100% - var(--container-space)));
 }
 
@@ -177,7 +141,6 @@
     color: rgba(255, 255, 255, 1);
     font-family: Sou;
 }
-
 
 .triangle {
     width: 0;
@@ -196,6 +159,7 @@
     padding: var(--countdown-bg-padding);
     font-size: var(--countdown-font-size);
     transition: all 2s;
+    backdrop-filter: blur(5px);
 }
 
 .currentClass {
@@ -212,6 +176,18 @@
     font-family: JETB;
 }
 
+/* 切换动画类 */
+.fade-element {
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    opacity: 1;
+}
+
+.fade-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-20px); /* 向上移动并消失 */
+}
+
 .miniCountdown {
     position: fixed;
     left: 50%;
@@ -223,10 +199,19 @@
     font-size: var(--countdown-font-size);
     font-family: JETB;
     color: #FFF;
-    display: none;
-    border: 2px solid #4CAF50;
-    /* 绿色边框突出提示 */
+    display: none; /* 初始隐藏，由JS控制 */
+    border: 2px solid #4CAF50; /* 使用用户推荐的颜色 */
+    backdrop-filter: blur(5px);
+    transition: opacity 0.5s ease, transform 0.5s ease, left 0.1s, top 0.1s; /* 拖动时位置更新需要快，但切换状态需要慢 */
+}
 
+.countdownContainer {
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.5s ease; /* 优化过渡时间 */
+    padding: var(--container-bg-padding);
 }
 
 .hint-label {
