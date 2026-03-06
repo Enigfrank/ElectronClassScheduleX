@@ -29,7 +29,7 @@ process.on('uncaughtException', (error) => {
             console.error('Failed to flush logger:', e);
         }
     }
-    
+
     // 如果是关键错误，可以选择退出应用
     // app.quit();
 });
@@ -102,7 +102,10 @@ if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
     app.quit();
 }
 
-// 注册自定义协议用于访问配置文件
+/**
+ * 注册自定义配置协议
+ * 允许通过 config:// 协议访问课表配置文件
+ */
 function registerConfigProtocol() {
     protocol.handle('config', (request) => {
         const url = request.url.substr(8);
@@ -113,7 +116,11 @@ function registerConfigProtocol() {
     });
 }
 
-// 确保配置文件存在
+/**
+ * 确保课表配置文件存在
+ * 如果不存在则尝试从资源目录提取
+ * @returns {boolean} 是否提取成功
+ */
 function ensureScheduleConfig() {
     if (!scheduleConfigExtractor) {
         scheduleConfigExtractor = new ScheduleConfigExtractor(logger);
@@ -359,7 +366,9 @@ function initializeApp() {
     }
 }
 
-// 应用启动逻辑
+/**
+ * 应用启动的主要逻辑入口
+ */
 app.whenReady().then(async () => {
     console.log('应用准备就绪,开始初始化...');
 
@@ -397,7 +406,7 @@ app.whenReady().then(async () => {
     } else {
         // 非首次启动,显示加载对话框后初始化
         showLoadingDialog();
-        
+
         // 使用 Promise 确保初始化流程的顺序
         new Promise(resolve => setTimeout(resolve, 1000))
             .then(() => {
@@ -426,7 +435,9 @@ app.whenReady().then(async () => {
     }
 });
 
-// 监听OOBE完成事件
+/**
+ * 监听 OOBE 完成事件
+ */
 ipcMain.on('oobe-finished', () => {
     onOobeComplete();
 });
@@ -440,6 +451,9 @@ ipcMain.on('openReactGUI', () => {
     }
 });
 
+/**
+ * 处理来自渲染进程的关机相关操作指令
+ */
 ipcMain.on('shutdown-action', (action) => {
     // 从全局导出的对象中获取调度器实例
     if (typeof shutdownScheduler === 'undefined' || !shutdownScheduler) {

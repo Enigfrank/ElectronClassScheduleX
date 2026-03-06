@@ -7,13 +7,25 @@ const CONFIG_DIR_NAME = 'config';
 const CONFIG_FILE_NAME = 'scheduleConfig.js';
 const SOURCE_CONFIG_PATH = path.join(__dirname, '..', 'js', CONFIG_FILE_NAME);
 
+/**
+ * 课表配置提取模块
+ * 负责将默认的课表配置文件提取到用户的 AppData 目录中，以便用户进行自定义。
+ */
 class ScheduleConfigExtractor {
+    /**
+     * @param {Object} logger - 日志记录器实例
+     */
     constructor(logger = null) {
         this.logger = logger;
         this.configDir = null;
         this.configFilePath = null;
     }
 
+    /**
+     * 记录日志
+     * @param {string} level - 日志级别
+     * @param {string} message - 日志消息
+     */
     log(level, message) {
         if (this.logger) {
             this.logger[level](message);
@@ -22,6 +34,10 @@ class ScheduleConfigExtractor {
         }
     }
 
+    /**
+     * 获取配置目录路径
+     * @returns {string} 配置目录的绝对路径
+     */
     getConfigDir() {
         if (this.configDir) {
             return this.configDir;
@@ -32,6 +48,10 @@ class ScheduleConfigExtractor {
         return this.configDir;
     }
 
+    /**
+     * 获取配置文件路径
+     * @returns {string} 配置文件的绝对路径
+     */
     getConfigFilePath() {
         if (this.configFilePath) {
             return this.configFilePath;
@@ -41,6 +61,11 @@ class ScheduleConfigExtractor {
         return this.configFilePath;
     }
 
+    /**
+     * 确保目录存在，如果不存在则创建
+     * @param {string} dirPath - 目录路径
+     * @returns {boolean} 是否存在或创建成功
+     */
     ensureDirectoryExists(dirPath) {
         try {
             if (!fs.existsSync(dirPath)) {
@@ -54,11 +79,19 @@ class ScheduleConfigExtractor {
         }
     }
 
+    /**
+     * 检查配置文件是否已存在
+     * @returns {boolean}
+     */
     configExists() {
         const configPath = this.getConfigFilePath();
         return fs.existsSync(configPath);
     }
 
+    /**
+     * 提取默认配置文件到应用数据目录
+     * @returns {Object} 包含 success, error 或 path 的结果对象
+     */
     extractConfig() {
         const configPath = this.getConfigFilePath();
         const configDir = this.getConfigDir();
@@ -95,6 +128,10 @@ class ScheduleConfigExtractor {
         }
     }
 
+    /**
+     * 确保配置文件存在（若不存在则提取）
+     * @returns {Object} 包含 success, existed, path 的结果对象
+     */
     ensureConfigExists() {
         if (this.configExists()) {
             this.log('info', '[配置提取] 配置文件已存在，跳过提取');
@@ -106,6 +143,10 @@ class ScheduleConfigExtractor {
         return { ...result, existed: false };
     }
 
+    /**
+     * 获取配置文件当前路径（同 getConfigFilePath）
+     * @returns {string}
+     */
     getConfigPath() {
         return this.getConfigFilePath();
     }

@@ -1,7 +1,15 @@
 const { BrowserWindow, screen, Menu, ipcMain } = require('electron');
 const path = require('path');
 
+/**
+ * 窗口管理模块
+ * 负责应用程序中所有 Electron 窗口（主窗口、仪表盘、OOBE、加载框等）的创建、显示、关闭及层级管理。
+ */
 class WindowManager {
+    /**
+     * @param {ConfigManager} configManager - 配置管理器实例
+     * @param {Object} logger - 日志记录器实例
+     */
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
@@ -60,12 +68,22 @@ class WindowManager {
         }
     }
 
+    /**
+     * 记录日志
+     * @param {string} level - 日志级别
+     * @param {string} message - 日志消息
+     */
     log(level, message) {
         if (this.logger) {
             this.logger[level](message);
         }
     }
 
+    /**
+     * 创建并初始化主窗口
+     * 主窗口是一个横向贯穿屏幕顶部的半透明、响应式窗口
+     * @returns {BrowserWindow} 主窗口实例
+     */
     createMainWindow() {
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width: screenWidth } = primaryDisplay.workAreaSize;
@@ -102,6 +120,11 @@ class WindowManager {
         return win;
     }
 
+    /**
+     * 创建并初始化 React GUI (仪表盘) 窗口
+     * 该窗口用于用户进行详细配置和查看状态
+     * @returns {BrowserWindow} GUI 窗口实例
+     */
     createReactGUIWindow() {
         if (this.windows.gui && !this.windows.gui.isDestroyed()) {
             this.windows.gui.show();
@@ -148,6 +171,11 @@ class WindowManager {
         return guiWindow;
     }
 
+    /**
+     * 创建加载状态对话框
+     * @param {BrowserWindow} parentWindow - 父窗口
+     * @returns {BrowserWindow} 加载窗口实例
+     */
     createLoadingDialog(parentWindow) {
         const loadingDialog = new BrowserWindow({
             width: 600,
@@ -167,6 +195,9 @@ class WindowManager {
         return loadingDialog;
     }
 
+    /**
+     * 关闭并销毁当前加载对话框
+     */
     closeLoadingDialog() {
         if (this.windows.loading && !this.windows.loading.isDestroyed()) {
             this.windows.loading.close();
@@ -174,20 +205,36 @@ class WindowManager {
         }
     }
 
+    /**
+     * 设置指定窗口是否置顶
+     * @param {BrowserWindow} win - 目标窗口
+     * @param {boolean} alwaysOnTop - 是否置顶
+     */
     setWindowAlwaysOnTop(win, alwaysOnTop) {
         if (win && !win.isDestroyed()) {
             win.setAlwaysOnTop(alwaysOnTop, 'screen-saver');
         }
     }
 
+    /**
+     * 彻底隐藏应用程序菜单栏
+     */
     hideMenuBar() {
         Menu.setApplicationMenu(null);
     }
 
+    /**
+     * 获取指定类型的窗口实例
+     * @param {string} type - 窗口类型标识（main, gui, loading, etc.）
+     * @returns {BrowserWindow|null}
+     */
     getWindow(type) {
         return this.windows[type];
     }
 
+    /**
+     * 关闭并注销所有当前管理的窗口
+     */
     closeAllWindows() {
         Object.values(this.windows).forEach(window => {
             if (window && !window.isDestroyed()) {
@@ -202,6 +249,11 @@ class WindowManager {
         };
     }
 
+    /**
+     * 检查特定类型的窗口是否正在运行且未被销毁
+     * @param {string} type - 窗口类型
+     * @returns {boolean}
+     */
     windowExists(type) {
         return this.windows[type] && !this.windows[type].isDestroyed();
     }

@@ -2,7 +2,15 @@ const { dialog, BrowserWindow } = require('electron');
 const { exec } = require('child_process');
 const path = require('path');
 
+/**
+ * 自动关机任务调度模块
+ * 负责定时关机任务的设置、警告显示、延迟处理及最终关机指令的发送
+ */
 class ShutdownScheduler {
+    /**
+     * @param {ConfigManager} configManager - 配置管理器实例
+     * @param {Object} logger - 日志记录器实例
+     */
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
@@ -10,12 +18,20 @@ class ShutdownScheduler {
         this.currentShutdownWarningWindow = null;
     }
 
+    /**
+     * 记录日志
+     * @param {string} level - 日志级别
+     * @param {string} message - 日志消息
+     */
     log(level, message) {
         if (this.logger) {
             this.logger[level](message);
         }
     }
 
+    /**
+     * 根据配置文件中的关机设置开始调度关机任务
+     */
     scheduleShutdown() {
         this.log('info', '[关机调度] 开始调度关机任务');
         const storedTimes = this.configManager.getShutdownTimes();
@@ -59,11 +75,21 @@ class ShutdownScheduler {
         this.showShutdownPlans(shutdownPlans);
     }
 
+    /**
+     * 验证时间字符串格式是否为 HH:MM
+     * @param {string} timeStr - 待验证的时间字符串
+     * @returns {boolean} 是否符合格式
+     */
     validateTimeFormat(timeStr) {
         const timeParts = timeStr.match(/^(\d{2}):(\d{2})$/);
         return !!timeParts;
     }
 
+    /**
+     * 根据 HH:MM 格式的时间字符串计算下一次触发的日期对象
+     * @param {string} timeStr - 时间字符串
+     * @returns {Date|null} 目标日期对象，无效格式则返回 null
+     */
     calculateTargetTime(timeStr) {
         const timeParts = timeStr.match(/^(\d{2}):(\d{2})$/);
         if (!timeParts) return null;
@@ -79,6 +105,12 @@ class ShutdownScheduler {
         return targetDate;
     }
 
+    /**
+     * 调度带预警提醒的关机任务
+     * 在关机前 15 秒弹出警告窗口
+     * @param {string} timeStr - 原始设定的时间
+     * @param {Date} targetDate - 目标关机时间
+     */
     scheduleShutdownWithWarning(timeStr, targetDate) {
         const now = new Date();
         const remainingDelay = targetDate - now;
@@ -94,8 +126,8 @@ class ShutdownScheduler {
         if (warningDelay > 0) {
             const warningTimerId = setTimeout(() => {
                 this.playWarningSound();
-                this.showShutdownWarningWindow(timeStr, targetDate, 
-                    () => this.handleDelayOption(targetDate, 30), 
+                this.showShutdownWarningWindow(timeStr, targetDate,
+                    () => this.handleDelayOption(targetDate, 30),
                     () => this.handleDelayOption(targetDate, 60),
                     () => this.cancelScheduledShutdown(),
                 );
@@ -114,16 +146,26 @@ class ShutdownScheduler {
         }
     }
 
+    /**
+     * 处理关机预警中的延迟选项
+     * @param {Date} currentTargetDate - 当前关机目标时间
+     * @param {number} delaySeconds - 需要延迟的秒数
+     */
     handleDelayOption(currentTargetDate, delaySeconds) {
         const newTarget = new Date(currentTargetDate.getTime() + delaySeconds * 1000);
         this.log('info', `[关机调度] 用户选择延长${delaySeconds}秒关机，新关机时间: ${newTarget.toLocaleString()}`);
-        
+
         this.clearShutdownTimers();
-        
+
         const timeStr = `${newTarget.getHours().toString().padStart(2, '0')}:${newTarget.getMinutes().toString().padStart(2, '0')}`;
         this.scheduleShutdownWithWarning(timeStr, newTarget);
     }
 
+    /**
+     * 执行最终的系统关机指令
+     * @param {string} originalTime - 原始设定的触发时间字符串
+     * @param {Date} targetDate - 实际执行关机的目标日期
+     */
     executeShutdown(originalTime, targetDate) {
         this.closeWarningWindow();
 
@@ -141,6 +183,9 @@ class ShutdownScheduler {
         });
     }
 
+    /**
+     * 播放系统提示音进行预警
+     */
     playWarningSound() {
         this.log('info', '[关机调度] 播放警告提示音');
         exec('powershell -c "[System.Media.SystemSounds]::Exclamation.Play()"', (err) => {
@@ -148,6 +193,14 @@ class ShutdownScheduler {
         });
     }
 
+    /**
+     * 显示关机前的倒计时确认/预警弹窗
+     * @param {string} timeStr - 关机时间
+     * @param {Date} targetDate - 目标时间对象
+     * @param {Function} onDelay30 - 延迟 30 秒的回调
+     * @param {Function} onDelay60 - 延迟 60 秒的回调
+     * @param {Function} onClose - 取消/关闭的回调
+     */
     showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, onClose) {
         this.log('info', `[关机调度] 显示关机警告窗口，目标时间: ${targetDate.toLocaleString()}`);
         this.closeWarningWindow();
@@ -201,12 +254,19 @@ class ShutdownScheduler {
         });
     }
 
+    /**
+     * 关闭当前显示的关机预警窗口
+     */
     closeWarningWindow() {
         if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
             this.currentShutdownWarningWindow.close();
         }
     }
 
+    /**
+     * 计算并弹窗显示所有的关机任务详情
+     * @param {Array} shutdownPlans - 包含关机计划详情的数组
+     */
     showShutdownPlans(shutdownPlans) {
         if (shutdownPlans.length > 0) {
             const messageContent = shutdownPlans.map((plan, index) =>
@@ -236,11 +296,17 @@ class ShutdownScheduler {
         }
     }
 
+    /**
+     * 清除所有的关机相关的定时器
+     */
     clearShutdownTimers() {
         this.shutdownTimers.forEach(timerId => clearTimeout(timerId));
         this.shutdownTimers.length = 0;
     }
 
+    /**
+     * 取消所有已排期的关机任务
+     */
     cancelScheduledShutdown() {
         this.log('info', '[关机调度] 取消定时关机');
         this.clearShutdownTimers();
@@ -251,6 +317,9 @@ class ShutdownScheduler {
         });
     }
 
+    /**
+     * 初始化调度器，启动已在配置中启用的关机任务
+     */
     initialize() {
         this.log('info', '[关机调度] 初始化关机调度器');
         const isScheduled = this.configManager.get('scheduleShutdown', false);

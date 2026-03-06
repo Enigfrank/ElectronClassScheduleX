@@ -12,13 +12,24 @@ try {
     app = undefined;
 }
 
+/**
+ * 日志管理模块
+ * 负责应用程序的日志记录、错误捕获和日志文件的自动清理
+ */
 class Logger {
+    /**
+     * 构造函数，初始化日志路径并开始初始化流程
+     */
     constructor() {
         this.baseLogsPath = this.getLogsPath();
         this.isInitialized = false;
         this.initialize();
     }
 
+    /**
+     * 获取日志文件的存储路径
+     * @returns {string} 日志存储目录的绝对路径
+     */
     getLogsPath() {
         try {
             // 检查是否存在全局 app 对象
@@ -28,11 +39,11 @@ class Logger {
                 const logsPath = path.join(userDataPath, 'logs');
                 return logsPath;
             }
-            
+
             // 在开发环境或无法获取 app 时，使用项目根目录的 logs 文件夹
             const devPath = path.join(__dirname, '..', 'logs');
             return devPath;
-            
+
         } catch (error) {
             // 如果获取应用路径失败，使用项目根目录的 logs 文件夹
             const fallbackPath = path.join(__dirname, '..', 'logs');
@@ -40,6 +51,10 @@ class Logger {
         }
     }
 
+    /**
+     * 初始化日志系统
+     * 设置日志配置、错误处理并标记初始化完成
+     */
     async initialize() {
         try {
             await this.setupLogging();
@@ -53,6 +68,10 @@ class Logger {
         }
     }
 
+    /**
+     * 配置 `electron-log`
+     * 包括日志目录创建、文件名解析、输出格式设计等
+     */
     async setupLogging() {
         try {
             // 确保日志目录存在
@@ -83,7 +102,7 @@ class Logger {
             // 测试日志写入
             log.info('-------------------------日志分割处-------------------------');
             log.info('日志系统初始化成功');
-            
+
             console.log(`日志文件路径: ${testLogPath}`);
         } catch (error) {
             console.error('日志配置失败:', error);
@@ -91,6 +110,10 @@ class Logger {
         }
     }
 
+    /**
+     * 设置全局错误处理
+     * 捕获未处理的异常、Promise 拒绝以及渲染进程崩溃
+     */
     setupErrorHandling() {
         try {
             // 错误捕获配置 - 使用新的 API
@@ -130,6 +153,10 @@ class Logger {
         }
     }
 
+    /**
+     * 清理过期日志文件
+     * 默认保留最近 7 天的日志
+     */
     cleanupOldLogs() {
         const logsPath = this.baseLogsPath;
         if (!fs.existsSync(logsPath)) return;
@@ -170,12 +197,16 @@ class Logger {
     }
 
     // 备用日志记录（当日志系统初始化失败时使用）
+    /**
+     * 设置备用日志系统
+     * 当常规日志系统初始化失败时，将日志输出到控制台并尝试追加到 fallback 文件
+     */
     setupFallbackLogging() {
         this.fallbackLog = (level, message) => {
             const timestamp = new Date().toISOString();
             const logMessage = `${timestamp} [${level.toUpperCase()}] ${message}`;
             console.log(logMessage);
-            
+
             // 尝试写入到备用日志文件
             try {
                 const fallbackLogPath = path.join(__dirname, '..', 'logs', 'fallback.log');
@@ -190,6 +221,10 @@ class Logger {
         };
     }
 
+    /**
+     * 记录普通信息日志
+     * @param {string} message - 日志内容
+     */
     info(message) {
         if (this.isInitialized) {
             log.info(message);
@@ -200,6 +235,10 @@ class Logger {
         }
     }
 
+    /**
+     * 记录错误日志
+     * @param {string} message - 日志内容
+     */
     error(message) {
         if (this.isInitialized) {
             log.error(message);
@@ -210,6 +249,10 @@ class Logger {
         }
     }
 
+    /**
+     * 记录警告日志
+     * @param {string} message - 日志内容
+     */
     warn(message) {
         if (this.isInitialized) {
             log.warn(message);
@@ -221,6 +264,10 @@ class Logger {
     }
 
     // 获取日志系统状态
+    /**
+     * 获取当前日志系统的工作状态
+     * @returns {Object} 包含初始化状态、路径和可写性的对象
+     */
     getStatus() {
         return {
             isInitialized: this.isInitialized,
@@ -230,6 +277,9 @@ class Logger {
     }
 
     // 手动刷新日志（确保日志被写入文件）
+    /**
+     * 手动刷新日志流，确保所有挂起的日志已写入磁盘
+     */
     flush() {
         if (this.isInitialized && log && log.transports && log.transports.file) {
             try {

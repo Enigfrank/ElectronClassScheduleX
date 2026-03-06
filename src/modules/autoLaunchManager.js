@@ -6,7 +6,14 @@ const { app, dialog } = require('electron');
 const iconv = require('iconv-lite');
 
 
+/**
+ * 管理程序的自启动功能（针对 Windows 任务计划程序）
+ */
 class AutoLaunchManager {
+    /**
+     * @param {Object} configManager - 配置管理实例
+     * @param {Object} logger - 日志管理实例
+     */
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
@@ -17,12 +24,20 @@ class AutoLaunchManager {
         this.taskName = 'ElectronClassScheduleX';
     }
 
+    /**
+     * 记录日志
+     * @param {string} level - 日志级别 (info, warn, error)
+     * @param {string} message - 日志内容
+     */
     log(level, message) {
         if (this.logger) {
             this.logger[level](message);
         }
     }
 
+    /**
+     * 根据当前配置设置或取消自启动
+     */
     setAutoLaunch() {
         // 清理旧的快捷方式启动项
         this.cleanOldShortcuts();
@@ -36,6 +51,9 @@ class AutoLaunchManager {
         }
     }
 
+    /**
+     * 清理旧版本的快捷方式启动项
+     */
     cleanOldShortcuts() {
         try {
             const shortcutPath = path.join(this.startupFolderPath, this.shortcutName);
@@ -48,6 +66,9 @@ class AutoLaunchManager {
         }
     }
 
+    /**
+     * 创建 Windows 计划任务以实现自启动
+     */
     createScheduledTask() {
         const { app, dialog } = require('electron');
 
@@ -70,16 +91,16 @@ class AutoLaunchManager {
                     // 使用 GBK 解码避免中文乱码
                     const stdoutStr = stdout ? iconv.decode(stdout, 'gbk') : '';
                     const stderrStr = stderr ? iconv.decode(stderr, 'gbk') : '';
-    
+
                     // 检测权限错误（支持中英文）
                     const isAccessDenied =
                         stderrStr.includes('Access is denied') ||
                         stderrStr.includes('拒绝访问') ||
                         stderrStr.includes('error');
-    
+
                     if (error) {
                         this.log('error', `[自启动管理] 创建失败: ${stderrStr || stdoutStr}`);
-    
+
                         if (isAccessDenied) {
                             dialog.showErrorBox('权限不足',
                                 '无法创建管理员权限的自启动任务。\n\n请以[管理员身份]运行此程序后再试。');
@@ -96,6 +117,9 @@ class AutoLaunchManager {
         }
     }
 
+    /**
+     * 删除已存在的 Windows 计划任务
+     */
     removeScheduledTask() {
         const command = `schtasks /Delete /TN "${this.taskName}" /F`;
 
@@ -111,11 +135,19 @@ class AutoLaunchManager {
         });
     }
 
+    /**
+     * 检查自启动是否已启用
+     * @returns {boolean}
+     */
     isAutoLaunchEnabled() {
         // 由于任务计划检查是异步的，这里直接返回配置状态
         return this.configManager.getAutoLaunch();
     }
 
+    /**
+     * 更新自启动配置并应用更改
+     * @param {boolean} enabled - 是否启用自启动
+     */
     updateAutoLaunch(enabled) {
         this.log('info', `[自启动管理] 更新自启动设置: ${enabled}`);
         this.configManager.setAutoLaunch(enabled);
