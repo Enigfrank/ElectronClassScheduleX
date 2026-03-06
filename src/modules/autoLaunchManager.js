@@ -64,28 +64,36 @@ class AutoLaunchManager {
 
         this.log('info', `[自启动管理] 执行命令: ${command}`);
 
-        exec(command, { windowsHide: true, encoding: 'buffer' }, (error, stdout, stderr) => {
-            // 使用 GBK 解码避免中文乱码
-            const stdoutStr = stdout ? iconv.decode(stdout, 'gbk') : '';
-            const stderrStr = stderr ? iconv.decode(stderr, 'gbk') : '';
-
-            // 检测权限错误（支持中英文）
-            const isAccessDenied =
-                stderrStr.includes('Access is denied') ||
-                stderrStr.includes('拒绝访问') ||
-                stderrStr.includes('error');
-
-            if (error) {
-                this.log('error', `[自启动管理] 创建失败: ${stderrStr || stdoutStr}`);
-
-                if (isAccessDenied) {
-                    dialog.showErrorBox('权限不足',
-                        '无法创建管理员权限的自启动任务。\n\n请以[管理员身份]运行此程序后再试。');
+        try {
+            exec(command, { windowsHide: true, encoding: 'buffer' }, (error, stdout, stderr) => {
+                try {
+                    // 使用 GBK 解码避免中文乱码
+                    const stdoutStr = stdout ? iconv.decode(stdout, 'gbk') : '';
+                    const stderrStr = stderr ? iconv.decode(stderr, 'gbk') : '';
+    
+                    // 检测权限错误（支持中英文）
+                    const isAccessDenied =
+                        stderrStr.includes('Access is denied') ||
+                        stderrStr.includes('拒绝访问') ||
+                        stderrStr.includes('error');
+    
+                    if (error) {
+                        this.log('error', `[自启动管理] 创建失败: ${stderrStr || stdoutStr}`);
+    
+                        if (isAccessDenied) {
+                            dialog.showErrorBox('权限不足',
+                                '无法创建管理员权限的自启动任务。\n\n请以[管理员身份]运行此程序后再试。');
+                        }
+                    } else {
+                        this.log('info', '[自启动管理] 计划任务创建成功');
+                    }
+                } catch (callbackError) {
+                    this.log('error', `[自启动管理] 回调处理出错: ${callbackError.message}`);
                 }
-            } else {
-                this.log('info', '[自启动管理] 计划任务创建成功');
-            }
-        });
+            });
+        } catch (execError) {
+            this.log('error', `[自启动管理] 执行命令出错: ${execError.message}`);
+        }
     }
 
     removeScheduledTask() {

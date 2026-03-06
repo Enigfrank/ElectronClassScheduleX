@@ -15,6 +15,32 @@ const AssignmentWindowManager = require('./modules/assignmentWindowManager');
 // 导入 Electron 模块
 const { app, BrowserWindow, Menu, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
+
+// 全局异常处理
+process.on('uncaughtException', (error) => {
+    const errorMsg = `[Uncaught Exception] ${error.message}\nStack: ${error.stack}`;
+    console.error(errorMsg);
+    if (logger) {
+        logger.error(errorMsg);
+        // 尝试写入最后的日志
+        try {
+            logger.flush();
+        } catch (e) {
+            console.error('Failed to flush logger:', e);
+        }
+    }
+    
+    // 如果是关键错误，可以选择退出应用
+    // app.quit();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    const errorMsg = `[Unhandled Rejection] ${reason instanceof Error ? reason.message : reason}\nStack: ${reason instanceof Error ? reason.stack : ''}`;
+    console.error(errorMsg);
+    if (logger) {
+        logger.error(errorMsg);
+    }
+});
 const { DisableMinimize } = require('electron-disable-minimize');
 const { net } = require('electron');
 
@@ -377,12 +403,21 @@ app.whenReady().then(async () => {
             .then(() => {
                 try {
                     initializeApp();
-                    if (loadingDialog && !loadingDialog.isDestroyed()) {
-                        loadingDialog.close();
+                    try {
+                        if (loadingDialog && !loadingDialog.isDestroyed()) {
+                            loadingDialog.close();
+                        }
+                    } catch (closeError) {
+                        console.error('关闭加载窗口失败:', closeError);
+                        if (logger) logger.warn(`关闭加载窗口失败: ${closeError.message}`);
                     }
                 } catch (error) {
-                    const msg = `初始化失败: ${error.message}`;
-                    if (logger) logger.error(msg);
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    const msg = `初始化失败: ${errorMsg}`;
+                    if (logger) {
+                        logger.error(msg);
+                        if (error.stack) logger.error(error.stack);
+                    }
                     console.error(msg);
                     dialog.showErrorBox('启动错误', msg);
                     app.quit();

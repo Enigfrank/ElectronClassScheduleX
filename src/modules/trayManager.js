@@ -16,18 +16,28 @@ class TrayManager {
 
     createTray(iconPath) {
         if (this.tray) {
-            this.tray.destroy();
+            try {
+                this.tray.destroy();
+            } catch (e) {
+                this.log('warn', `[托盘管理] 销毁旧托盘失败: ${e.message}`);
+            }
             this.tray = null;
         }
         
-        this.tray = new Tray(iconPath);
-        this.updateTrayMenu();
-        
-        this.tray.on('click', () => {
-            this.onTrayClick();
-        });
+        try {
+            this.tray = new Tray(iconPath);
+            this.updateTrayMenu();
+            
+            this.tray.on('click', () => {
+                this.onTrayClick();
+            });
 
-        return this.tray;
+            this.log('info', '[托盘管理] 托盘创建成功');
+            return this.tray;
+        } catch (error) {
+            this.log('error', `[托盘管理] 创建托盘失败: ${error.message}`);
+            return null;
+        }
     }
 
     onTrayClick() {
