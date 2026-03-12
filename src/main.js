@@ -12,9 +12,14 @@ const ScheduleConfigExtractor = require('./modules/scheduleConfigExtractor');
 const ClientManager = require('./modules/clientManager');
 const AssignmentWindowManager = require('./modules/assignmentWindowManager');
 
+// 新导入的解耦模块
+const AssignmentScheduler = require('./modules/assignmentScheduler');
+const ProtocolHandler = require('./modules/protocolHandler');
+const BootManager = require('./modules/bootManager');
+
 // 导入 Electron 模块
-const { app, BrowserWindow, Menu, ipcMain, dialog, protocol } = require('electron');
-const path = require('path');
+const { app, Menu, ipcMain, dialog } = require('electron');
+const { DisableMinimize } = require('electron-disable-minimize');
 
 // 全局异常处理
 process.on('uncaughtException', (error) => {
@@ -29,9 +34,6 @@ process.on('uncaughtException', (error) => {
             console.error('Failed to flush logger:', e);
         }
     }
-
-    // 如果是关键错误，可以选择退出应用
-    // app.quit();
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -41,19 +43,13 @@ process.on('unhandledRejection', (reason, promise) => {
         logger.error(errorMsg);
     }
 });
-const { DisableMinimize } = require('electron-disable-minimize');
-const { net } = require('electron');
 
 // 全局变量
 let win = undefined;
 let tray = undefined;
-let testGUIWindow = undefined;
-let loadingDialog = undefined;
 let appInitialized = false; // 标记应用是否已初始化
-let pendingAssignments = null; // 缓存待显示的作业数据
-let assignmentCheckInterval = null; // 作业显示检查定时器
 
-// 初始化模块
+// 模块实例
 let logger;
 let configManager;
 let assignmentConfigManager;
@@ -66,6 +62,11 @@ let ipcManager;
 let scheduleConfigExtractor;
 let clientManager;
 let assignmentWindowManager;
+
+// 新模块实例
+let assignmentScheduler;
+let protocolHandler;
+let bootManager;
 
 /**
  * 初始化所有模块
@@ -84,7 +85,10 @@ function initializeModules() {
         autoLaunchManager = new AutoLaunchManager(configManager, logger);
         clientManager = new ClientManager(assignmentConfigManager, logger);
         assignmentWindowManager = new AssignmentWindowManager(assignmentConfigManager, logger);
+        protocolHandler = new ProtocolHandler(scheduleConfigExtractor);
+        bootManager = new BootManager(windowManager, configManager, logger);
         ipcManager = new IpcManager(configManager, assignmentConfigManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager, clientManager, assignmentWindowManager);
+        assignmentScheduler = new AssignmentScheduler(assignmentConfigManager, assignmentWindowManager, clientManager, ipcManager, logger);
 
         if (logger) {
             logger.info('所有模块初始化完成');
@@ -98,21 +102,25 @@ function initializeModules() {
 }
 
 // 检查单例锁
-if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
+const gotTheLock = app.requestSingleInstanceLock({ key: '电子课表' });
+
+if (!gotTheLock) {
+    console.error('获取单例锁失败，应用已在运行，即将退出');
+    if (logger) {
+        logger.warn('获取单例锁失败，应用已在运行，即将退出');
+        logger.flush();
+    }
     app.quit();
-}
-
-/**
- * 注册自定义配置协议
- * 允许通过 config:// 协议访问课表配置文件
- */
-function registerConfigProtocol() {
-    protocol.handle('config', (request) => {
-        const url = request.url.substr(8);
-        const configDir = scheduleConfigExtractor.getConfigDir();
-        const filePath = path.join(configDir, url);
-
-        return net.fetch(`file://${filePath}`);
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // 当运行第二个实例时，聚焦到主窗口
+        if (win) {
+            if (win.isMinimized()) win.restore();
+            win.focus();
+        }
+        if (logger) {
+            logger.info('检测到第二个实例启动，已聚焦主窗口');
+        }
     });
 }
 
@@ -136,172 +144,6 @@ function ensureScheduleConfig() {
 }
 
 /**
- * 显示OOBE引导窗口
- * 首次启动时显示,引导用户完成初始配置
- */
-function showOobe() {
-    if (logger) {
-        logger.info('[OOBE] 显示OOBE引导窗口');
-    }
-    windowManager.createOobeWindow();
-}
-
-/**
- * OOBE完成回调
- * 当用户完成OOBE所有步骤后调用
- * 注意：OOBE状态和窗口已在ipcManager中处理,此处只负责初始化主应用
- */
-function onOobeComplete() {
-    if (logger) {
-        logger.info('[OOBE] OOBE完成回调触发,开始启动主应用');
-    }
-
-    // 初始化主应用（OOBE状态和窗口已由ipcManager处理）
-    initializeApp();
-}
-
-/**
- * 显示加载对话框
- * 在应用初始化期间显示加载状态
- */
-function showLoadingDialog() {
-    loadingDialog = new BrowserWindow({
-        width: 600,
-        height: 400,
-        frame: false,
-        alwaysOnTop: true,
-        modal: true,
-        parent: win,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
-        }
-    });
-
-    loadingDialog.loadFile(path.join(__dirname, 'loading.html'));
-}
-
-/**
- * 检查并显示作业窗口
- * 根据配置的显示条件判断是否应该显示作业窗口
- */
-function checkAndShowAssignmentWindow() {
-    if (!assignmentWindowManager || !assignmentConfigManager) {
-        return;
-    }
-
-    const displayPeriod = assignmentConfigManager.getAssignmentDisplayPeriod();
-
-    // 检查是否满足显示条件
-    if (typeof displayPeriod === 'string' && displayPeriod.startsWith('time:')) {
-        const timeStr = displayPeriod.replace('time:', '');
-        const [targetHour, targetMinute] = timeStr.split(':').map(Number);
-        const now = new Date();
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
-
-        // 如果当前时间已超过目标时间,且有缓存的作业
-        if ((currentHour > targetHour || (currentHour === targetHour && currentMinute >= targetMinute))
-            && pendingAssignments) {
-            logger.info(`满足显示条件 (${timeStr}),显示作业窗口`);
-            assignmentWindowManager.showWindow(pendingAssignments);
-            pendingAssignments = null;
-        }
-    } else if (displayPeriod === -1 && pendingAssignments) {
-        // 放学后显示模式,暂时缓存作业
-        logger.info('放学后显示模式,作业已缓存');
-    }
-}
-
-/**
- * 启动作业窗口显示检查定时器
- */
-function startAssignmentCheckTimer() {
-    if (assignmentCheckInterval) {
-        clearInterval(assignmentCheckInterval);
-    }
-
-    // 每分钟检查一次
-    assignmentCheckInterval = setInterval(checkAndShowAssignmentWindow, 60000);
-
-    // 立即执行一次检查
-    checkAndShowAssignmentWindow();
-
-    if (logger) {
-        logger.info('作业窗口显示检查定时器已启动');
-    }
-}
-
-/**
- * 设置 clientManager 的事件回调
- */
-function setupClientManagerCallbacks() {
-    if (!clientManager || !assignmentWindowManager || !ipcManager) {
-        if (logger) {
-            logger.warn('无法设置 clientManager 回调：模块未初始化');
-        }
-        return;
-    }
-
-    // 设置新作业回调
-    clientManager.setOnNewAssignment((data) => {
-        logger.info('收到新作业通知: ' + JSON.stringify(data));
-        // 获取作业列表
-        const clientId = assignmentConfigManager.getClientId();
-        if (clientId) {
-            clientManager.getAssignments(clientId).then(assignments => {
-                // 缓存作业数据
-                pendingAssignments = assignments;
-                // 检查是否应该立即显示
-                if (assignmentWindowManager.shouldShowWindow()) {
-                    assignmentWindowManager.showWindow(assignments);
-                    pendingAssignments = null;
-                } else {
-                    logger.info('作业已缓存,等待满足显示条件');
-                }
-            }).catch(err => {
-                logger.error('获取作业列表失败: ' + err.message);
-            });
-        }
-        // 显示系统通知
-        if (clientManager && clientManager.showNotification) {
-            clientManager.showNotification('新作业', `收到新作业: ${data.title || '点击查看详情'}`);
-        }
-    });
-
-    // 设置作业取消回调
-    clientManager.setOnAssignmentCancelled((data) => {
-        logger.info('收到作业取消通知: ' + JSON.stringify(data));
-        // 重新获取作业列表并更新窗口
-        const clientId = assignmentConfigManager.getClientId();
-        if (clientId) {
-            clientManager.getAssignments(clientId).then(assignments => {
-                // 更新缓存
-                pendingAssignments = assignments;
-                // 如果窗口已显示,直接更新
-                if (assignmentWindowManager.isWindowVisible()) {
-                    assignmentWindowManager.updateAssignments(assignments);
-                }
-            }).catch(err => {
-                logger.error('获取作业列表失败: ' + err.message);
-            });
-        }
-    });
-
-    // 设置WebSocket状态回调
-    clientManager.setOnWsStatus((status) => {
-        ipcManager.sendWsStatusToRenderer(status);
-    });
-
-    // 启动定时检查
-    startAssignmentCheckTimer();
-
-    if (logger) {
-        logger.info('clientManager 事件回调设置完成');
-    }
-}
-
-/**
  * 初始化应用
  * 创建主窗口、设置托盘、初始化各模块
  */
@@ -310,8 +152,6 @@ function initializeApp() {
     if (appInitialized) {
         if (logger) {
             logger.warn('应用已经初始化,跳过重复初始化');
-        } else {
-            console.warn('应用已经初始化,跳过重复初始化');
         }
         return;
     }
@@ -325,8 +165,6 @@ function initializeApp() {
 
     if (logger) {
         logger.info('开始初始化应用');
-    } else {
-        console.log('开始初始化应用');
     }
 
     // 创建主窗口
@@ -340,20 +178,15 @@ function initializeApp() {
     const handle = win.getNativeWindowHandle();
     DisableMinimize(handle);
 
-    // 设置自启动
     autoLaunchManager.setAutoLaunch();
 
-    // 初始化关机调度
     shutdownScheduler.initialize();
 
-    // 创建托盘（只创建一次）
     const iconPath = utils.getAssetPath('image', 'icon.png');
     tray = trayManager.createTray(iconPath);
 
-    // 设置 clientManager 的事件回调
-    setupClientManagerCallbacks();
+    assignmentScheduler.setupCallbacks();
 
-    // 如果作业功能已启用且有clientId,自动连接WebSocket
     if (assignmentConfigManager.getAssignmentEnabled() && assignmentConfigManager.getClientId()) {
         clientManager.connect();
         logger.info('作业功能已启用,自动连接WebSocket');
@@ -361,9 +194,18 @@ function initializeApp() {
 
     if (logger) {
         logger.info('应用初始化完成');
-    } else {
-        console.log('应用初始化完成');
     }
+}
+
+/**
+ * OOBE完成回调
+ * 当用户完成OOBE所有步骤后调用
+ */
+function onOobeComplete() {
+    if (logger) {
+        logger.info('[OOBE] OOBE完成回调触发,开始启动主应用');
+    }
+    initializeApp();
 }
 
 /**
@@ -376,7 +218,7 @@ app.whenReady().then(async () => {
     initializeModules();
 
     // 注册自定义协议
-    registerConfigProtocol();
+    protocolHandler.register();
 
     // 确保配置文件存在
     if (!ensureScheduleConfig()) {
@@ -402,36 +244,51 @@ app.whenReady().then(async () => {
         if (logger) {
             logger.info('[启动] 首次启动,显示OOBE引导');
         }
-        showOobe();
+        bootManager.showOobe();
     } else {
         // 非首次启动,显示加载对话框后初始化
-        showLoadingDialog();
+        bootManager.showLoading();
 
         // 使用 Promise 确保初始化流程的顺序
-        new Promise(resolve => setTimeout(resolve, 1000))
-            .then(() => {
-                try {
-                    initializeApp();
-                    try {
-                        if (loadingDialog && !loadingDialog.isDestroyed()) {
-                            loadingDialog.close();
-                        }
-                    } catch (closeError) {
-                        console.error('关闭加载窗口失败:', closeError);
-                        if (logger) logger.warn(`关闭加载窗口失败: ${closeError.message}`);
-                    }
-                } catch (error) {
-                    const errorMsg = error instanceof Error ? error.message : String(error);
-                    const msg = `初始化失败: ${errorMsg}`;
-                    if (logger) {
-                        logger.error(msg);
-                        if (error.stack) logger.error(error.stack);
-                    }
-                    console.error(msg);
-                    dialog.showErrorBox('启动错误', msg);
-                    app.quit();
+        const initializationDelay = 500; // 适当减少等待时间，同时保持稳定性
+        setTimeout(() => {
+            if (app.isQuitting) return; // 如果应用正在退出，中止初始化
+            try {
+                initializeApp();
+
+                // 确保主窗口创建成功后，监听 ready-to-show 事件关闭加载窗口
+                if (win && !win.isDestroyed()) {
+                    let loadingClosed = false;
+                    
+                    const closeLoading = () => {
+                        if (loadingClosed) return;
+                        loadingClosed = true;
+                        bootManager.closeLoading();
+                    };
+
+                    win.once('ready-to-show', () => {
+                        closeLoading();
+                        win.show(); // 确保主窗口显示
+                    });
+
+                    // 设置超时兜底，防止 ready-to-show 不触发导致加载窗口一直显示
+                    setTimeout(closeLoading, 5000);
+                } else {
+                    // 如果主窗口未创建，直接关闭加载窗口
+                    bootManager.closeLoading();
                 }
-            });
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                const msg = `初始化失败: ${errorMsg}`;
+                if (logger) {
+                    logger.error(msg);
+                    if (error.stack) logger.error(error.stack);
+                }
+                console.error(msg);
+                dialog.showErrorBox('启动错误', msg);
+                app.quit();
+            }
+        }, initializationDelay);
     }
 });
 
@@ -440,65 +297,6 @@ app.whenReady().then(async () => {
  */
 ipcMain.on('oobe-finished', () => {
     onOobeComplete();
-});
-
-/**
- * IPC事件处理：打开React GUI窗口
- */
-ipcMain.on('openReactGUI', () => {
-    if (windowManager) {
-        windowManager.createReactGUIWindow();
-    }
-});
-
-/**
- * 处理来自渲染进程的关机相关操作指令
- */
-ipcMain.on('shutdown-action', (action) => {
-    // 从全局导出的对象中获取调度器实例
-    if (typeof shutdownScheduler === 'undefined' || !shutdownScheduler) {
-        console.error('Shutdown scheduler not available');
-        return;
-    }
-
-    let actionExecuted = false;
-
-    // 根据存储在调度器中的回调函数执行对应操作
-    switch (action) {
-        case 'delay30':
-            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onDelay30 === 'function') {
-                shutdownScheduler.currentCallbacks.onDelay30();
-                actionExecuted = true;
-            }
-            break;
-        case 'delay60':
-            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onDelay60 === 'function') {
-                shutdownScheduler.currentCallbacks.onDelay60();
-                actionExecuted = true;
-            }
-            break;
-        case 'close':
-            if (shutdownScheduler.currentCallbacks && typeof shutdownScheduler.currentCallbacks.onClose === 'function') {
-                shutdownScheduler.currentCallbacks.onClose();
-                actionExecuted = true;
-            }
-            break;
-        default:
-            if (logger) {
-                logger.warn('未知的关机操作:', action);
-            } else {
-                console.warn('未知的关机操作:', action);
-            }
-    }
-
-    if (actionExecuted && logger) {
-        logger.info(`关机操作已执行: ${action}`);
-    }
-
-    // 关闭警告窗口
-    if (shutdownScheduler.currentShutdownWarningWindow) {
-        shutdownScheduler.currentShutdownWarningWindow.close();
-    }
 });
 
 /**
@@ -522,14 +320,13 @@ app.on('before-quit', () => {
         assignmentWindowManager.hideWindow();
     }
 
-    // 清理作业检查定时器
-    if (assignmentCheckInterval) {
-        clearInterval(assignmentCheckInterval);
-        assignmentCheckInterval = null;
+    // 清理作业调度器
+    if (assignmentScheduler) {
+        assignmentScheduler.stop();
     }
-
-    if (testGUIWindow) {
-        testGUIWindow.close();
+    
+    // 清理关机调度器
+    if (shutdownScheduler) {
         shutdownScheduler.cancelScheduledShutdown();
     }
 
@@ -540,6 +337,17 @@ app.on('before-quit', () => {
     if (tray) {
         tray.destroy();
         tray = null;
+    }
+});
+
+/**
+ * 所有窗口关闭时的处理
+ * 防止在窗口切换过程中（如OOBE -> 主窗口）程序意外退出
+ */
+app.on('window-all-closed', () => {
+    // 保持程序运行，因为可能有托盘或正在切换窗口
+    if (logger) {
+        logger.info('所有窗口已关闭，保持后台运行');
     }
 });
 
@@ -555,6 +363,8 @@ module.exports = {
     utils,
     scheduleConfigExtractor,
     clientManager,
-    assignmentWindowManager
+    assignmentWindowManager,
+    assignmentScheduler,
+    protocolHandler,
+    bootManager
 };
-
