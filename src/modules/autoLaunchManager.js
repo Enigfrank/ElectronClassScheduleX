@@ -1,5 +1,5 @@
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 const os = require('os');
 const { promisify } = require('util');
 const { exec } = require('child_process');
@@ -93,10 +93,9 @@ class AutoLaunchManager {
         }
 
         const exePath = path.normalize(app.getPath('exe'));
-        // 添加环境变量标识，让应用知道是通过任务计划程序启动的
-        const command = `schtasks /Create /TN "${this.taskName}" /TR "cmd /c set STARTED_BY_TASK_SCHEDULER=1 && \\"${exePath}\\"" /SC ONLOGON /RL HIGHEST /F`;
+        const command = `schtasks /Create /TN "${this.taskName}" /TR "${exePath}" /SC ONLOGON /RL HIGHEST /F`;
 
-        this.log('info', `执行命令：${command}`);
+        this.log('info', `执行命令: ${command}`);
 
         try {
             const { stdout, stderr } = await execPromise(command, {

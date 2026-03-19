@@ -2,8 +2,15 @@ const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
 
-// 延迟获取 Electron app 对象，避免在模块加载时访问未初始化的 app
-let _appCache = null;
+// 安全地获取 Electron app 对象
+let app;
+try {
+    const electron = require('electron');
+    app = electron.app;
+} catch (error) {
+    // 如果不是在 Electron 环境中运行，app 将为 undefined
+    app = undefined;
+}
 
 /**
  * 日志管理模块
@@ -14,14 +21,8 @@ class Logger {
      * 构造函数，初始化日志路径并开始初始化流程
      */
     constructor() {
+        this.baseLogsPath = this.getLogsPath();
         this.isInitialized = false;
-        // 延迟获取日志路径，确保 app 对象已准备好
-        try {
-            this.baseLogsPath = this.getLogsPath();
-        } catch (error) {
-            console.error('获取日志路径失败:', error);
-            this.baseLogsPath = path.join(__dirname, '..', 'logs');
-        }
         this.initialize();
     }
 
@@ -31,20 +32,10 @@ class Logger {
      */
     getLogsPath() {
         try {
-            // 延迟获取 app 对象，确保在 Electron 环境完全准备好后再访问
-            if (_appCache === null) {
-                try {
-                    const electron = require('electron');
-                    _appCache = electron.app;
-                } catch (error) {
-                    _appCache = undefined;
-                }
-            }
-
             // 检查是否存在全局 app 对象
-            if (typeof _appCache !== 'undefined' && _appCache && _appCache.getPath) {
+            if (typeof app !== 'undefined' && app && app.getPath) {
                 // 使用 userData 目录存储日志，确保在打包环境中可写
-                const userDataPath = _appCache.getPath('userData');
+                const userDataPath = app.getPath('userData');
                 const logsPath = path.join(userDataPath, 'logs');
                 return logsPath;
             }
@@ -55,7 +46,6 @@ class Logger {
 
         } catch (error) {
             // 如果获取应用路径失败，使用项目根目录的 logs 文件夹
-            console.error('获取日志路径失败，使用备用路径:', error);
             const fallbackPath = path.join(__dirname, '..', 'logs');
             return fallbackPath;
         }
@@ -148,8 +138,8 @@ class Logger {
             });
 
             // 捕获渲染进程错误（如果 app 可用）
-            if (_appCache && _appCache.on) {
-                _appCache.on('web-contents-created', (event, contents) => {
+            if (app && app.on) {
+                app.on('web-contents-created', (event, contents) => {
                     if (contents && contents.on) {
                         contents.on('crashed', (event, killed) => {
                             log.error(`WebContents crashed (killed=${killed})`);
@@ -206,6 +196,7 @@ class Logger {
         }
     }
 
+    // 备用日志记录（当日志系统初始化失败时使用）
     /**
      * 设置备用日志系统
      * 当常规日志系统初始化失败时，将日志输出到控制台并尝试追加到 fallback 文件

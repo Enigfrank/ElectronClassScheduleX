@@ -11,9 +11,13 @@ const IpcManager = require('./modules/ipcManager');
 const ScheduleConfigExtractor = require('./modules/scheduleConfigExtractor');
 const ClientManager = require('./modules/clientManager');
 const AssignmentWindowManager = require('./modules/assignmentWindowManager');
+
+// 新导入的解耦模块
 const AssignmentScheduler = require('./modules/assignmentScheduler');
 const ProtocolHandler = require('./modules/protocolHandler');
 const BootManager = require('./modules/bootManager');
+
+// 导入 Electron 模块
 const { app, Menu, ipcMain, dialog } = require('electron');
 const { DisableMinimize } = require('electron-disable-minimize');
 
@@ -205,41 +209,10 @@ function onOobeComplete() {
 }
 
 /**
- * 检测是否为自启动场景
- * @returns {boolean} 是否为自启动
- */
-function isAutoLaunch() {
-    // Windows 任务计划程序启动时，命令行参数可能包含特定标识
-    // 或者通过进程环境变量判断
-    if (process.platform === 'win32') {
-        // 检查是否由任务计划程序启动（自启动）
-        const isTaskScheduler = process.env.STARTED_BY_TASK_SCHEDULER === '1';
-        if (isTaskScheduler) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
  * 应用启动的主要逻辑入口
  */
 app.whenReady().then(async () => {
     console.log('应用准备就绪,开始初始化...');
-
-    // 检测自启动场景
-    const autoLaunch = isAutoLaunch();
-    const isWindows = process.platform === 'win32';
-
-    // 自启动场景下，等待更长时间确保系统环境完全准备好
-    const startupDelay = autoLaunch ? 3000 : 0;
-
-    if (autoLaunch) {
-        console.log('检测到自启动场景，延迟初始化以确保系统环境准备好...');
-    }
-
-    // 等待系统环境完全准备好
-    await new Promise(resolve => setTimeout(resolve, startupDelay));
 
     // 确保应用完全准备好后再初始化模块
     initializeModules();
@@ -261,9 +234,6 @@ app.whenReady().then(async () => {
         const logStatus = logger.getStatus();
         logger.info(`日志系统状态: ${JSON.stringify(logStatus)}`);
         logger.info('应用启动完成,开始加载配置...');
-        if (autoLaunch) {
-            logger.info('[自启动] 自启动场景，已应用额外延迟');
-        }
     }
 
     // 检查OOBE是否已完成
@@ -280,8 +250,7 @@ app.whenReady().then(async () => {
         bootManager.showLoading();
 
         // 使用 Promise 确保初始化流程的顺序
-        // 自启动场景下使用更长的延迟
-        const initializationDelay = autoLaunch ? 2000 : 500;
+        const initializationDelay = 500; // 适当减少等待时间，同时保持稳定性
         setTimeout(() => {
             if (app.isQuitting) return; // 如果应用正在退出，中止初始化
             try {
@@ -290,7 +259,7 @@ app.whenReady().then(async () => {
                 // 确保主窗口创建成功后，监听 ready-to-show 事件关闭加载窗口
                 if (win && !win.isDestroyed()) {
                     let loadingClosed = false;
-
+                    
                     const closeLoading = () => {
                         if (loadingClosed) return;
                         loadingClosed = true;
@@ -355,7 +324,7 @@ app.on('before-quit', () => {
     if (assignmentScheduler) {
         assignmentScheduler.stop();
     }
-
+    
     // 清理关机调度器
     if (shutdownScheduler) {
         shutdownScheduler.cancelScheduledShutdown();

@@ -12,6 +12,7 @@ class ConfigManager {
      */
     constructor(logger = null) {
         this.logger = logger;
+        this.store = new Store();
         this.defaultConfig = {
             isDuringClassCountdown: true,
             isWindowAlwaysOnTop: true,
@@ -22,20 +23,6 @@ class ConfigManager {
             isFirstRun: true,
             isOobeCompleted: false
         };
-        
-        // 初始化配置存储，添加错误处理
-        try {
-            this.store = new Store();
-            this.storeAvailable = true;
-        } catch (error) {
-            console.error('配置存储初始化失败，使用内存存储:', error);
-            if (logger) {
-                logger.error('配置存储初始化失败，使用内存存储：' + error.message);
-            }
-            // 降级到内存存储
-            this.store = new Map();
-            this.storeAvailable = false;
-        }
     }
 
     /**
@@ -56,21 +43,8 @@ class ConfigManager {
      * @returns {*} 配置值
      */
     get(key, defaultValue = null) {
-        try {
-            if (this.storeAvailable) {
-                const value = this.store.get(key);
-                return value !== undefined ? value : (defaultValue !== null ? defaultValue : this.defaultConfig[key]);
-            } else {
-                // 内存存储降级模式
-                return this.store.has(key) ? this.store.get(key) : (defaultValue !== null ? defaultValue : this.defaultConfig[key]);
-            }
-        } catch (error) {
-            console.error('获取配置失败:', error);
-            if (this.logger) {
-                this.logger.error('获取配置失败：' + error.message);
-            }
-            return defaultValue !== null ? defaultValue : this.defaultConfig[key];
-        }
+        const value = this.store.get(key);
+        return value !== undefined ? value : (defaultValue !== null ? defaultValue : this.defaultConfig[key]);
     }
 
     /**
@@ -79,20 +53,8 @@ class ConfigManager {
      * @param {*} value - 配置值
      */
     set(key, value) {
-        try {
-            if (this.storeAvailable) {
-                this.store.set(key, value);
-            } else {
-                // 内存存储降级模式
-                this.store.set(key, value);
-            }
-            this.log('info', `[配置管理] 设置 ${key} = ${JSON.stringify(value)}`);
-        } catch (error) {
-            console.error('设置配置失败:', error);
-            if (this.logger) {
-                this.logger.error('设置配置失败：' + error.message);
-            }
-        }
+        this.store.set(key, value);
+        this.log('info', `[配置管理] 设置 ${key} = ${JSON.stringify(value)}`);
     }
 
     /**
@@ -111,21 +73,10 @@ class ConfigManager {
      * 重置所有配置为默认值
      */
     reset() {
-        try {
-            for (const key in this.defaultConfig) {
-                if (this.storeAvailable) {
-                    this.store.delete(key);
-                } else {
-                    this.store.delete(key);
-                }
-            }
-            this.log('info', '[配置管理] 已重置所有配置为默认值');
-        } catch (error) {
-            console.error('重置配置失败:', error);
-            if (this.logger) {
-                this.logger.error('重置配置失败：' + error.message);
-            }
+        for (const key in this.defaultConfig) {
+            this.store.delete(key);
         }
+        this.log('info', '[配置管理] 已重置所有配置为默认值');
     }
 
     /**
