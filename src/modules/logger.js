@@ -23,7 +23,7 @@ class Logger {
     constructor() {
         this.baseLogsPath = this.getLogsPath();
         this.isInitialized = false;
-        this.initialize();
+        // 注意：初始化现在通过手动调用 initialize() 方法完成，以便于异步等待
     }
 
     /**

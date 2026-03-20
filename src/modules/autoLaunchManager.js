@@ -92,14 +92,20 @@ class AutoLaunchManager {
         // 防止开发环境误删其他任务（虽然任务名很具体）
         const command = `schtasks /Delete /TN "${this.taskName}" /F`;
 
-        exec(command, { windowsHide: true }, (error, stdout, stderr) => {
+        // 使用 encoding: 'buffer' 以获取原始字节流，便于后续正确解码
+        exec(command, { windowsHide: true, encoding: 'buffer' }, (error, stdout, stderr) => {
             if (error) {
-                // 如果任务不存在，不视为致命错误，仅在有其他严重异常时记录
-                const stderrStr = stderr ? stderr.toString() : '';
-                if (!stderrStr.includes('ERROR: The system cannot find the file specified') && 
-                    !stderrStr.includes('错误: 系统找不到指定的文件')) {
-                    // 只有在不是“找不到文件”的情况下才记录警告
-                    this.log('warn', `[自启动管理] 尝试清理旧计划任务时发生非预期错误: ${stderrStr || error.message}`);
+                // 将 stderr 从 GBK 解码为 UTF-8 字符串，解决 Windows 下的乱码问题
+                const stderrStr = stderr ? iconv.decode(stderr, 'cp936') : '';
+                
+                // 检查是否为“找不到文件”或“找不到任务”错误，这类错误在清理旧任务时是正常的
+                const isNotFoundError = stderrStr.includes('ERROR: The system cannot find the file specified') || 
+                                     stderrStr.includes('错误: 系统找不到指定的文件') ||
+                                     stderrStr.includes('错误: 系统找不到指定的计划任务');
+
+                if (!isNotFoundError) {
+                    // 只有在不是“找不到”的情况下才记录警告
+                    this.log('warn', `[自启动管理] 尝试清理旧计划任务时发生非预期错误: ${stderrStr.trim() || error.message}`);
                 }
             } else {
                 this.log('info', `[自启动管理] 已成功清理旧的计划任务: ${this.taskName}`);

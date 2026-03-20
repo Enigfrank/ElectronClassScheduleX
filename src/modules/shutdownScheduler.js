@@ -1,6 +1,7 @@
 const { dialog, BrowserWindow } = require('electron');
 const { exec } = require('child_process');
 const path = require('path');
+const iconv = require('iconv-lite');
 
 /**
  * 自动关机任务调度模块
@@ -170,12 +171,15 @@ class ShutdownScheduler {
         this.closeWarningWindow();
 
         this.log('info', `[关机调度] 执行关机命令，计划时间: ${targetDate.toLocaleString()}`);
-        exec('shutdown /s /t 0', (error) => {
+        exec('shutdown /s /t 0', { encoding: 'buffer' }, (error, stdout, stderr) => {
             if (error) {
-                this.log('error', `[关机调度] 关机失败 (${originalTime}): ${error.message}`);
+                const stderrStr = stderr ? iconv.decode(stderr, 'cp936') : '';
+                const errorMsg = stderrStr || error.message;
+
+                this.log('error', `[关机调度] 关机失败 (${originalTime}): ${errorMsg}`);
                 dialog.showMessageBox({
                     title: '关机失败',
-                    message: `计划于 ${targetDate.toLocaleString()} 的关机任务失败！\n错误详情: ${error.message}`
+                    message: `计划于 ${targetDate.toLocaleString()} 的关机任务失败！\n错误详情: ${errorMsg}`
                 });
             } else {
                 this.log('info', `[关机调度] 成功触发关机 (${originalTime})，关机时间: ${targetDate.toLocaleString()}`);
@@ -188,8 +192,11 @@ class ShutdownScheduler {
      */
     playWarningSound() {
         this.log('info', '[关机调度] 播放警告提示音');
-        exec('powershell -c "[System.Media.SystemSounds]::Exclamation.Play()"', (err) => {
-            if (err) this.log('warn', `[关机调度] 播放系统提示音失败: ${err.message}`);
+        exec('powershell -c "[System.Media.SystemSounds]::Exclamation.Play()"', { encoding: 'buffer' }, (err, stdout, stderr) => {
+            if (err) {
+                const stderrStr = stderr ? iconv.decode(stderr, 'cp936') : '';
+                this.log('warn', `[关机调度] 播放系统提示音失败: ${stderrStr || err.message}`);
+            }
         });
     }
 

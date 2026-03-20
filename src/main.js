@@ -71,9 +71,12 @@ let assignmentWindowManager;
  * 初始化所有模块
  * 创建并配置各个功能模块的实例
  */
-function initializeModules() {
+async function initializeModules() {
     try {
+        // 创建并初始化日志模块
         logger = new Logger();
+        await logger.initialize();
+
         scheduleConfigExtractor = new ScheduleConfigExtractor(logger);
         configManager = new ConfigManager(logger);
         assignmentConfigManager = new AssignmentConfigManager(logger);
@@ -98,8 +101,22 @@ function initializeModules() {
 }
 
 // 检查单例锁
-if (!app.requestSingleInstanceLock({ key: '电子课表' })) {
+const gotTheLock = app.requestSingleInstanceLock({ key: '电子课表' });
+
+if (!gotTheLock) {
+    console.log('检测到另一个实例已在运行, 退出当前实例。');
     app.quit();
+    process.exit(0); // 确保进程立即退出
+} else {
+    // 监听第二个实例启动
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        console.log('收到第二个实例的启动请求, 正在聚焦主窗口...');
+        if (win) {
+            if (win.isMinimized()) win.restore();
+            win.focus();
+            win.show();
+        }
+    });
 }
 
 /**
@@ -151,13 +168,13 @@ function showOobe() {
  * 当用户完成OOBE所有步骤后调用
  * 注意：OOBE状态和窗口已在ipcManager中处理,此处只负责初始化主应用
  */
-function onOobeComplete() {
+async function onOobeComplete() {
     if (logger) {
         logger.info('[OOBE] OOBE完成回调触发,开始启动主应用');
     }
 
     // 初始化主应用（OOBE状态和窗口已由ipcManager处理）
-    initializeApp();
+    await initializeApp();
 }
 
 /**
@@ -170,8 +187,8 @@ function showLoadingDialog() {
         height: 400,
         frame: false,
         alwaysOnTop: true,
-        modal: true,
-        parent: win,
+        modal: win ? true : false,
+        parent: win || undefined,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -305,7 +322,7 @@ function setupClientManagerCallbacks() {
  * 初始化应用
  * 创建主窗口、设置托盘、初始化各模块
  */
-function initializeApp() {
+async function initializeApp() {
     // 防止重复初始化
     if (appInitialized) {
         if (logger) {
@@ -320,7 +337,7 @@ function initializeApp() {
 
     // 确保模块已初始化
     if (!logger) {
-        initializeModules();
+        await initializeModules();
     }
 
     if (logger) {
@@ -337,8 +354,18 @@ function initializeApp() {
         win.webContents.send('getWeekIndex');
     });
 
-    const handle = win.getNativeWindowHandle();
-    DisableMinimize(handle);
+    // 禁用最小化按钮
+    try {
+        const handle = win.getNativeWindowHandle();
+        if (handle && handle.length > 0) {
+            DisableMinimize(handle);
+        } else {
+            if (logger) logger.warn('[启动] 无法获取主窗口句柄,跳过禁用最小化按钮');
+        }
+    } catch (err) {
+        console.error('无法禁用最小化按钮:', err);
+        if (logger) logger.warn(`无法禁用最小化按钮: ${err.message}`);
+    }
 
     // 设置自启动
     autoLaunchManager.setAutoLaunch();
@@ -373,7 +400,7 @@ app.whenReady().then(async () => {
     console.log('应用准备就绪,开始初始化...');
 
     // 确保应用完全准备好后再初始化模块
-    initializeModules();
+    await initializeModules();
 
     // 注册自定义协议
     registerConfigProtocol();
@@ -407,31 +434,25 @@ app.whenReady().then(async () => {
         // 非首次启动,显示加载对话框后初始化
         showLoadingDialog();
 
-        // 使用 Promise 确保初始化流程的顺序
-        new Promise(resolve => setTimeout(resolve, 1000))
-            .then(() => {
-                try {
-                    initializeApp();
-                    try {
-                        if (loadingDialog && !loadingDialog.isDestroyed()) {
-                            loadingDialog.close();
-                        }
-                    } catch (closeError) {
-                        console.error('关闭加载窗口失败:', closeError);
-                        if (logger) logger.warn(`关闭加载窗口失败: ${closeError.message}`);
-                    }
-                } catch (error) {
-                    const errorMsg = error instanceof Error ? error.message : String(error);
-                    const msg = `初始化失败: ${errorMsg}`;
-                    if (logger) {
-                        logger.error(msg);
-                        if (error.stack) logger.error(error.stack);
-                    }
-                    console.error(msg);
-                    dialog.showErrorBox('启动错误', msg);
-                    app.quit();
-                }
-            });
+        // 稍微延迟一点初始化,给加载对话框显示的时间
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        try {
+            await initializeApp();
+            if (loadingDialog && !loadingDialog.isDestroyed()) {
+                loadingDialog.close();
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            const msg = `初始化失败: ${errorMsg}`;
+            if (logger) {
+                logger.error(msg);
+                if (error.stack) logger.error(error.stack);
+            }
+            console.error(msg);
+            dialog.showErrorBox('启动错误', msg);
+            app.quit();
+        }
     }
 });
 
