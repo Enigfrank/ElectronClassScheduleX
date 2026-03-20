@@ -125,6 +125,49 @@ class IpcManager {
                 this.shutdownManagerWindow.webContents.send('shutdownTimesUpdated', times);
             });
         });
+
+        // 处理来自渲染进程的关机相关操作指令
+        ipcMain.on('shutdown-action', (event, action) => {
+            if (!this.shutdownScheduler) {
+                this.log('error', '[关机管理] 关机调度器未初始化');
+                return;
+            }
+
+            let actionExecuted = false;
+
+            // 根据存储在调度器中的回调函数执行对应操作
+            switch (action) {
+                case 'delay30':
+                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onDelay30 === 'function') {
+                        this.shutdownScheduler.currentCallbacks.onDelay30();
+                        actionExecuted = true;
+                    }
+                    break;
+                case 'delay60':
+                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onDelay60 === 'function') {
+                        this.shutdownScheduler.currentCallbacks.onDelay60();
+                        actionExecuted = true;
+                    }
+                    break;
+                case 'close':
+                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onClose === 'function') {
+                        this.shutdownScheduler.currentCallbacks.onClose();
+                        actionExecuted = true;
+                    }
+                    break;
+                default:
+                    this.log('warn', `[关机管理] 未知的关机操作: ${action}`);
+            }
+
+            if (actionExecuted) {
+                this.log('info', `[关机管理] 关机操作已执行: ${action}`);
+            }
+
+            // 关闭警告窗口
+            if (this.shutdownScheduler.currentShutdownWarningWindow) {
+                this.shutdownScheduler.currentShutdownWarningWindow.close();
+            }
+        });
     }
 
     /**
@@ -392,10 +435,14 @@ class IpcManager {
 
         ipcMain.on('open-external-link', (event, url) => {
             this.log('info', `[IPC管理] 打开外部链接: ${url}`);
-            shell.openExternal(url).catch((err) => {
-                this.log('error', `[IPC管理] 打开外部链接失败: ${err.message}`);
-                dialog.showErrorBox('打开链接失败', `无法打开链接: ${url}\n错误: ${err.message}`);
-            });
+            if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+                shell.openExternal(url).catch((err) => {
+                    this.log('error', `[IPC管理] 打开外部链接失败: ${err.message}`);
+                    dialog.showErrorBox('打开链接失败', `无法打开链接: ${url}\n错误: ${err.message}`);
+                });
+            } else {
+                this.log('warn', `[IPC管理] 拒绝打开非法的外部链接: ${url}`);
+            }
         });
 
         ipcMain.on('open-config-folder', () => {
@@ -753,17 +800,30 @@ class IpcManager {
     setupOobeEvents() {
         // OOBE完成事件
         ipcMain.on('oobe-complete', () => {
-            this.log('info', '[IPC管理] OOBE完成，准备启动主应用');
-            // 标记OOBE已完成
-            this.configManager.setOobeCompleted(true);
-            // 关闭OOBE窗口
-            this.windowManager.closeOobeWindow();
-            // 通知主进程启动主应用
-            const { ipcMain } = require('electron');
-            // 使用setImmediate确保窗口关闭后再触发事件
-            setImmediate(() => {
-                ipcMain.emit('oobe-finished');
-            });
+            this.log('info', '[IPC管理] OOBE完成，正在保存配置并重启应用...');
+            
+            try {
+                // 1. 标记OOBE已完成
+                this.configManager.setOobeCompleted(true);
+                
+                // 2. 确保日志已刷新
+                if (this.logger && typeof this.logger.flush === 'function') {
+                    this.logger.flush();
+                }
+
+                // 3. 重启应用
+                // 使用 app.relaunch() 准备重启，然后使用 app.exit(0) 退出当前进程
+                app.relaunch();
+                app.exit(0);
+                
+            } catch (error) {
+                this.log('error', `[IPC管理] OOBE完成处理出错: ${error.message}`);
+                // 如果重启失败，尝试回退到原有的初始化逻辑
+                this.windowManager.closeOobeWindow();
+                setImmediate(() => {
+                    ipcMain.emit('oobe-finished');
+                });
+            }
         });
 
         // OOBE打开配置文件夹
