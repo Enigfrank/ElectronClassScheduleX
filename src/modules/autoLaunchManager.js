@@ -39,16 +39,35 @@ class AutoLaunchManager {
      * 根据当前配置设置或取消自启动
      */
     setAutoLaunch() {
-        // 清理旧的快捷方式启动项
-        this.cleanOldShortcuts();
+        // 始终尝试清理旧的自启动方式（快捷方式和计划任务）
+        this.cleanOldAutoLaunchMethods();
 
-        if (this.configManager.getAutoLaunch()) {
-            this.log('info', '[自启动管理] 自启动已启用，创建计划任务');
-            this.createScheduledTask();
-        } else {
-            this.log('info', '[自启动管理] 自启动已禁用，删除计划任务');
-            this.removeScheduledTask();
+        const enabled = this.configManager.getAutoLaunch();
+
+        // 仅在打包后的应用中设置自启动
+        if (!app.isPackaged) {
+            this.log('warn', '[自启动管理] 开发环境跳过设置自启动');
+            return;
         }
+
+        try {
+            this.log('info', `[自启动管理] 正在将自启动状态设置为: ${enabled}`);
+            app.setLoginItemSettings({
+                openAtLogin: enabled,
+                path: app.getPath('exe')
+            });
+            this.log('info', '[自启动管理] Electron API 设置成功');
+        } catch (err) {
+            this.log('error', `[自启动管理] 通过 Electron API 设置自启动失败: ${err.message}`);
+        }
+    }
+
+    /**
+     * 清理所有旧版本的自启动方式
+     */
+    cleanOldAutoLaunchMethods() {
+        this.cleanOldShortcuts();
+        this.removeOldScheduledTask();
     }
 
     /**
@@ -67,70 +86,23 @@ class AutoLaunchManager {
     }
 
     /**
-     * 创建 Windows 计划任务以实现自启动
+     * 删除旧版本创建的 Windows 计划任务
      */
-    createScheduledTask() {
-        const { app, dialog } = require('electron');
-
-        // 防止开发环境错误注册 electron.exe
-        if (!app.isPackaged) {
-            this.log('warn', '[自启动管理] 开发环境跳过创建计划任务');
-            return;
-        }
-
-        const exePath = path.normalize(app.getPath('exe'));
-
-        // 正确的命令格式，注意引号包裹整个路径（处理含空格的路径如 Program Files）
-        const command = `schtasks /Create /TN "${this.taskName}" /TR "${exePath}" /SC ONLOGON /RL HIGHEST /F`;
-
-        this.log('info', `[自启动管理] 执行命令: ${command}`);
-
-        try {
-            exec(command, { windowsHide: true, encoding: 'buffer' }, (error, stdout, stderr) => {
-                try {
-                    // 使用 GBK 解码避免中文乱码
-                    const stdoutStr = stdout ? iconv.decode(stdout, 'gbk') : '';
-                    const stderrStr = stderr ? iconv.decode(stderr, 'gbk') : '';
-
-                    // 检测权限错误（支持中英文）
-                    const isAccessDenied =
-                        stderrStr.includes('Access is denied') ||
-                        stderrStr.includes('拒绝访问') ||
-                        stderrStr.includes('error');
-
-                    if (error) {
-                        this.log('error', `[自启动管理] 创建失败: ${stderrStr || stdoutStr}`);
-
-                        if (isAccessDenied) {
-                            dialog.showErrorBox('权限不足',
-                                '无法创建管理员权限的自启动任务。\n\n请以[管理员身份]运行此程序后再试。');
-                        }
-                    } else {
-                        this.log('info', '[自启动管理] 计划任务创建成功');
-                    }
-                } catch (callbackError) {
-                    this.log('error', `[自启动管理] 回调处理出错: ${callbackError.message}`);
-                }
-            });
-        } catch (execError) {
-            this.log('error', `[自启动管理] 执行命令出错: ${execError.message}`);
-        }
-    }
-
-    /**
-     * 删除已存在的 Windows 计划任务
-     */
-    removeScheduledTask() {
+    removeOldScheduledTask() {
+        // 防止开发环境误删其他任务（虽然任务名很具体）
         const command = `schtasks /Delete /TN "${this.taskName}" /F`;
 
-        exec(command, (error, stdout, stderr) => {
+        exec(command, { windowsHide: true }, (error, stdout, stderr) => {
             if (error) {
-                // 如果任务不存在，不视为错误
-                if (stderr && !stderr.includes('The system cannot find the file specified')) {
-                    this.log('error', `[自启动管理] 删除计划任务失败: ${error.message}`);
+                // 如果任务不存在，不视为致命错误，仅在有其他严重异常时记录
+                const stderrStr = stderr ? stderr.toString() : '';
+                if (!stderrStr.includes('ERROR: The system cannot find the file specified') && 
+                    !stderrStr.includes('错误: 系统找不到指定的文件')) {
+                    // 只有在不是“找不到文件”的情况下才记录警告
+                    this.log('warn', `[自启动管理] 尝试清理旧计划任务时发生非预期错误: ${stderrStr || error.message}`);
                 }
             } else {
-                this.log('info', '[自启动管理] 计划任务删除成功');
+                this.log('info', `[自启动管理] 已成功清理旧的计划任务: ${this.taskName}`);
             }
         });
     }
@@ -140,7 +112,15 @@ class AutoLaunchManager {
      * @returns {boolean}
      */
     isAutoLaunchEnabled() {
-        // 由于任务计划检查是异步的，这里直接返回配置状态
+        // 优先检查 Electron API 的实际状态
+        if (app.isPackaged) {
+            try {
+                const settings = app.getLoginItemSettings();
+                return settings.openAtLogin;
+            } catch (err) {
+                this.log('warn', `[自启动管理] 获取自启动状态失败: ${err.message}`);
+            }
+        }
         return this.configManager.getAutoLaunch();
     }
 
@@ -149,10 +129,11 @@ class AutoLaunchManager {
      * @param {boolean} enabled - 是否启用自启动
      */
     updateAutoLaunch(enabled) {
-        this.log('info', `[自启动管理] 更新自启动设置: ${enabled}`);
+        this.log('info', `[自启动管理] 用户更新自启动设置: ${enabled}`);
         this.configManager.setAutoLaunch(enabled);
         this.setAutoLaunch();
     }
 }
+
 
 module.exports = AutoLaunchManager;
