@@ -61,55 +61,6 @@ class IpcManager {
         this.setupUtilityEvents();
         this.setupClientEvents();
         this.setupAssignmentWindowEvents();
-        this.setupShutdownActionEvents();
-    }
-
-    /**
-     * 设置关机操作相关IPC事件监听器
-     */
-    setupShutdownActionEvents() {
-        ipcMain.on('shutdown-action', (event, action) => {
-            // 从全局导出的对象中获取调度器实例
-            if (!this.shutdownScheduler) {
-                console.error('Shutdown scheduler not available');
-                return;
-            }
-
-            let actionExecuted = false;
-
-            // 根据存储在调度器中的回调函数执行对应操作
-            switch (action) {
-                case 'delay30':
-                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onDelay30 === 'function') {
-                        this.shutdownScheduler.currentCallbacks.onDelay30();
-                        actionExecuted = true;
-                    }
-                    break;
-                case 'delay60':
-                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onDelay60 === 'function') {
-                        this.shutdownScheduler.currentCallbacks.onDelay60();
-                        actionExecuted = true;
-                    }
-                    break;
-                case 'close':
-                    if (this.shutdownScheduler.currentCallbacks && typeof this.shutdownScheduler.currentCallbacks.onClose === 'function') {
-                        this.shutdownScheduler.currentCallbacks.onClose();
-                        actionExecuted = true;
-                    }
-                    break;
-                default:
-                    this.log('warn', `未知的关机操作: ${action}`);
-            }
-
-            if (actionExecuted) {
-                this.log('info', `关机操作已执行: ${action}`);
-            }
-
-            // 关闭警告窗口
-            if (this.shutdownScheduler.currentShutdownWarningWindow) {
-                this.shutdownScheduler.currentShutdownWarningWindow.close();
-            }
-        });
     }
 
     /**
