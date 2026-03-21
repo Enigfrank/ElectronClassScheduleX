@@ -205,6 +205,72 @@
     transition: opacity 0.5s ease, transform 0.5s ease, left 0.1s, top 0.1s; /* 拖动时位置更新需要快，但切换状态需要慢 */
 }
 
+.miniCountdown.dragging {
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    will-change: left, top;
+}
+
+.dragBoundaryHint {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 999;
+    transition: opacity 0.2s ease;
+}
+
+.dragBoundaryHint::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 3px;
+    border-radius: 6px;
+    background:
+        linear-gradient(90deg,
+            #ff2d55,
+            #ff9500,
+            #ffe100,
+            #00ff66,
+            #00ffcc,
+            #00a2ff,
+            #5e5cff,
+            #c442ff,
+            #ff2d55) 0 0 / 320% 100%;
+    animation: dragBoundaryRgbFlow 2.2s linear infinite;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+
+.dragBoundaryHint::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 6px;
+    border-radius: 8px;
+    background:
+        linear-gradient(90deg,
+            #ff2d55,
+            #ff9500,
+            #ffe100,
+            #00ff66,
+            #00ffcc,
+            #00a2ff,
+            #5e5cff,
+            #c442ff,
+            #ff2d55) 0 0 / 280% 100%;
+    animation: dragBoundaryRgbFlow 2.2s linear infinite;
+    filter: blur(8px);
+    opacity: 0.9;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+
+.dragBoundaryHint.active {
+    opacity: 1;
+}
+
 .countdownContainer {
     position: absolute;
     left: 100%;
@@ -267,5 +333,15 @@
     to {
         opacity: 0;
         transform: translateY(-10px);
+    }
+}
+
+@keyframes dragBoundaryRgbFlow {
+    from {
+        background-position: 0% 0;
+    }
+
+    to {
+        background-position: 300% 0;
     }
 }

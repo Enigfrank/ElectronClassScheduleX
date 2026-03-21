@@ -34,6 +34,7 @@
     </div>
   </div>
   <div class="miniCountdown" id="miniCountdown">00:00</div>
+  <div class="dragBoundaryHint" id="dragBoundaryHint" aria-hidden="true"></div>
   <div class="nextClassHint" id="nextClassHint"
     style="display: none; position: fixed; top: var(--top-space); border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF; margin-left: 10px;">
   </div>
@@ -311,6 +312,27 @@
   }
 
   /**
+   * 设置拖动范围提示层显示状态
+   * @param {boolean} visible 是否显示提示层
+   */
+  function setDragBoundaryHintVisible(visible) {
+    const dragBoundaryHint = document.getElementById('dragBoundaryHint');
+    if (!dragBoundaryHint) return;
+    dragBoundaryHint.classList.toggle('active', visible);
+  }
+
+  /**
+   * 设置迷你倒计时的拖动渲染状态
+   * 拖动中禁用位置过渡，提升跟手性
+   * @param {boolean} dragging 是否处于拖动状态
+   */
+  function setMiniCountdownDraggingState(dragging) {
+    const miniCountdown = document.getElementById('miniCountdown');
+    if (!miniCountdown) return;
+    miniCountdown.classList.toggle('dragging', dragging);
+  }
+
+  /**
    * 检测点是否在元素区域内
    * @param {number} x 点的X坐标
    * @param {number} y 点的Y坐标
@@ -330,6 +352,8 @@
     if (document.getElementById('miniCountdown').style.display === 'block') {
       isDragging = true;
       ipcRenderer.send('setDragState', true);
+      setDragBoundaryHintVisible(true);
+      setMiniCountdownDraggingState(true);
       dragStartX = event.clientX;
       dragStartY = event.clientY;
 
@@ -384,6 +408,8 @@
     if (isDragging) {
       isDragging = false;
       ipcRenderer.send('setDragState', false);
+      setDragBoundaryHintVisible(false);
+      setMiniCountdownDraggingState(false);
       updateInteractiveRect();
     }
   }
@@ -398,6 +424,8 @@
     if (miniCountdown.style.display === 'block' && event.touches.length === 1) {
       isDragging = true;
       ipcRenderer.send('setDragState', true);
+      setDragBoundaryHintVisible(true);
+      setMiniCountdownDraggingState(true);
       const touch = event.touches[0];
       dragStartX = touch.clientX;
       dragStartY = touch.clientY;
@@ -453,6 +481,8 @@
     if (isDragging) {
       isDragging = false;
       ipcRenderer.send('setDragState', false);
+      setDragBoundaryHintVisible(false);
+      setMiniCountdownDraggingState(false);
       updateInteractiveRect();
     }
   }
@@ -462,6 +492,8 @@
    */
   function resetMiniCountdownPosition() {
     const miniCountdown = document.getElementById('miniCountdown');
+    setDragBoundaryHintVisible(false);
+    setMiniCountdownDraggingState(false);
     miniCountdown.style.left = '50%';
     miniCountdown.style.top = 'var(--top-space)';
     miniCountdown.style.transform = 'translateX(-50%)';
