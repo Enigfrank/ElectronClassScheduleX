@@ -15,8 +15,9 @@ class ShutdownScheduler {
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
-        this.shutdownTimers = [];
+        this.shutdownTasks = new Map();
         this.currentShutdownWarningWindow = null;
+        this.currentWarningTaskId = null;
     }
 
     /**
@@ -115,48 +116,58 @@ class ShutdownScheduler {
     scheduleShutdownWithWarning(timeStr, targetDate) {
         const now = new Date();
         const remainingDelay = targetDate - now;
+        const taskId = `${timeStr}-${targetDate.getTime()}`;
 
         if (remainingDelay <= 0) {
-            this.executeShutdown(timeStr, targetDate);
+            this.executeShutdown(taskId, timeStr, targetDate);
             return;
         }
 
         const warningDelay = remainingDelay - 15 * 1000;
-        let finalShutdownTimer = null;
+        const taskState = {
+            timeStr,
+            targetDate,
+            warningTimerId: null,
+            finalTimerId: null
+        };
+        this.shutdownTasks.set(taskId, taskState);
 
         if (warningDelay > 0) {
             const warningTimerId = setTimeout(() => {
                 this.playWarningSound();
-                this.showShutdownWarningWindow(timeStr, targetDate,
-                    () => this.handleDelayOption(targetDate, 30),
-                    () => this.handleDelayOption(targetDate, 60),
-                    () => this.cancelScheduledShutdown(),
+                this.showShutdownWarningWindow(taskId, timeStr, targetDate,
+                    () => this.handleDelayOption(taskId, targetDate, 30),
+                    () => this.handleDelayOption(taskId, targetDate, 60),
+                    () => this.cancelScheduledShutdown(taskId),
                 );
 
-                finalShutdownTimer = setTimeout(() => {
-                    this.executeShutdown(timeStr, targetDate);
+                const finalTimerId = setTimeout(() => {
+                    this.executeShutdown(taskId, timeStr, targetDate);
                 }, 15 * 1000);
 
-                this.shutdownTimers.push(finalShutdownTimer);
+                const currentTask = this.shutdownTasks.get(taskId);
+                if (currentTask) {
+                    currentTask.finalTimerId = finalTimerId;
+                }
             }, warningDelay);
 
-            this.shutdownTimers.push(warningTimerId);
+            taskState.warningTimerId = warningTimerId;
         } else {
-            const finalTimerId = setTimeout(() => this.executeShutdown(timeStr, targetDate), remainingDelay);
-            this.shutdownTimers.push(finalTimerId);
+            taskState.finalTimerId = setTimeout(() => this.executeShutdown(taskId, timeStr, targetDate), remainingDelay);
         }
     }
 
     /**
      * 处理关机预警中的延迟选项
+     * @param {string} taskId - 当前关机任务ID
      * @param {Date} currentTargetDate - 当前关机目标时间
      * @param {number} delaySeconds - 需要延迟的秒数
      */
-    handleDelayOption(currentTargetDate, delaySeconds) {
+    handleDelayOption(taskId, currentTargetDate, delaySeconds) {
         const newTarget = new Date(currentTargetDate.getTime() + delaySeconds * 1000);
         this.log('info', `[关机调度] 用户选择延长${delaySeconds}秒关机，新关机时间: ${newTarget.toLocaleString()}`);
 
-        this.clearShutdownTimers();
+        this.clearTaskTimers(taskId);
 
         const timeStr = `${newTarget.getHours().toString().padStart(2, '0')}:${newTarget.getMinutes().toString().padStart(2, '0')}`;
         this.scheduleShutdownWithWarning(timeStr, newTarget);
@@ -164,11 +175,13 @@ class ShutdownScheduler {
 
     /**
      * 执行最终的系统关机指令
+     * @param {string} taskId - 当前关机任务ID
      * @param {string} originalTime - 原始设定的触发时间字符串
      * @param {Date} targetDate - 实际执行关机的目标日期
      */
-    executeShutdown(originalTime, targetDate) {
-        this.closeWarningWindow();
+    executeShutdown(taskId, originalTime, targetDate) {
+        this.closeWarningWindow(taskId);
+        this.clearTaskTimers(taskId);
 
         this.log('info', `[关机调度] 执行关机命令，计划时间: ${targetDate.toLocaleString()}`);
         exec('shutdown /s /t 0', { encoding: 'buffer' }, (error, stdout, stderr) => {
@@ -208,7 +221,7 @@ class ShutdownScheduler {
      * @param {Function} onDelay60 - 延迟 60 秒的回调
      * @param {Function} onClose - 取消/关闭的回调
      */
-    showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, onClose) {
+    showShutdownWarningWindow(taskId, timeStr, targetDate, onDelay30, onDelay60, onClose) {
         this.log('info', `[关机调度] 显示关机警告窗口，目标时间: ${targetDate.toLocaleString()}`);
         this.closeWarningWindow();
 
@@ -233,6 +246,7 @@ class ShutdownScheduler {
         shutdownWarningWin.focus();
 
         this.currentShutdownWarningWindow = shutdownWarningWin;
+        this.currentWarningTaskId = taskId;
         const htmlPath = path.join(__dirname, '../shutdown-warning.html');
         shutdownWarningWin.loadFile(htmlPath);
 
@@ -258,14 +272,17 @@ class ShutdownScheduler {
         shutdownWarningWin.on('closed', () => {
             this.currentShutdownWarningWindow = null;
             this.currentCallbacks = null;
+            this.currentWarningTaskId = null;
         });
     }
 
     /**
      * 关闭当前显示的关机预警窗口
+     * @param {string|null} taskId - 需要关闭的关机任务ID，为 null 时表示直接关闭当前窗口
      */
-    closeWarningWindow() {
-        if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
+    closeWarningWindow(taskId = null) {
+        const shouldCloseCurrentWindow = taskId === null || this.currentWarningTaskId === taskId;
+        if (shouldCloseCurrentWindow && this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
             this.currentShutdownWarningWindow.close();
         }
     }
@@ -307,20 +324,48 @@ class ShutdownScheduler {
      * 清除所有的关机相关的定时器
      */
     clearShutdownTimers() {
-        this.shutdownTimers.forEach(timerId => clearTimeout(timerId));
-        this.shutdownTimers.length = 0;
+        Array.from(this.shutdownTasks.keys()).forEach(taskId => this.clearTaskTimers(taskId));
+    }
+
+    /**
+     * 清除指定关机任务的定时器
+     * @param {string} taskId - 关机任务ID
+     */
+    clearTaskTimers(taskId) {
+        const taskState = this.shutdownTasks.get(taskId);
+        if (!taskState) {
+            return;
+        }
+
+        if (taskState.warningTimerId) {
+            clearTimeout(taskState.warningTimerId);
+        }
+
+        if (taskState.finalTimerId) {
+            clearTimeout(taskState.finalTimerId);
+        }
+
+        this.shutdownTasks.delete(taskId);
     }
 
     /**
      * 取消所有已排期的关机任务
+     * @param {string|null} taskId - 关机任务ID，为 null 时表示取消全部
      */
-    cancelScheduledShutdown() {
-        this.log('info', '[关机调度] 取消定时关机');
-        this.clearShutdownTimers();
-        this.closeWarningWindow();
+    cancelScheduledShutdown(taskId = null) {
+        this.log('info', taskId ? `[关机调度] 取消指定定时关机: ${taskId}` : '[关机调度] 取消定时关机');
+
+        if (taskId) {
+            this.clearTaskTimers(taskId);
+            this.closeWarningWindow(taskId);
+        } else {
+            this.clearShutdownTimers();
+            this.closeWarningWindow();
+        }
+
         dialog.showMessageBox({
             title: '关机取消',
-            message: '已取消定时关机'
+            message: taskId ? '已取消当前定时关机任务' : '已取消定时关机'
         });
     }
 

@@ -1,6 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, protocol, net } = require('electron');
 const path = require('path');
-const { DisableMinimize } = require('electron-disable-minimize');
 
 // 导入模块
 const Logger = require('./logger');
@@ -102,6 +101,13 @@ class AppLifecycleManager {
      * @returns {boolean} 是否获取到锁
      */
     checkSingleInstanceLock() {
+        // 开发环境默认跳过单例锁，避免频繁重启时因锁文件权限/残留导致闪退
+        const shouldSkipLockInDev = !app.isPackaged && process.env.ECSX_ENABLE_SINGLE_INSTANCE !== '1';
+        if (shouldSkipLockInDev) {
+            this.logToConsole('[单例锁] 开发环境已跳过（如需启用请设置 ECSX_ENABLE_SINGLE_INSTANCE=1）');
+            return true;
+        }
+
         const gotTheLock = app.requestSingleInstanceLock({ key: '电子课表' });
 
         if (!gotTheLock) {
@@ -195,6 +201,7 @@ class AppLifecycleManager {
             if (this.logger) {
                 this.logger.error('模块初始化失败: ' + error.message);
             }
+            throw error;
         }
     }
 
@@ -272,19 +279,6 @@ class AppLifecycleManager {
         win.webContents.on('did-finish-load', () => {
             win.webContents.send('getWeekIndex');
         });
-
-        // 禁用最小化按钮
-        try {
-            const handle = win.getNativeWindowHandle();
-            if (handle && handle.length > 0) {
-                DisableMinimize(handle);
-            } else if (this.logger) {
-                this.logger.warn('[启动] 无法获取主窗口句柄, 跳过禁用最小化按钮');
-            }
-        } catch (err) {
-            this.logToConsole('无法禁用最小化按钮:', err);
-            if (this.logger) this.logger.warn(`无法禁用最小化按钮: ${err.message}`);
-        }
 
         // 设置自启动
         this.autoLaunchManager.setAutoLaunch();

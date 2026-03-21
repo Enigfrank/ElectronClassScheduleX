@@ -217,33 +217,61 @@
     }
   }
 
+  /**
+   * 根据当前高亮课程设置倒计时容器位置
+   * 当页面尚未渲染出高亮课程时，回退到基础定位，避免启动阶段空指针异常
+   */
   function setCountdownerPosition() {
-    let highlightElement = document.getElementById('highlighted')
-    let offset = {}
+    const highlightElement = document.getElementById('highlighted');
+    const globalContainer = document.getElementById('globalContainer');
+
+    if (!countdownContainer || !classContainer || !globalContainer) {
+      return;
+    }
+
+    if (!highlightElement || scheduleData.currentHighlight.index === null || !scheduleData.currentHighlight.type) {
+      countdownContainer.style.marginLeft = `${globalContainer.offsetWidth + 20}px`;
+      countdownContainer.style.top = '50%';
+      countdownContainer.style.transform = 'translateY(-50%)';
+      return;
+    }
+
+    let offset = {};
     if (scheduleData.currentHighlight.type === 'current') {
       offset = {
         x: highlightElement.offsetLeft - countdownContainer.offsetWidth / 2 + highlightElement.offsetWidth / 2,
         y: classContainer.offsetHeight
-      }
+      };
     } else if (scheduleData.currentHighlight.type === 'upcoming') {
       if (scheduleData.currentHighlight.index != 0 && scheduleData.divider.indexOf((scheduleData.currentHighlight.index - 1)) != -1) {
         offset = {
           x: highlightElement.offsetLeft - countdownContainer.offsetWidth / 2 - Number(getComputedStyle(highlightElement).marginLeft.replace('px', '')) - getComputedStyle(root).getPropertyValue('--divider-width').replace('px', '') / 2 - getComputedStyle(root).getPropertyValue('--divider-margin').replace('px', ''),
           y: classContainer.offsetHeight
-        }
+        };
       } else {
         offset = {
           x: highlightElement.offsetLeft - countdownContainer.offsetWidth / 2 - Number(getComputedStyle(highlightElement).marginLeft.replace('px', '')),
           y: classContainer.offsetHeight
-        }
+        };
       }
     }
     if (scheduleData.currentHighlight.isEnd) {
       offset = {
         x: highlightElement.offsetLeft - countdownContainer.offsetWidth / 2 + highlightElement.offsetWidth + Number(getComputedStyle(highlightElement).marginLeft.replace('px', '')),
         y: classContainer.offsetHeight
-      }
+      };
     }
+
+    if (typeof offset.x !== 'number' || typeof offset.y !== 'number') {
+      countdownContainer.style.marginLeft = `${globalContainer.offsetWidth + 20}px`;
+      countdownContainer.style.top = '50%';
+      countdownContainer.style.transform = 'translateY(-50%)';
+      return;
+    }
+
+    countdownContainer.style.marginLeft = `${Math.max(0, offset.x)}px`;
+    countdownContainer.style.top = `${Math.max(0, offset.y)}px`;
+    countdownContainer.style.transform = 'none';
   }
 
   /**
