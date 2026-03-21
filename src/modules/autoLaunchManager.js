@@ -20,7 +20,6 @@ class AutoLaunchManager {
         // 旧的快捷方式路径，用于清理
         this.startupFolderPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
         this.shortcutName = '电子课表(请勿重命名).lnk';
-        // 任务计划名称
         this.taskName = 'ElectronClassScheduleX';
     }
 
@@ -89,7 +88,6 @@ class AutoLaunchManager {
      * 删除旧版本创建的 Windows 计划任务
      */
     removeOldScheduledTask() {
-        // 防止开发环境误删其他任务（虽然任务名很具体）
         const command = `schtasks /Delete /TN "${this.taskName}" /F`;
 
         // 使用 encoding: 'buffer' 以获取原始字节流，便于后续正确解码

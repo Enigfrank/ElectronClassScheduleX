@@ -3,7 +3,6 @@ const Store = require('electron-store').default;
 /**
  * 配置管理模块
  * 负责应用程序配置的读取、存储和管理
- * 注意：作业相关配置已移至 AssignmentConfigManager 统一管理
  */
 class ConfigManager {
     /**

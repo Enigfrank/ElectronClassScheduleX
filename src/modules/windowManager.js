@@ -153,11 +153,12 @@ class WindowManager {
             guiWindow.show();
         });
 
-        guiWindow.on('close', () => {
+        guiWindow.once('close', () => {
             this.windows.gui = null;
         });
 
-        guiWindow.webContents.on('did-finish-load', () => {
+
+        guiWindow.webContents.once('did-finish-load', () => {
             guiWindow.webContents.send('init', {
                 isDuringClassCountdown: this.configManager.get('isDuringClassCountdown', true),
                 isWindowAlwaysOnTop: this.configManager.getWindowAlwaysOnTop(),
@@ -166,6 +167,8 @@ class WindowManager {
                 scheduleShutdown: this.configManager.get('scheduleShutdown', false)
             });
         });
+
+
 
         this.windows.gui = guiWindow;
         return guiWindow;

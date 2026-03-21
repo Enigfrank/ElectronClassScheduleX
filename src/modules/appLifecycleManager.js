@@ -27,8 +27,6 @@ class AppLifecycleManager {
     constructor() {
         this.appInitialized = false;
         this.loadingDialog = null;
-        
-        // 模块实例
         this.logger = null;
         this.configManager = null;
         this.assignmentConfigManager = null;
@@ -52,21 +50,14 @@ class AppLifecycleManager {
         if (!this.checkSingleInstanceLock()) {
             return;
         }
-
         // 全局异常处理
         this.setupGlobalErrorHandler();
-
-        // 等待应用就绪
         await app.whenReady();
-        
         this.logToConsole('应用准备就绪, 开始初始化...');
-
         // 初始化基础模块
         await this.initializeModules();
-
         // 注册自定义协议
         this.registerConfigProtocol();
-
         // 确保配置文件存在
         if (!this.ensureScheduleConfig()) {
             const msg = '配置文件初始化失败，程序无法继续运行。';
@@ -75,23 +66,19 @@ class AppLifecycleManager {
             app.quit();
             return;
         }
-
         // 记录日志系统状态
         if (this.logger) {
             const logStatus = this.logger.getStatus();
             this.logger.info(`日志系统状态: ${JSON.stringify(logStatus)}`);
             this.logger.info('应用启动完成, 开始加载配置...');
         }
-
         // 检查OOBE是否已完成
         const isOobeCompleted = this.configManager.getOobeCompleted();
-
         if (!isOobeCompleted) {
             this.showOobe();
         } else {
             await this.handleNormalStartup();
         }
-
         // 设置生命周期事件
         this.setupLifecycleEvents();
     }
@@ -265,28 +252,110 @@ class AppLifecycleManager {
         }
 
         // 创建主窗口
-        const win = this.windowManager.createMainWindow();
+        const win = this.initializeMainWindow();
         Menu.setApplicationMenu(null);
 
         win.webContents.on('did-finish-load', () => {
             win.webContents.send('getWeekIndex');
         });
 
-        // 设置自启动
-        this.autoLaunchManager.setAutoLaunch();
-
-        // 初始化关机调度
-        this.shutdownScheduler.initialize();
-
-        // 创建托盘
-        const iconPath = this.utils.getAssetPath('image', 'icon.png');
-        this.trayManager.createTray(iconPath);
-
-        // 初始化作业管理
-        this.assignmentManager.initialize();
+        this.initializeAutoLaunchModule();
+        this.initializeShutdownModule();
+        this.initializeTrayModule();
+        this.initializeAssignmentModule();
 
         if (this.logger) {
             this.logger.info('应用初始化完成');
+        }
+    }
+
+    /**
+     * 初始化主窗口并挂载崩溃保护监听
+     * @returns {Electron.BrowserWindow} 主窗口实例
+     */
+    initializeMainWindow() {
+        const win = this.windowManager.createMainWindow();
+        if (!win || win.isDestroyed()) {
+            throw new Error('主窗口创建失败');
+        }
+
+        // 记录渲染进程异常，避免静默闪退难排查
+        win.webContents.on('render-process-gone', (event, details) => {
+            const reason = details && details.reason ? details.reason : 'unknown';
+            const exitCode = details && typeof details.exitCode === 'number' ? details.exitCode : 'unknown';
+            if (this.logger) {
+                this.logger.error(`[主窗口] 渲染进程异常退出: reason=${reason}, exitCode=${exitCode}`);
+            }
+        });
+
+        win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+            if (this.logger) {
+                this.logger.error(`[主窗口] 页面加载失败: code=${errorCode}, desc=${errorDescription}, url=${validatedURL}`);
+            }
+        });
+
+        return win;
+    }
+
+    /**
+     * 初始化自启动模块（非致命）
+     */
+    initializeAutoLaunchModule() {
+        try {
+            if (this.autoLaunchManager) {
+                this.autoLaunchManager.setAutoLaunch();
+            }
+        } catch (error) {
+            if (this.logger) {
+                this.logger.error(`[启动流程] 自启动模块初始化失败: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * 初始化关机调度模块（非致命）
+     */
+    initializeShutdownModule() {
+        try {
+            if (this.shutdownScheduler) {
+                this.shutdownScheduler.initialize();
+            }
+        } catch (error) {
+            if (this.logger) {
+                this.logger.error(`[启动流程] 关机调度模块初始化失败: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * 初始化托盘模块（非致命）
+     */
+    initializeTrayModule() {
+        try {
+            if (!this.utils || !this.trayManager) {
+                return;
+            }
+            const iconPath = this.utils.getAssetPath('image', 'icon.png');
+            this.trayManager.createTray(iconPath);
+        } catch (error) {
+            if (this.logger) {
+                this.logger.error(`[启动流程] 托盘模块初始化失败: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * 初始化作业管理模块（非致命）
+     */
+    initializeAssignmentModule() {
+        try {
+            if (this.assignmentManager) {
+                this.assignmentManager.initialize();
+            }
+        } catch (error) {
+            if (this.logger) {
+                this.logger.error(`[启动流程] 作业管理模块初始化失败: ${error.message}`);
+            }
         }
     }
 
@@ -365,11 +434,13 @@ class AppLifecycleManager {
             }
         });
 
-        // 所有窗口关闭
         app.on('window-all-closed', () => {
-            // 在 macOS 上, 除非用户用 Cmd + Q 确定地退出, 否则绝大部分应用及其菜单栏会保持激活。
-            if (process.platform !== 'darwin') {
+            // 在 Windows/Linux 上，若托盘可用则保持后台运行，避免因窗口意外关闭造成“闪退”感知
+            const hasTray = this.trayManager && typeof this.trayManager.hasTray === 'function' && this.trayManager.hasTray();
+            if (process.platform !== 'darwin' && !hasTray) {
                 app.quit();
+            } else if (this.logger) {
+                this.logger.info('[生命周期] 所有窗口已关闭，但托盘可用，应用保持后台运行');
             }
         });
     }
@@ -381,9 +452,6 @@ class AppLifecycleManager {
         console.log(...args);
     }
 
-    /**
-     * 导出所有模块供外部使用 (模拟 main.js 原有的导出)
-     */
     getModules() {
         return {
             logger: this.logger,

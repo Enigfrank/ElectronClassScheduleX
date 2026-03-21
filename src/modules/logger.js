@@ -23,7 +23,7 @@ class Logger {
     constructor() {
         this.baseLogsPath = this.getLogsPath();
         this.isInitialized = false;
-        // 注意：初始化现在通过手动调用 initialize() 方法完成，以便于异步等待
+        this.fallbackLog = null;
     }
 
     /**
@@ -91,6 +91,7 @@ class Logger {
             log.transports.console.level = 'info';
             log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
             log.transports.console.format = '{h}:{i}:{s}.{ms} [{level}] {text}';
+            log.transports.file.sync = true;
 
             // 确保日志文件可以被写入
             const testLogPath = log.transports.file.resolvePathFn();
@@ -116,15 +117,7 @@ class Logger {
      */
     setupErrorHandling() {
         try {
-            // 错误捕获配置 - 使用新的 API
-            if (log.errorHandler && log.errorHandler.start) {
-                log.errorHandler.start({
-                    showDialog: false,
-                    onError: (error) => {
-                        log.error('应用程序错误:', error);
-                    }
-                });
-            }
+
 
             // 捕获未处理的 Promise 拒绝
             process.on('unhandledRejection', (reason, promise) => {
@@ -135,6 +128,9 @@ class Logger {
             // 捕获未捕获的异常
             process.on('uncaughtException', (error) => {
                 log.error('未捕获的异常:', error);
+                setTimeout(() => {
+                    process.exit(1);
+                }, 1000);
             });
 
             // 捕获渲染进程错误（如果 app 可用）
@@ -225,41 +221,33 @@ class Logger {
      * 记录普通信息日志
      * @param {string} message - 日志内容
      */
-    info(message) {
+    info(...args) {
         if (this.isInitialized) {
-            log.info(message);
+            log.info(...args);
         } else if (this.fallbackLog) {
-            this.fallbackLog('info', message);
+            this.fallbackLog('info', args.join(' '));
         } else {
-            console.log(`[INFO] ${message}`);
+            console.log('[INFO]', ...args);
         }
     }
 
-    /**
-     * 记录错误日志
-     * @param {string} message - 日志内容
-     */
-    error(message) {
+    error(...args) {
         if (this.isInitialized) {
-            log.error(message);
+            log.error(...args);
         } else if (this.fallbackLog) {
-            this.fallbackLog('error', message);
+            this.fallbackLog('error', args.join(' '));
         } else {
-            console.error(`[ERROR] ${message}`);
+            console.error('[ERROR]', ...args);
         }
     }
 
-    /**
-     * 记录警告日志
-     * @param {string} message - 日志内容
-     */
-    warn(message) {
+    warn(...args) {
         if (this.isInitialized) {
-            log.warn(message);
+            log.warn(...args);
         } else if (this.fallbackLog) {
-            this.fallbackLog('warn', message);
+            this.fallbackLog('warn', args.join(' '));
         } else {
-            console.warn(`[WARN] ${message}`);
+            console.warn('[WARN]', ...args);
         }
     }
 
@@ -276,15 +264,13 @@ class Logger {
         };
     }
 
-    // 手动刷新日志（确保日志被写入文件）
     /**
      * 手动刷新日志流，确保所有挂起的日志已写入磁盘
      */
     flush() {
-        if (this.isInitialized && log && log.transports && log.transports.file) {
+        if (this.isInitialized) {
             try {
-                log.transports.file.stream?.end();
-                log.transports.file.stream = null;
+                log.transports.file.sync = true;
             } catch (error) {
                 console.error('刷新日志失败:', error);
             }

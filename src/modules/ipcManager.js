@@ -334,7 +334,7 @@ class IpcManager {
             if (rect) {
                 if (!checkTimer) {
                     // 启动定时检查，50ms一次
-                    checkTimer = setInterval(checkMousePosition, 50);
+                    checkTimer = setInterval(checkMousePosition, 25);
                 }
             } else {
                 if (checkTimer) {
@@ -800,7 +800,7 @@ class IpcManager {
     setupOobeEvents() {
         // OOBE完成事件
         ipcMain.on('oobe-complete', () => {
-            this.log('info', '[IPC管理] OOBE完成，正在保存配置并重启应用...');
+            this.log('info', '[IPC管理] OOBE完成,正在保存配置并重启应用...');
             
             try {
                 // 1. 标记OOBE已完成

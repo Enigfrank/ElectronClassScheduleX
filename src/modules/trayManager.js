@@ -104,11 +104,14 @@ class TrayManager {
         const mainWindow = this.windowManager.getWindow('main');
 
         dialog.showMessageBox(mainWindow, {
+            type: 'question',
             title: '请确认',
             message: '你确定要退出程序吗?',
-            buttons: ['取消', '确定']
-        }).then((data) => {
-            if (data.response) {
+            buttons: ['取消', '确定'],
+            defaultId: 0,
+            cancelId: 0
+        }).then(({ response }) => {
+            if (response === 1) {
                 app.quit();
             }
         });
@@ -128,11 +131,8 @@ class TrayManager {
      * 销毁托盘实例并清理资源
      */
     destroy() {
-        if (this.tray) {
+        if (this.tray && !this.tray.isDestroyed()) {
             try {
-                // 移除所有事件监听器
-                this.tray.removeAllListeners();
-                // 销毁托盘图标
                 this.tray.destroy();
             } catch (error) {
                 this.log('error', `[托盘管理] 销毁托盘时出错: ${error.message}`);
@@ -150,6 +150,14 @@ class TrayManager {
         if (this.tray) {
             this.tray.setToolTip(tooltip);
         }
+    }
+
+    /**
+     * 判断托盘是否已创建且可用
+     * @returns {boolean} 托盘是否可用
+     */
+    hasTray() {
+        return !!(this.tray && !this.tray.isDestroyed());
     }
 }
 

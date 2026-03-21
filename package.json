@@ -1,6 +1,6 @@
 {
   "name": "electron-class-schedule-x",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "description": "电子课表",
   "main": "src/main.js",
   "author": {
