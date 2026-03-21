@@ -57,6 +57,7 @@
   let root = document.querySelector(':root');
   let isClassCountdown = true
   let isClassHidden = true
+  let isCountdownerPositionRetryPending = false
 
   // 拖动相关变量
   let isDragging = false;
@@ -217,9 +218,30 @@
     }
   }
 
+  /**
+   * 设置倒计时容器位置
+   * 当高亮课程元素尚未渲染到 DOM 时，延迟到下一帧重试，避免启动阶段空指针
+   */
   function setCountdownerPosition() {
     let highlightElement = document.getElementById('highlighted')
     let offset = {}
+
+    if (!highlightElement) {
+      if (
+        !isCountdownerPositionRetryPending &&
+        scheduleData.currentHighlight &&
+        scheduleData.currentHighlight.index !== null &&
+        scheduleData.currentHighlight.type
+      ) {
+        isCountdownerPositionRetryPending = true
+        requestAnimationFrame(() => {
+          isCountdownerPositionRetryPending = false
+          setCountdownerPosition()
+        })
+      }
+      return
+    }
+
     if (scheduleData.currentHighlight.type === 'current') {
       offset = {
         x: highlightElement.offsetLeft - countdownContainer.offsetWidth / 2 + highlightElement.offsetWidth / 2,

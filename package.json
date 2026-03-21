@@ -18,11 +18,11 @@
     "@electron/rebuild": "^4.0.3",
     "electron": "^39.6.0",
     "electron-builder": "^26.7.0",
+    "electron-rebuild": "^3.2.9",
     "node-gyp": "^12.2.0"
   },
   "dependencies": {
     "axios": "^1.13.5",
-    "electron-disable-minimize": "^2.1.0",
     "electron-log": "^5.4.3",
     "electron-prompt": "^1.7.0",
     "electron-store": "^11.0.2",
@@ -43,12 +43,16 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "src/image/icon.ico",
       "signtoolOptions": {
-        "signingHashAlgorithms": ["sha256"],
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
         "rfc3161TimeStampServer": "http://timestamp.digicert.com"
       }
     },

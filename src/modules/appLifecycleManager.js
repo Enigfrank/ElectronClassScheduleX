@@ -1,6 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, protocol, net } = require('electron');
 const path = require('path');
-const { DisableMinimize } = require('electron-disable-minimize');
 
 // 导入模块
 const Logger = require('./logger');
@@ -272,19 +271,6 @@ class AppLifecycleManager {
         win.webContents.on('did-finish-load', () => {
             win.webContents.send('getWeekIndex');
         });
-
-        // 禁用最小化按钮
-        try {
-            const handle = win.getNativeWindowHandle();
-            if (handle && handle.length > 0) {
-                DisableMinimize(handle);
-            } else if (this.logger) {
-                this.logger.warn('[启动] 无法获取主窗口句柄, 跳过禁用最小化按钮');
-            }
-        } catch (err) {
-            this.logToConsole('无法禁用最小化按钮:', err);
-            if (this.logger) this.logger.warn(`无法禁用最小化按钮: ${err.message}`);
-        }
 
         // 设置自启动
         this.autoLaunchManager.setAutoLaunch();
