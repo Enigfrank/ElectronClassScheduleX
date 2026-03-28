@@ -54,8 +54,23 @@ class AppLifecycleManager {
         this.setupGlobalErrorHandler();
         await app.whenReady();
         this.logToConsole('应用准备就绪, 开始初始化...');
-        // 初始化基础模块
-        await this.initializeModules();
+        // 初始化基础模块（失败时立即中断启动，避免后续空对象访问）
+        try {
+            await this.initializeModules();
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            const msg = `模块初始化失败，程序无法继续运行。\n${errorMsg}`;
+            this.logToConsole(msg);
+            if (this.logger) {
+                this.logger.error(msg);
+                if (error && error.stack) {
+                    this.logger.error(error.stack);
+                }
+            }
+            dialog.showErrorBox('启动错误', msg);
+            app.quit();
+            return;
+        }
         // 注册自定义协议
         this.registerConfigProtocol();
         // 确保配置文件存在
@@ -137,6 +152,7 @@ class AppLifecycleManager {
 
     /**
      * 初始化所有模块
+     * @throws {Error} 当任意关键模块初始化失败时抛出异常
      */
     async initializeModules() {
         try {
@@ -177,10 +193,15 @@ class AppLifecycleManager {
 
             this.logger.info('所有模块初始化完成');
         } catch (error) {
-            this.logToConsole('模块初始化失败:', error);
+            const message = `模块初始化失败: ${error instanceof Error ? error.message : String(error)}`;
+            this.logToConsole(message);
             if (this.logger) {
-                this.logger.error('模块初始化失败: ' + error.message);
+                this.logger.error(message);
+                if (error && error.stack) {
+                    this.logger.error(error.stack);
+                }
             }
+            throw error;
         }
     }
 

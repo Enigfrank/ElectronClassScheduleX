@@ -696,7 +696,6 @@ class IpcManager {
             type: 'input',
             height: 200,
             width: 400,
-            icon: this.getAssetPath('image', 'clock.png'),
             buttons: ['取消', '确认'],
             defaultId: 1
         };
