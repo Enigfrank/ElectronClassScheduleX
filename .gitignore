@@ -91,6 +91,5 @@ typings/
 # Electron-Forge
 out/
 
-React-Gui
 /.trae
-/ECSX-Gui
+/ECSX-Gui/dist
