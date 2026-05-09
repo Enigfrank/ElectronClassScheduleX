@@ -349,7 +349,7 @@ class AppLifecycleManager {
     }
 
     /**
-     * 初始化托盘模块（非致命）
+     * 初始化托盘模块
      */
     initializeTrayModule() {
         try {
