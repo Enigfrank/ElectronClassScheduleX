@@ -31,6 +31,17 @@ class ShutdownScheduler {
     }
 
     /**
+     * 初始化调度器，启动已在配置中启用的关机任务
+     */
+    initialize() {
+        this.log('info', '[关机调度] 初始化关机调度器');
+        const isScheduled = this.configManager.get('scheduleShutdown', false);
+        if (isScheduled) {
+            this.scheduleShutdown();
+        }
+    }
+
+    /**
      * 根据配置文件中的关机设置开始调度关机任务
      */
     scheduleShutdown() {
@@ -261,14 +272,7 @@ class ShutdownScheduler {
         });
     }
 
-    /**
-     * 关闭当前显示的关机预警窗口
-     */
-    closeWarningWindow() {
-        if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
-            this.currentShutdownWarningWindow.close();
-        }
-    }
+
 
     /**
      * 计算并弹窗显示所有的关机任务详情
@@ -294,12 +298,6 @@ class ShutdownScheduler {
             shutdownPlans.forEach((plan, index) => {
                 this.log('info', `[关机调度] [${index + 1}] 原始时间: ${plan.originalTime} | 触发时间: ${plan.formattedDate} | 剩余 ${Math.ceil(plan.delay / 1000)} 秒`);
             });
-        } else {
-            dialog.showMessageBox({
-                title: '温馨提示',
-                message: '当前没有设置有效的关机任务',
-                type: 'info'
-            });
         }
     }
 
@@ -312,27 +310,21 @@ class ShutdownScheduler {
     }
 
     /**
+     * 关闭当前显示的关机预警窗口
+     */
+    closeWarningWindow() {
+        if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
+            this.currentShutdownWarningWindow.close();
+        }
+    }
+
+    /**
      * 取消所有已排期的关机任务
      */
     cancelScheduledShutdown() {
         this.log('info', '[关机调度] 取消定时关机');
         this.clearShutdownTimers();
         this.closeWarningWindow();
-        dialog.showMessageBox({
-            title: '关机取消',
-            message: '已取消定时关机'
-        });
-    }
-
-    /**
-     * 初始化调度器，启动已在配置中启用的关机任务
-     */
-    initialize() {
-        this.log('info', '[关机调度] 初始化关机调度器');
-        const isScheduled = this.configManager.get('scheduleShutdown', false);
-        if (isScheduled) {
-            this.scheduleShutdown();
-        }
     }
 }
 

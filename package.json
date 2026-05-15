@@ -37,7 +37,7 @@
     "asarUnpack": [],
     "appId": "com.enigfrank.ElectronClassScheduleX",
     "productName": "电子课表",
-    "compression": "lzma",
+    "compression": "maximum",
     "copyright": "Copyright © Enigfrank",
     "win": {
       "target": [

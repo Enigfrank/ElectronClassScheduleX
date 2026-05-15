@@ -162,11 +162,6 @@ class IpcManager {
             if (actionExecuted) {
                 this.log('info', `[关机管理] 关机操作已执行: ${action}`);
             }
-
-            // 关闭警告窗口
-            if (this.shutdownScheduler.currentShutdownWarningWindow) {
-                this.shutdownScheduler.currentShutdownWarningWindow.close();
-            }
         });
     }
 
@@ -300,7 +295,7 @@ class IpcManager {
             try {
                 const point = screen.getCursorScreenPoint();
                 const bounds = mainWindow.getBounds();
-                
+
                 // 计算绝对坐标区域
                 // 注意：bounds.x/y 是窗口左上角在屏幕上的坐标
                 if (interactiveRect) {
@@ -313,9 +308,9 @@ class IpcManager {
 
                     // 扩大一点判定区域，防止边缘闪烁
                     const padding = 5;
-                    if (point.x >= absoluteRect.x - padding && 
+                    if (point.x >= absoluteRect.x - padding &&
                         point.x <= absoluteRect.x + absoluteRect.width + padding &&
-                        point.y >= absoluteRect.y - padding && 
+                        point.y >= absoluteRect.y - padding &&
                         point.y <= absoluteRect.y + absoluteRect.height + padding) {
                         // 在区域内，禁用穿透
                         mainWindow.setIgnoreMouseEvents(false);
@@ -340,7 +335,7 @@ class IpcManager {
                 if (checkTimer) {
                     clearInterval(checkTimer);
                     checkTimer = null;
-                    
+
                     // 确保恢复穿透
                     const mainWindow = this.windowManager.getWindow('main');
                     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -461,12 +456,12 @@ class IpcManager {
             try {
                 // 使用与logger模块相同的路径逻辑
                 const logsDir = app.getPath('userData') ? path.join(app.getPath('userData'), 'logs') : path.join(__dirname, '..', 'logs');
-                
+
                 // 确保日志目录存在
                 if (!fs.existsSync(logsDir)) {
                     return { success: true, logs: ['暂无日志文件'] };
                 }
-                
+
                 const files = fs.readdirSync(logsDir).filter(file => file.endsWith('.log'));
 
                 if (files.length === 0) {
@@ -800,11 +795,11 @@ class IpcManager {
         // OOBE完成事件
         ipcMain.on('oobe-complete', () => {
             this.log('info', '[IPC管理] OOBE完成,正在保存配置并重启应用...');
-            
+
             try {
                 // 1. 标记OOBE已完成
                 this.configManager.setOobeCompleted(true);
-                
+
                 // 2. 确保日志已刷新
                 if (this.logger && typeof this.logger.flush === 'function') {
                     this.logger.flush();
@@ -814,7 +809,7 @@ class IpcManager {
                 // 使用 app.relaunch() 准备重启，然后使用 app.exit(0) 退出当前进程
                 app.relaunch();
                 app.exit(0);
-                
+
             } catch (error) {
                 this.log('error', `[IPC管理] OOBE完成处理出错: ${error.message}`);
                 // 如果重启失败，尝试回退到原有的初始化逻辑
