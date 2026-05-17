@@ -36,6 +36,9 @@ jobs:
             exit 1
           }
 
+      - name: 启用 Corepack
+        run: corepack enable
+
       - name: 安装依赖
         run: yarn install --frozen-lockfile
 
