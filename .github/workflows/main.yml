@@ -92,25 +92,39 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
           body: |
-            ## 📦 构建信息
-
-            | 项目 | 值 |
-            |------|------|
-            | 版本 | `${{ env.VERSION }}` |
-            | 提交 | `${{ github.sha }}` |
-            | 触发方式 | `${{ github.event_name }}` |
-
-            ## ⚠️ 签名状态
-
-            当前版本 **未进行代码签名**，Windows SmartScreen 可能会提示"未知发布者"。
-            这是正常现象，点击"仍要运行"即可安装。
-
-            ## 📝 更新内容
-
-            详见 [Commits](https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }})
+            > **🔖 Release** `${{ env.VERSION }}`
+            > 由 ${{ github.event_name == 'workflow_dispatch' && '手动触发' || '标签推送' }}工作流自动构建
 
             ---
-            *由 GitHub Actions 自动生成*
+
+            ### 📦 构建信息
+
+            | 属性 | 详情 |
+            | :--- | :--- |
+            | **版本号** | `${{ env.VERSION }}` |
+            | **提交 SHA** | `${{ github.sha }}` |
+            | **触发方式** | `${{ github.event_name }}` |
+            | **构建环境** | `windows-latest` · Node.js 24 |
+
+            ---
+
+            ### ⚠️ 安装说明
+
+            > 本应用**未进行代码签名**，首次运行时 Windows SmartScreen
+            > 可能会弹出"Windows 已保护你的电脑"警告。
+            >
+            > 请点击 **「更多信息」→「仍要运行」** 即可正常安装，
+            > 此为未签名应用在 Windows 上的正常行为。
+
+            ---
+
+            ### 📝 变更日志
+
+            📎 [查看本次发布的所有提交](https://github.com/${{ github.repository }}/compare/${{ github.event.before }}...${{ github.sha }})
+
+            ---
+
+            <sub>🤖 由 GitHub Actions 自动生成 · ${{ github.workflow }}</sub>
           draft: false
           prerelease: false
           files: |
