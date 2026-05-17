@@ -39,10 +39,10 @@ jobs:
           }
 
       - name: 安装依赖
-        run: yarn install --frozen-lockfile
+        run: corepack yarn install --frozen-lockfile
 
       - name: 构建 Electron 应用
-        run: yarn build
+        run: corepack yarn build
 
       - name: 提取发布元数据
         id: meta
