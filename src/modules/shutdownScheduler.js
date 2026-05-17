@@ -8,15 +8,12 @@ const iconv = require('iconv-lite');
  * 负责定时关机任务的设置、警告显示、延迟处理及最终关机指令的发送
  */
 class ShutdownScheduler {
-    /**
-     * @param {ConfigManager} configManager - 配置管理器实例
-     * @param {Object} logger - 日志记录器实例
-     */
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
         this.shutdownTimers = [];
         this.currentShutdownWarningWindow = null;
+        this.shutdownCancelled = false;
     }
 
     /**
@@ -124,6 +121,8 @@ class ShutdownScheduler {
      * @param {Date} targetDate - 目标关机时间
      */
     scheduleShutdownWithWarning(timeStr, targetDate) {
+        this.shutdownCancelled = false;
+
         const now = new Date();
         const remainingDelay = targetDate - now;
 
@@ -133,10 +132,11 @@ class ShutdownScheduler {
         }
 
         const warningDelay = remainingDelay - 15 * 1000;
-        let finalShutdownTimer = null;
 
         if (warningDelay > 0) {
             const warningTimerId = setTimeout(() => {
+                if (this.shutdownCancelled) return;
+
                 this.playWarningSound();
                 this.showShutdownWarningWindow(timeStr, targetDate,
                     () => this.handleDelayOption(targetDate, 30),
@@ -144,7 +144,8 @@ class ShutdownScheduler {
                     () => this.cancelScheduledShutdown(),
                 );
 
-                finalShutdownTimer = setTimeout(() => {
+                const finalShutdownTimer = setTimeout(() => {
+                    if (this.shutdownCancelled) return;
                     this.executeShutdown(timeStr, targetDate);
                 }, 15 * 1000);
 
@@ -153,7 +154,10 @@ class ShutdownScheduler {
 
             this.shutdownTimers.push(warningTimerId);
         } else {
-            const finalTimerId = setTimeout(() => this.executeShutdown(timeStr, targetDate), remainingDelay);
+            const finalTimerId = setTimeout(() => {
+                if (this.shutdownCancelled) return;
+                this.executeShutdown(timeStr, targetDate);
+            }, remainingDelay);
             this.shutdownTimers.push(finalTimerId);
         }
     }
@@ -266,7 +270,11 @@ class ShutdownScheduler {
             onClose: onClose
         };
 
-        shutdownWarningWin.on('closed', () => {
+        shutdownWarningWin.on('close', (e) => {
+            e.preventDefault();
+            if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
+                this.currentShutdownWarningWindow.destroy();
+            }
             this.currentShutdownWarningWindow = null;
             this.currentCallbacks = null;
         });
@@ -314,8 +322,10 @@ class ShutdownScheduler {
      */
     closeWarningWindow() {
         if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
-            this.currentShutdownWarningWindow.close();
+            this.currentShutdownWarningWindow.destroy();
         }
+        this.currentShutdownWarningWindow = null;
+        this.currentCallbacks = null;
     }
 
     /**
@@ -323,6 +333,7 @@ class ShutdownScheduler {
      */
     cancelScheduledShutdown() {
         this.log('info', '[关机调度] 取消定时关机');
+        this.shutdownCancelled = true;
         this.clearShutdownTimers();
         this.closeWarningWindow();
     }

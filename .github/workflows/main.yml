@@ -25,7 +25,7 @@ jobs:
       - name: 配置 Node.js (LTS 版本)
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '24.15.0'
           cache: 'npm'
 
       - name: 验证锁文件

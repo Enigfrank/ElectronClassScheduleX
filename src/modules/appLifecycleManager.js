@@ -68,8 +68,6 @@ class AppLifecycleManager {
                 }
             }
             dialog.showErrorBox('启动错误', msg);
-            app.quit();
-            return;
         }
         // 注册自定义协议
         this.registerConfigProtocol();
@@ -170,16 +168,16 @@ class AppLifecycleManager {
             this.autoLaunchManager = new AutoLaunchManager(this.configManager, this.logger);
             this.clientManager = new ClientManager(this.assignmentConfigManager, this.logger);
             this.assignmentWindowManager = new AssignmentWindowManager(this.assignmentConfigManager, this.logger);
-            
+
             this.ipcManager = new IpcManager(
-                this.configManager, 
-                this.assignmentConfigManager, 
-                this.logger, 
-                this.windowManager, 
-                this.trayManager, 
-                this.shutdownScheduler, 
-                this.autoLaunchManager, 
-                this.clientManager, 
+                this.configManager,
+                this.assignmentConfigManager,
+                this.logger,
+                this.windowManager,
+                this.trayManager,
+                this.shutdownScheduler,
+                this.autoLaunchManager,
+                this.clientManager,
                 this.assignmentWindowManager
             );
 
@@ -299,27 +297,11 @@ class AppLifecycleManager {
         if (!win || win.isDestroyed()) {
             throw new Error('主窗口创建失败');
         }
-
-        // 记录渲染进程异常，避免静默闪退难排查
-        win.webContents.on('render-process-gone', (event, details) => {
-            const reason = details && details.reason ? details.reason : 'unknown';
-            const exitCode = details && typeof details.exitCode === 'number' ? details.exitCode : 'unknown';
-            if (this.logger) {
-                this.logger.error(`[主窗口] 渲染进程异常退出: reason=${reason}, exitCode=${exitCode}`);
-            }
-        });
-
-        win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-            if (this.logger) {
-                this.logger.error(`[主窗口] 页面加载失败: code=${errorCode}, desc=${errorDescription}, url=${validatedURL}`);
-            }
-        });
-
         return win;
     }
 
     /**
-     * 初始化自启动模块（非致命）
+     * 初始化自启动模块
      */
     initializeAutoLaunchModule() {
         try {
@@ -456,7 +438,6 @@ class AppLifecycleManager {
         });
 
         app.on('window-all-closed', () => {
-            // 在 Windows/Linux 上，若托盘可用则保持后台运行，避免因窗口意外关闭造成“闪退”感知
             const hasTray = this.trayManager && typeof this.trayManager.hasTray === 'function' && this.trayManager.hasTray();
             if (process.platform !== 'darwin' && !hasTray) {
                 app.quit();

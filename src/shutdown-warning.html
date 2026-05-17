@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <title>关机提醒</title>
@@ -11,16 +12,19 @@
             background: #fff7e6;
             margin: 0;
         }
+
         h3 {
             color: #d32f2f;
             margin: 0 0 15px 0;
         }
+
         .countdown {
             font-size: 24px;
             font-weight: bold;
             color: #e53935;
             margin: 10px 0;
         }
+
         .btn {
             margin: 5px;
             padding: 8px 16px;
@@ -28,11 +32,21 @@
             border-radius: 4px;
             cursor: pointer;
         }
-        .delay30 { background: #ffb74d; }
-        .delay60 { background: #ff8a65; }
-        .close { background: #bdbdbd; }
+
+        .delay30 {
+            background: #ffb74d;
+        }
+
+        .delay60 {
+            background: #ff8a65;
+        }
+
+        .close {
+            background: #bdbdbd;
+        }
     </style>
 </head>
+
 <body>
     <h3>⚠️ 即将关机提醒</h3>
     <div>系统将在 <span class="countdown">15</span> 秒后自动关机。</div>
@@ -61,15 +75,13 @@
 
         function startCountdown() {
             const countdownEl = document.querySelector('.countdown');
-            
+
             interval = setInterval(() => {
                 seconds--;
                 countdownEl.textContent = seconds;
-                
-                // 目标时间显示保持不变，只显示倒计时
+
                 if (seconds <= 0) {
                     clearInterval(interval);
-                    window.close();
                 }
             }, 1000);
         }
@@ -90,4 +102,5 @@
         });
     </script>
 </body>
+
 </html>
