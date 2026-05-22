@@ -298,7 +298,7 @@ class ShutdownScheduler {
             dialog.showMessageBox({
                 title: '关机计划提示',
                 message: `已为您设置以下关机任务：\n\n${messageContent}`,
-                buttons: ['知道了'],
+                buttons: ['已阅'],
                 cancelId: 0
             });
 
