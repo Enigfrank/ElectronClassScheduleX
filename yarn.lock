@@ -1039,6 +1039,7 @@ __metadata:
     electron-prompt: "npm:^1.7.0"
     electron-store: "npm:^11.0.2"
     iconv-lite: "npm:^0.7.2"
+    json5: "npm:^2.2.3"
     react: "npm:^19.2.6"
     react-dom: "npm:^19.2.6"
     ws: "npm:^8.20.1"

@@ -30,9 +30,7 @@ class ConfigManager {
      * @param {string} message - 日志消息
      */
     log(level, message) {
-        if (this.logger) {
-            this.logger[level](message);
-        }
+        this.logger?.[level]?.(message);
     }
 
     /**
@@ -41,9 +39,9 @@ class ConfigManager {
      * @param {*} defaultValue - 默认值
      * @returns {*} 配置值
      */
-    get(key, defaultValue = null) {
-        const value = this.store.get(key);
-        return value !== undefined ? value : (defaultValue !== null ? defaultValue : this.defaultConfig[key]);
+    get(key, defaultValue) {
+        const fallback = defaultValue ?? this.defaultConfig[key];
+        return this.store.get(key, fallback);
     }
 
     /**
@@ -62,7 +60,7 @@ class ConfigManager {
      */
     getAll() {
         const config = {};
-        for (const key in this.defaultConfig) {
+        for (const key of Object.keys(this.defaultConfig)) {
             config[key] = this.get(key);
         }
         return config;
@@ -72,7 +70,7 @@ class ConfigManager {
      * 重置所有配置为默认值
      */
     reset() {
-        for (const key in this.defaultConfig) {
+        for (const key of Object.keys(this.defaultConfig)) {
             this.store.delete(key);
         }
         this.log('info', '[配置管理] 已重置所有配置为默认值');
@@ -83,7 +81,7 @@ class ConfigManager {
      * @returns {Array} 关机时间列表
      */
     getShutdownTimes() {
-        const times = this.get('shutdownTimes', []);
+        const times = this.get('shutdownTimes');
         if (times.length > 0 && typeof times[0] === 'string') {
             return times.map(time => ({ time, enabled: true }));
         }
@@ -98,66 +96,34 @@ class ConfigManager {
         this.set('shutdownTimes', times);
     }
 
-    /**
-     * 获取窗口置顶配置
-     * @returns {boolean} 是否窗口置顶
-     */
     getWindowAlwaysOnTop() {
-        return this.get('isWindowAlwaysOnTop', true);
+        return this.get('isWindowAlwaysOnTop');
     }
 
-    /**
-     * 设置窗口置顶配置
-     * @param {boolean} value - 是否窗口置顶
-     */
     setWindowAlwaysOnTop(value) {
         this.set('isWindowAlwaysOnTop', value);
     }
 
-    /**
-     * 获取自启动配置
-     * @returns {boolean} 是否开机自启动
-     */
     getAutoLaunch() {
-        return this.get('isAutoLaunch', true);
+        return this.get('isAutoLaunch');
     }
 
-    /**
-     * 设置自启动配置
-     * @param {boolean} value - 是否开机自启动
-     */
     setAutoLaunch(value) {
         this.set('isAutoLaunch', value);
     }
 
-    /**
-     * 获取是否首次运行
-     * @returns {boolean} 是否首次运行
-     */
     getIsFirstRun() {
-        return this.get('isFirstRun', true);
+        return this.get('isFirstRun');
     }
 
-    /**
-     * 设置首次运行状态
-     * @param {boolean} value - 是否首次运行
-     */
     setIsFirstRun(value) {
         this.set('isFirstRun', value);
     }
 
-    /**
-     * 获取OOBE是否已完成
-     * @returns {boolean} OOBE是否已完成
-     */
     getOobeCompleted() {
-        return this.get('isOobeCompleted', false);
+        return this.get('isOobeCompleted');
     }
 
-    /**
-     * 设置OOBE完成状态
-     * @param {boolean} value - OOBE是否已完成
-     */
     setOobeCompleted(value) {
         this.set('isOobeCompleted', value);
     }

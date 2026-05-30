@@ -1,4 +1,5 @@
-const { BrowserWindow, screen, Menu, ipcMain } = require('electron');
+const fs = require('fs');
+const { BrowserWindow, screen, Menu, ipcMain, app } = require('electron');
 const path = require('path');
 
 /**
@@ -16,7 +17,6 @@ class WindowManager {
         this.windows = {
             main: null,
             gui: null,
-            loading: null,
             shutdownWarning: null,
             oobe: null,
             devTools: null
@@ -147,7 +147,33 @@ class WindowManager {
             }
         });
 
-        guiWindow.loadFile(path.join(__dirname, '..', 'GUI.html'));
+        // __dirname 是 src/modules，往上一级 '..' 就是 src，然后加载 GUI.html
+        const htmlPath = path.join(__dirname, '..', 'GUI.html');
+        guiWindow.loadFile(htmlPath);
+
+        const isDev = !app.isPackaged;
+        let bundleWatcher = null;
+
+        if (isDev) {
+            // __dirname 是 src/modules，往上一级 '..' 是 src，再进入 dist 文件夹
+            const bundlePath = path.join(__dirname, '..', 'dist', 'react-gui.bundle.js');
+            
+            // 确保文件存在再监听，避免首次启动时 Webpack 还没编译完导致报错
+            if (fs.existsSync(bundlePath)) {
+                fs.watchFile(bundlePath, { interval: 500 }, (curr, prev) => {
+                    if (curr.mtime !== prev.mtime) {
+                        console.log('🔄 [开发环境] 检测到 React GUI 代码更新，正在自动刷新窗口...');
+                        guiWindow.webContents.reload(); // 自动刷新窗口
+                    }
+                });
+                bundleWatcher = bundlePath;
+            } else {
+                console.warn(`⚠️ [开发环境] 未找到 bundle 文件: ${bundlePath}，请先在 ECSX-Gui 目录下运行 npm run dev`);
+            }
+            
+            // 开发环境自动打开 F12 开发者工具
+            guiWindow.webContents.openDevTools({ mode: 'detach' });
+        }
 
         guiWindow.once('ready-to-show', () => {
             guiWindow.show();
@@ -155,8 +181,11 @@ class WindowManager {
 
         guiWindow.once('close', () => {
             this.windows.gui = null;
+            // 窗口关闭时，取消文件监听，防止内存泄漏
+            if (isDev && bundleWatcher) {
+                fs.unwatchFile(bundleWatcher);
+            }
         });
-
 
         guiWindow.webContents.once('did-finish-load', () => {
             guiWindow.webContents.send('init', {
@@ -168,44 +197,8 @@ class WindowManager {
             });
         });
 
-
-
         this.windows.gui = guiWindow;
         return guiWindow;
-    }
-
-    /**
-     * 创建加载状态对话框
-     * @param {BrowserWindow} parentWindow - 父窗口
-     * @returns {BrowserWindow} 加载窗口实例
-     */
-    createLoadingDialog(parentWindow) {
-        const loadingDialog = new BrowserWindow({
-            width: 600,
-            height: 400,
-            frame: false,
-            alwaysOnTop: true,
-            modal: true,
-            parent: parentWindow,
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false
-            }
-        });
-
-        loadingDialog.loadFile(path.join(__dirname, '..', 'loading.html'));
-        this.windows.loading = loadingDialog;
-        return loadingDialog;
-    }
-
-    /**
-     * 关闭并销毁当前加载对话框
-     */
-    closeLoadingDialog() {
-        if (this.windows.loading && !this.windows.loading.isDestroyed()) {
-            this.windows.loading.close();
-            this.windows.loading = null;
-        }
     }
 
     /**
@@ -228,7 +221,7 @@ class WindowManager {
 
     /**
      * 获取指定类型的窗口实例
-     * @param {string} type - 窗口类型标识（main, gui, loading, etc.）
+     * @param {string} type - 窗口类型标识（main, gui, etc.）
      * @returns {BrowserWindow|null}
      */
     getWindow(type) {
@@ -247,7 +240,6 @@ class WindowManager {
         this.windows = {
             main: null,
             gui: null,
-            loading: null,
             shutdownWarning: null
         };
     }

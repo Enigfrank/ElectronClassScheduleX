@@ -11,61 +11,51 @@ class ShutdownScheduler {
     constructor(configManager, logger) {
         this.configManager = configManager;
         this.logger = logger;
-        this.shutdownTimers = [];
+        
+        this.shutdownTimers = []; 
+        this.currentFinalTimer = null;
         this.currentShutdownWarningWindow = null;
         this.shutdownCancelled = false;
+        this.currentCallbacks = null;
     }
 
-    /**
-     * 记录日志
-     * @param {string} level - 日志级别
-     * @param {string} message - 日志消息
-     */
     log(level, message) {
-        if (this.logger) {
-            this.logger[level](message);
-        }
+        this.logger?.[level]?.(message);
     }
 
-    /**
-     * 初始化调度器，启动已在配置中启用的关机任务
-     */
     initialize() {
         this.log('info', '[关机调度] 初始化关机调度器');
         const isScheduled = this.configManager.get('scheduleShutdown', false);
-        if (isScheduled) {
-            this.scheduleShutdown();
-        }
+        if (isScheduled) this.scheduleShutdown();
     }
 
-    /**
-     * 根据配置文件中的关机设置开始调度关机任务
-     */
     scheduleShutdown() {
         this.log('info', '[关机调度] 开始调度关机任务');
         const storedTimes = this.configManager.getShutdownTimes();
-        const currentTimes = [...storedTimes];
+        const validTimes = [];
         const shutdownPlans = [];
 
         this.clearShutdownTimers();
 
-        currentTimes.forEach((timeItem, index) => {
+        storedTimes.forEach((timeItem) => {
             if (!timeItem.enabled) {
+                validTimes.push(timeItem); // 保留未启用的项
                 return;
             }
 
             const timeStr = timeItem.time;
             if (!this.validateTimeFormat(timeStr)) {
                 this.log('error', `[关机调度] 无效时间格式: ${timeStr}`);
-                return;
+                return; // 过滤掉无效格式
             }
 
             const targetDate = this.calculateTargetTime(timeStr);
             if (!targetDate) {
                 this.log('warn', `[关机调度] 已过期时间: ${timeStr}，已自动移除`);
-                currentTimes.splice(index, 1);
-                return;
+                return; // 过滤掉已过期时间，不加入 validTimes
             }
+
+            validTimes.push(timeItem); // 保留有效时间
 
             const delay = targetDate - new Date();
             this.scheduleShutdownWithWarning(timeStr, targetDate);
@@ -77,33 +67,23 @@ class ShutdownScheduler {
             });
         });
 
-        if (currentTimes.length !== storedTimes.length) {
-            this.configManager.setShutdownTimes(currentTimes);
+        // 只有当有效时间数量发生变化时，才更新配置
+        if (validTimes.length !== storedTimes.length) {
+            this.configManager.setShutdownTimes(validTimes);
         }
 
         this.showShutdownPlans(shutdownPlans);
     }
 
-    /**
-     * 验证时间字符串格式是否为 HH:MM
-     * @param {string} timeStr - 待验证的时间字符串
-     * @returns {boolean} 是否符合格式
-     */
     validateTimeFormat(timeStr) {
-        const timeParts = timeStr.match(/^(\d{2}):(\d{2})$/);
-        return !!timeParts;
+        return /^(\d{2}):(\d{2})$/.test(timeStr);
     }
 
-    /**
-     * 根据 HH:MM 格式的时间字符串计算下一次触发的日期对象
-     * @param {string} timeStr - 时间字符串
-     * @returns {Date|null} 目标日期对象，无效格式则返回 null
-     */
     calculateTargetTime(timeStr) {
         const timeParts = timeStr.match(/^(\d{2}):(\d{2})$/);
         if (!timeParts) return null;
 
-        const [_, hour, minute] = timeParts;
+        const [, hour, minute] = timeParts;
         const now = new Date();
         let targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
 
@@ -114,15 +94,8 @@ class ShutdownScheduler {
         return targetDate;
     }
 
-    /**
-     * 调度带预警提醒的关机任务
-     * 在关机前 15 秒弹出警告窗口
-     * @param {string} timeStr - 原始设定的时间
-     * @param {Date} targetDate - 目标关机时间
-     */
     scheduleShutdownWithWarning(timeStr, targetDate) {
         this.shutdownCancelled = false;
-
         const now = new Date();
         const remainingDelay = targetDate - now;
 
@@ -141,24 +114,23 @@ class ShutdownScheduler {
                 this.showShutdownWarningWindow(timeStr, targetDate,
                     () => this.handleDelayOption(targetDate, 30),
                     () => this.handleDelayOption(targetDate, 60),
-                    () => this.cancelScheduledShutdown(),
+                    () => this.cancelScheduledShutdown()
                 );
 
-                const finalShutdownTimer = setTimeout(() => {
+                this.currentFinalTimer = setTimeout(() => {
                     if (this.shutdownCancelled) return;
                     this.executeShutdown(timeStr, targetDate);
                 }, 15 * 1000);
-
-                this.shutdownTimers.push(finalShutdownTimer);
+                
             }, warningDelay);
 
             this.shutdownTimers.push(warningTimerId);
         } else {
-            const finalTimerId = setTimeout(() => {
+            // 如果剩余时间不足 15 秒，直接设置 finalTimer
+            this.currentFinalTimer = setTimeout(() => {
                 if (this.shutdownCancelled) return;
                 this.executeShutdown(timeStr, targetDate);
             }, remainingDelay);
-            this.shutdownTimers.push(finalTimerId);
         }
     }
 
@@ -171,26 +143,27 @@ class ShutdownScheduler {
         const newTarget = new Date(currentTargetDate.getTime() + delaySeconds * 1000);
         this.log('info', `[关机调度] 用户选择延长${delaySeconds}秒关机，新关机时间: ${newTarget.toLocaleString()}`);
 
-        this.clearShutdownTimers();
+        this.closeWarningWindow();
 
+        // 清除原本最后 15 秒的关机定时器
+        if (this.currentFinalTimer) {
+            clearTimeout(this.currentFinalTimer);
+            this.currentFinalTimer = null;
+        }
+
+        // 重新生成时间字符串并再次进入调度流程
         const timeStr = `${newTarget.getHours().toString().padStart(2, '0')}:${newTarget.getMinutes().toString().padStart(2, '0')}`;
         this.scheduleShutdownWithWarning(timeStr, newTarget);
     }
 
-    /**
-     * 执行最终的系统关机指令
-     * @param {string} originalTime - 原始设定的触发时间字符串
-     * @param {Date} targetDate - 实际执行关机的目标日期
-     */
     executeShutdown(originalTime, targetDate) {
         this.closeWarningWindow();
-
         this.log('info', `[关机调度] 执行关机命令，计划时间: ${targetDate.toLocaleString()}`);
+        
         exec('shutdown /s /t 0', { encoding: 'buffer' }, (error, stdout, stderr) => {
             if (error) {
                 const stderrStr = stderr ? iconv.decode(stderr, 'cp936') : '';
                 const errorMsg = stderrStr || error.message;
-
                 this.log('error', `[关机调度] 关机失败 (${originalTime}): ${errorMsg}`);
                 dialog.showMessageBox({
                     title: '关机失败',
@@ -202,9 +175,6 @@ class ShutdownScheduler {
         });
     }
 
-    /**
-     * 播放系统提示音进行预警
-     */
     playWarningSound() {
         this.log('info', '[关机调度] 播放警告提示音');
         exec('powershell -c "[System.Media.SystemSounds]::Exclamation.Play()"', { encoding: 'buffer' }, (err, stdout, stderr) => {
@@ -215,32 +185,14 @@ class ShutdownScheduler {
         });
     }
 
-    /**
-     * 显示关机前的倒计时确认/预警弹窗
-     * @param {string} timeStr - 关机时间
-     * @param {Date} targetDate - 目标时间对象
-     * @param {Function} onDelay30 - 延迟 30 秒的回调
-     * @param {Function} onDelay60 - 延迟 60 秒的回调
-     * @param {Function} onClose - 取消/关闭的回调
-     */
     showShutdownWarningWindow(timeStr, targetDate, onDelay30, onDelay60, onClose) {
         this.log('info', `[关机调度] 显示关机警告窗口，目标时间: ${targetDate.toLocaleString()}`);
         this.closeWarningWindow();
 
         const shutdownWarningWin = new BrowserWindow({
-            width: 360,
-            height: 220,
-            alwaysOnTop: true,
-            frame: false,
-            resizable: false,
-            movable: true,
-            skipTaskbar: false,
-            focusable: true,
-            type: 'notification',
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-            }
+            width: 380, height: 240, alwaysOnTop: true, frame: false, resizable: false,
+            movable: true, skipTaskbar: false, focusable: true, type: 'notification',
+            webPreferences: { nodeIntegration: true, contextIsolation: false }
         });
 
         shutdownWarningWin.setAlwaysOnTop(true, 'screen-saver');
@@ -248,6 +200,8 @@ class ShutdownScheduler {
         shutdownWarningWin.focus();
 
         this.currentShutdownWarningWindow = shutdownWarningWin;
+        this.currentCallbacks = { onDelay30, onDelay60, onClose };
+
         const htmlPath = path.join(__dirname, '../shutdown-warning.html');
         shutdownWarningWin.loadFile(htmlPath);
 
@@ -256,36 +210,16 @@ class ShutdownScheduler {
             shutdownWarningWin.webContents.executeJavaScript(`
                 window.shutdownTargetTime = "${targetTimeStr}";
                 const targetTimeEl = document.getElementById('targetTime');
-                if (targetTimeEl) {
-                    targetTimeEl.textContent = window.shutdownTargetTime;
-                }
-            `).catch(err => {
-                this.log('warn', `[关机调度] 设置目标时间失败: ${err.message}`);
-            });
+                if (targetTimeEl) targetTimeEl.textContent = window.shutdownTargetTime;
+            `).catch(err => this.log('warn', `[关机调度] 设置目标时间失败: ${err.message}`));
         });
 
-        this.currentCallbacks = {
-            onDelay30: onDelay30,
-            onDelay60: onDelay60,
-            onClose: onClose
-        };
-
-        shutdownWarningWin.on('close', (e) => {
-            e.preventDefault();
-            if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
-                this.currentShutdownWarningWindow.destroy();
-            }
+        shutdownWarningWin.on('closed', () => {
             this.currentShutdownWarningWindow = null;
             this.currentCallbacks = null;
         });
     }
 
-
-
-    /**
-     * 计算并弹窗显示所有的关机任务详情
-     * @param {Array} shutdownPlans - 包含关机计划详情的数组
-     */
     showShutdownPlans(shutdownPlans) {
         if (shutdownPlans.length > 0) {
             const messageContent = shutdownPlans.map((plan, index) =>
@@ -303,34 +237,27 @@ class ShutdownScheduler {
             });
 
             this.log('info', `[关机调度] 成功设置 ${shutdownPlans.length} 个关机计划`);
-            shutdownPlans.forEach((plan, index) => {
-                this.log('info', `[关机调度] [${index + 1}] 原始时间: ${plan.originalTime} | 触发时间: ${plan.formattedDate} | 剩余 ${Math.ceil(plan.delay / 1000)} 秒`);
-            });
         }
     }
 
-    /**
-     * 清除所有的关机相关的定时器
-     */
     clearShutdownTimers() {
         this.shutdownTimers.forEach(timerId => clearTimeout(timerId));
         this.shutdownTimers.length = 0;
+        
+        // 同时清理可能存在的 finalTimer
+        if (this.currentFinalTimer) {
+            clearTimeout(this.currentFinalTimer);
+            this.currentFinalTimer = null;
+        }
     }
 
-    /**
-     * 关闭当前显示的关机预警窗口
-     */
     closeWarningWindow() {
         if (this.currentShutdownWarningWindow && !this.currentShutdownWarningWindow.isDestroyed()) {
             this.currentShutdownWarningWindow.destroy();
         }
-        this.currentShutdownWarningWindow = null;
-        this.currentCallbacks = null;
+        // 状态清理已移至 'closed' 事件中，此处无需重复
     }
 
-    /**
-     * 取消所有已排期的关机任务
-     */
     cancelScheduledShutdown() {
         this.log('info', '[关机调度] 取消定时关机');
         this.shutdownCancelled = true;

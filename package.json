@@ -1,6 +1,6 @@
 {
   "name": "electron-class-schedule-x",
-  "version": "1.5.4",
+  "version": "1.6.0",
   "description": "电子课表",
   "main": "src/main.js",
   "author": {
@@ -10,7 +10,7 @@
   "license": "GPL-3.0",
   "scripts": {
     "start": "chcp 65001 && electron .",
-    "build": "electron-builder --win --x64 --publish never",
+    "build": "chcp 65001 && electron-builder --win --x64 --publish never",
     "rebuild": "electron-rebuild"
   },
   "devDependencies": {
@@ -23,6 +23,7 @@
     "electron-prompt": "^1.7.0",
     "electron-store": "^11.0.2",
     "iconv-lite": "^0.7.2",
+    "json5": "^2.2.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "ws": "^8.20.1"

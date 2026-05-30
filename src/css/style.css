@@ -199,15 +199,18 @@
     font-size: var(--countdown-font-size);
     font-family: JETB;
     color: #FFF;
-    display: none; /* 初始隐藏，由JS控制 */
-    border: 2px solid #4CAF50; /* 使用用户推荐的颜色 */
+    display: none; 
+    border: 2px solid #4CAF50; 
     backdrop-filter: blur(5px);
-    transition: opacity 0.5s ease, transform 0.5s ease, left 0.1s, top 0.1s; /* 拖动时位置更新需要快，但切换状态需要慢 */
+    transition: opacity 0.5s ease, transform 0.5s ease; 
+    touch-action: none; 
+    cursor: grab;
 }
 
 .miniCountdown.dragging {
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transition: none !important; 
     will-change: left, top;
+    cursor: grabbing;
 }
 
 .dragBoundaryHint {

@@ -1,4 +1,5 @@
-const { Tray, Menu, app } = require('electron');
+const { Tray, Menu, app, dialog } = require('electron');
+const path = require('path');
 
 /**
  * 系统托盘管理模块
@@ -6,50 +7,29 @@ const { Tray, Menu, app } = require('electron');
  */
 class TrayManager {
     /**
-     * @param {ConfigManager} configManager - 配置管理器实例
+     * @param {Object} configManager - [冗余占位] 配置管理器实例（当前未使用，保留以防外部按位置传参错位）
      * @param {Object} logger - 日志记录器实例
      * @param {WindowManager} windowManager - 窗口管理器实例
      */
     constructor(configManager, logger, windowManager) {
-        this.configManager = configManager;
         this.logger = logger;
         this.windowManager = windowManager;
         this.tray = null;
     }
 
-    /**
-     * 记录日志
-     * @param {string} level - 日志级别
-     * @param {string} message - 日志消息
-     */
     log(level, message) {
-        if (this.logger) {
-            this.logger[level](message);
-        }
+        this.logger?.[level]?.(message);
     }
 
-    /**
-     * 创建系统托盘图标
-     * @param {string} iconPath - 托盘图标的绝对路径
-     * @returns {Tray|null} 托盘实例
-     */
     createTray(iconPath) {
-        if (this.tray) {
-            try {
-                this.tray.destroy();
-            } catch (e) {
-                this.log('warn', `[托盘管理] 销毁旧托盘失败: ${e.message}`);
-            }
-            this.tray = null;
-        }
+        this.destroy();
 
         try {
             this.tray = new Tray(iconPath);
             this.updateTrayMenu();
 
-            this.tray.on('click', () => {
-                this.onTrayClick();
-            });
+            // 简化箭头函数
+            this.tray.on('click', () => this.onTrayClick());
 
             this.log('info', '[托盘管理] 托盘创建成功');
             return this.tray;
@@ -59,27 +39,17 @@ class TrayManager {
         }
     }
 
-    /**
-     * 托盘图标被点击时的回调函数
-     */
     onTrayClick() {
         this.windowManager.createReactGUIWindow();
     }
 
-    /**
-     * 根据当前状态更新托盘菜单
-     */
     updateTrayMenu() {
-        if (this.tray) {
-            const contextMenu = Menu.buildFromTemplate(this.getTrayMenuTemplate());
-            this.tray.setContextMenu(contextMenu);
-        }
+        if (!this.tray) return; 
+        
+        const contextMenu = Menu.buildFromTemplate(this.getTrayMenuTemplate());
+        this.tray.setContextMenu(contextMenu);
     }
 
-    /**
-     * 获取托盘菜单的模板
-     * @returns {Array} 菜单模板数组
-     */
     getTrayMenuTemplate() {
         return [
             {
@@ -96,11 +66,7 @@ class TrayManager {
         ];
     }
 
-    /**
-     * 显示退出程序的确认对话框
-     */
     showQuitConfirmation() {
-        const { dialog } = require('electron');
         const mainWindow = this.windowManager.getWindow('main');
 
         dialog.showMessageBox(mainWindow, {
@@ -111,53 +77,34 @@ class TrayManager {
             defaultId: 0,
             cancelId: 0
         }).then(({ response }) => {
-            if (response === 1) {
-                app.quit();
-            }
+            if (response === 1) app.quit();
         });
     }
 
-    /**
-     * 获取资源文件的物理路径
-     * @param {...string} paths - 路径片段
-     * @returns {string} 绝对路径
-     */
     getAssetPath(...paths) {
-        const path = require('path');
         return path.join(__dirname, '..', ...paths);
     }
 
-    /**
-     * 销毁托盘实例并清理资源
-     */
     destroy() {
-        if (this.tray && !this.tray.isDestroyed()) {
-            try {
+        if (!this.tray) return;
+
+        try {
+            if (!this.tray.isDestroyed()) {
                 this.tray.destroy();
-            } catch (error) {
-                this.log('error', `[托盘管理] 销毁托盘时出错: ${error.message}`);
-            } finally {
-                this.tray = null;
             }
+        } catch (error) {
+            this.log('error', `[托盘管理] 销毁托盘时出错: ${error.message}`);
+        } finally {
+            this.tray = null;
         }
     }
 
-    /**
-     * 设置托盘工具提示文本
-     * @param {string} tooltip - 提示文本内容
-     */
     setToolTip(tooltip) {
-        if (this.tray) {
-            this.tray.setToolTip(tooltip);
-        }
+        this.tray?.setToolTip(tooltip);
     }
 
-    /**
-     * 判断托盘是否已创建且可用
-     * @returns {boolean} 托盘是否可用
-     */
     hasTray() {
-        return !!(this.tray && !this.tray.isDestroyed());
+        return !!this.tray && !this.tray.isDestroyed();
     }
 }
 

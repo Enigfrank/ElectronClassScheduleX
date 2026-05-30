@@ -1,25 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
-
-// 安全地获取 Electron app 对象
-let app;
-try {
-    const electron = require('electron');
-    app = electron.app;
-} catch (error) {
-    // 如果不是在 Electron 环境中运行，app 将为 undefined
-    app = undefined;
-}
+const { app } = require('electron'); 
 
 /**
  * 日志管理模块
  * 负责应用程序的日志记录、错误捕获和日志文件的自动清理
  */
 class Logger {
-    /**
-     * 构造函数，初始化日志路径并开始初始化流程
-     */
     constructor() {
         this.baseLogsPath = this.getLogsPath();
         this.isInitialized = false;
@@ -32,29 +20,12 @@ class Logger {
      */
     getLogsPath() {
         try {
-            // 检查是否存在全局 app 对象
-            if (typeof app !== 'undefined' && app && app.getPath) {
-                // 使用 userData 目录存储日志，确保在打包环境中可写
-                const userDataPath = app.getPath('userData');
-                const logsPath = path.join(userDataPath, 'logs');
-                return logsPath;
-            }
-
-            // 在开发环境或无法获取 app 时，使用项目根目录的 logs 文件夹
-            const devPath = path.join(__dirname, '..', 'logs');
-            return devPath;
-
+            return app.getPath('logs');
         } catch (error) {
-            // 如果获取应用路径失败，使用项目根目录的 logs 文件夹
-            const fallbackPath = path.join(__dirname, '..', 'logs');
-            return fallbackPath;
+            return path.join(__dirname, '..', 'logs');
         }
     }
 
-    /**
-     * 初始化日志系统
-     * 设置日志配置、错误处理并标记初始化完成
-     */
     async initialize() {
         try {
             await this.setupLogging();
@@ -63,27 +34,18 @@ class Logger {
             console.log('日志系统初始化完成');
         } catch (error) {
             console.error('日志系统初始化失败:', error);
-            // 即使日志系统初始化失败，也不应该阻止应用运行
             this.setupFallbackLogging();
         }
     }
 
-    /**
-     * 配置 `electron-log`
-     * 包括日志目录创建、文件名解析、输出格式设计等
-     */
     async setupLogging() {
         try {
-            // 确保日志目录存在
-            if (!fs.existsSync(this.baseLogsPath)) {
-                fs.mkdirSync(this.baseLogsPath, { recursive: true });
-            }
+            fs.mkdirSync(this.baseLogsPath, { recursive: true });
 
             // 按日期生成日志文件
             log.transports.file.resolvePathFn = () => {
                 const date = new Date().toISOString().split('T')[0];
-                const fileName = `${date}.log`;
-                return path.join(this.baseLogsPath, fileName);
+                return path.join(this.baseLogsPath, `${date}.log`);
             };
 
             // 日志配置
@@ -91,89 +53,52 @@ class Logger {
             log.transports.console.level = 'info';
             log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
             log.transports.console.format = '{h}:{i}:{s}.{ms} [{level}] {text}';
-            log.transports.file.sync = true;
-
-            // 确保日志文件可以被写入
-            const testLogPath = log.transports.file.resolvePathFn();
-            const testDir = path.dirname(testLogPath);
-            if (!fs.existsSync(testDir)) {
-                fs.mkdirSync(testDir, { recursive: true });
-            }
+            log.transports.file.sync = true; // 同步写入，确保崩溃前日志不丢失
 
             // 测试日志写入
             log.info('-------------------------日志分割处-------------------------');
             log.info('日志系统初始化成功');
 
-            console.log(`日志文件路径: ${testLogPath}`);
+            console.log(`日志文件路径: ${log.transports.file.resolvePathFn()}`);
         } catch (error) {
             console.error('日志配置失败:', error);
             throw error;
         }
     }
 
-    /**
-     * 设置全局错误处理
-     * 捕获未处理的异常、Promise 拒绝以及渲染进程崩溃
-     */
     setupErrorHandling() {
-        try {
-
-
-            // 捕获未处理的 Promise 拒绝
-            process.on('unhandledRejection', (reason, promise) => {
-                log.error('未处理的 Promise 拒绝:', reason);
-                log.error('Promise:', promise);
-            });
-
-            // 捕获未捕获的异常
-            process.on('uncaughtException', (error) => {
-                log.error('未捕获的异常:', error);
-                setTimeout(() => {
-                    process.exit(1);
-                }, 1000);
-            });
-
-            // 捕获渲染进程错误（如果 app 可用）
+        try {        
+            // 渲染进程崩溃的监听
             if (app && app.on) {
                 app.on('web-contents-created', (event, contents) => {
-                    if (contents && contents.on) {
-                        contents.on('crashed', (event, killed) => {
-                            log.error(`WebContents crashed (killed=${killed})`);
-                        });
-                    }
+                    contents?.on('crashed', (event, killed) => {
+                        log.error(`WebContents crashed (killed=${killed})`);
+                    });
                 });
             }
         } catch (error) {
             console.error('错误处理初始化失败:', error);
-            // 不抛出错误，让日志系统可以继续工作
         }
     }
 
-    /**
-     * 清理过期日志文件
-     * 默认保留最近 7 天的日志
-     */
     cleanupOldLogs() {
-        const logsPath = this.baseLogsPath;
-        if (!fs.existsSync(logsPath)) return;
+        if (!fs.existsSync(this.baseLogsPath)) return;
 
         try {
-            const files = fs.readdirSync(logsPath);
+            const files = fs.readdirSync(this.baseLogsPath);
             const now = Date.now();
             const maxAge = 7 * 24 * 60 * 60 * 1000; // 7天
             let deletedCount = 0;
 
             files.forEach(file => {
                 if (file.endsWith('.log')) {
-                    const filePath = path.join(logsPath, file);
+                    const filePath = path.join(this.baseLogsPath, file);
                     try {
                         const stats = fs.statSync(filePath);
                         if (now - stats.mtime.getTime() > maxAge) {
                             fs.unlinkSync(filePath);
                             deletedCount++;
-                            if (this.isInitialized) {
-                                log.info(`删除旧日志文件: ${file}`);
-                            }
+                            if (this.isInitialized) log.info(`删除旧日志文件: ${file}`);
                         }
                     } catch (fileError) {
                         console.error(`删除日志文件失败 ${file}:`, fileError);
@@ -186,30 +111,19 @@ class Logger {
             }
         } catch (error) {
             console.error('清理旧日志失败:', error);
-            if (this.isInitialized) {
-                log.error('清理旧日志失败:', error);
-            }
+            if (this.isInitialized) log.error('清理旧日志失败:', error);
         }
     }
 
-    // 备用日志记录（当日志系统初始化失败时使用）
-    /**
-     * 设置备用日志系统
-     * 当常规日志系统初始化失败时，将日志输出到控制台并尝试追加到 fallback 文件
-     */
     setupFallbackLogging() {
         this.fallbackLog = (level, message) => {
             const timestamp = new Date().toISOString();
             const logMessage = `${timestamp} [${level.toUpperCase()}] ${message}`;
             console.log(logMessage);
 
-            // 尝试写入到备用日志文件
             try {
                 const fallbackLogPath = path.join(__dirname, '..', 'logs', 'fallback.log');
-                const logsDir = path.dirname(fallbackLogPath);
-                if (!fs.existsSync(logsDir)) {
-                    fs.mkdirSync(logsDir, { recursive: true });
-                }
+                fs.mkdirSync(path.dirname(fallbackLogPath), { recursive: true });
                 fs.appendFileSync(fallbackLogPath, logMessage + '\n');
             } catch (writeError) {
                 console.error('备用日志写入失败:', writeError);
@@ -217,45 +131,20 @@ class Logger {
         };
     }
 
-    /**
-     * 记录普通信息日志
-     * @param {string} message - 日志内容
-     */
-    info(...args) {
+    _log(level, ...args) {
         if (this.isInitialized) {
-            log.info(...args);
+            log[level](...args);
         } else if (this.fallbackLog) {
-            this.fallbackLog('info', args.join(' '));
+            this.fallbackLog(level, args.join(' '));
         } else {
-            console.log('[INFO]', ...args);
+            console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`[${level.toUpperCase()}]`, ...args);
         }
     }
 
-    error(...args) {
-        if (this.isInitialized) {
-            log.error(...args);
-        } else if (this.fallbackLog) {
-            this.fallbackLog('error', args.join(' '));
-        } else {
-            console.error('[ERROR]', ...args);
-        }
-    }
+    info(...args) { this._log('info', ...args); }
+    error(...args) { this._log('error', ...args); }
+    warn(...args) { this._log('warn', ...args); }
 
-    warn(...args) {
-        if (this.isInitialized) {
-            log.warn(...args);
-        } else if (this.fallbackLog) {
-            this.fallbackLog('warn', args.join(' '));
-        } else {
-            console.warn('[WARN]', ...args);
-        }
-    }
-
-    // 获取日志系统状态
-    /**
-     * 获取当前日志系统的工作状态
-     * @returns {Object} 包含初始化状态、路径和可写性的对象
-     */
     getStatus() {
         return {
             isInitialized: this.isInitialized,
@@ -265,16 +154,11 @@ class Logger {
     }
 
     /**
-     * 手动刷新日志流，确保所有挂起的日志已写入磁盘
+     * 手动刷新日志流
+     * 注：由于 setupLogging 中已配置 sync = true，日志均为同步落盘，此方法保留仅为兼容外部调用
      */
     flush() {
-        if (this.isInitialized) {
-            try {
-                log.transports.file.sync = true;
-            } catch (error) {
-                console.error('刷新日志失败:', error);
-            }
-        }
+        // 同步模式下无需额外操作
     }
 }
 

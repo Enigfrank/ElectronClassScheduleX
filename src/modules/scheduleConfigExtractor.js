@@ -17,17 +17,15 @@ class ScheduleConfigExtractor {
      */
     constructor(logger = null) {
         this.logger = logger;
-        this.configDir = null;
-        this.configFilePath = null;
+        this.configDir = path.join(app.getPath('appData'), APP_NAME, CONFIG_DIR_NAME);
+        this.configFilePath = path.join(this.configDir, CONFIG_FILE_NAME);
     }
 
     /**
      * 记录日志
-     * @param {string} level - 日志级别
-     * @param {string} message - 日志消息
      */
     log(level, message) {
-        if (this.logger) {
+        if (this.logger?.[level]) {
             this.logger[level](message);
         } else {
             console.log(`[${level.toUpperCase()}] ${message}`);
@@ -39,12 +37,6 @@ class ScheduleConfigExtractor {
      * @returns {string} 配置目录的绝对路径
      */
     getConfigDir() {
-        if (this.configDir) {
-            return this.configDir;
-        }
-
-        const appDataPath = app.getPath('appData');
-        this.configDir = path.join(appDataPath, APP_NAME, CONFIG_DIR_NAME);
         return this.configDir;
     }
 
@@ -53,11 +45,6 @@ class ScheduleConfigExtractor {
      * @returns {string} 配置文件的绝对路径
      */
     getConfigFilePath() {
-        if (this.configFilePath) {
-            return this.configFilePath;
-        }
-
-        this.configFilePath = path.join(this.getConfigDir(), CONFIG_FILE_NAME);
         return this.configFilePath;
     }
 
@@ -68,10 +55,7 @@ class ScheduleConfigExtractor {
      */
     ensureDirectoryExists(dirPath) {
         try {
-            if (!fs.existsSync(dirPath)) {
-                fs.mkdirSync(dirPath, { recursive: true });
-                this.log('info', `[配置提取] 创建配置目录: ${dirPath}`);
-            }
+            fs.mkdirSync(dirPath, { recursive: true });
             return true;
         } catch (error) {
             this.log('error', `[配置提取] 创建配置目录失败: ${error.message}`);
@@ -84,8 +68,7 @@ class ScheduleConfigExtractor {
      * @returns {boolean}
      */
     configExists() {
-        const configPath = this.getConfigFilePath();
-        return fs.existsSync(configPath);
+        return fs.existsSync(this.configFilePath);
     }
 
     /**
@@ -93,11 +76,8 @@ class ScheduleConfigExtractor {
      * @returns {Object} 包含 success, error 或 path 的结果对象
      */
     extractConfig() {
-        const configPath = this.getConfigFilePath();
-        const configDir = this.getConfigDir();
-
         try {
-            if (!this.ensureDirectoryExists(configDir)) {
+            if (!this.ensureDirectoryExists(this.configDir)) {
                 return { success: false, error: '无法创建配置目录' };
             }
 
@@ -106,25 +86,25 @@ class ScheduleConfigExtractor {
                 return { success: false, error: '源配置文件不存在' };
             }
 
-            const configContent = fs.readFileSync(SOURCE_CONFIG_PATH, 'utf-8');
+            fs.copyFileSync(SOURCE_CONFIG_PATH, this.configFilePath);
 
-            fs.writeFileSync(configPath, configContent, 'utf-8');
-
-            this.log('info', `[配置提取] 配置文件已提取到: ${configPath}`);
-            return { success: true, path: configPath };
+            this.log('info', `[配置提取] 配置文件已提取到: ${this.configFilePath}`);
+            return { success: true, path: this.configFilePath };
 
         } catch (error) {
             this.log('error', `[配置提取] 提取配置文件失败: ${error.message}`);
 
-            if (error.code === 'EACCES') {
-                return { success: false, error: '权限不足，无法写入配置文件' };
-            } else if (error.code === 'ENOENT') {
-                return { success: false, error: '路径不存在' };
-            } else if (error.code === 'ENOSPC') {
-                return { success: false, error: '磁盘空间不足' };
-            }
-
-            return { success: false, error: error.message };
+            // 针对特定系统错误码返回友好的提示信息
+            const errorMessages = {
+                'EACCES': '权限不足，无法写入配置文件',
+                'ENOENT': '路径不存在',
+                'ENOSPC': '磁盘空间不足'
+            };
+            
+            return { 
+                success: false, 
+                error: errorMessages[error.code] || error.message 
+            };
         }
     }
 
@@ -135,21 +115,14 @@ class ScheduleConfigExtractor {
     ensureConfigExists() {
         if (this.configExists()) {
             this.log('info', '[配置提取] 配置文件已存在，跳过提取');
-            return { success: true, existed: true, path: this.getConfigFilePath() };
+            return { success: true, existed: true, path: this.configFilePath };
         }
 
         this.log('info', '[配置提取] 配置文件不存在，开始提取...');
         const result = this.extractConfig();
         return { ...result, existed: false };
     }
-
-    /**
-     * 获取配置文件当前路径（同 getConfigFilePath）
-     * @returns {string}
-     */
-    getConfigPath() {
-        return this.getConfigFilePath();
-    }
+    
 }
 
 module.exports = ScheduleConfigExtractor;

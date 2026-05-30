@@ -36,7 +36,7 @@
   <div class="miniCountdown" id="miniCountdown">00:00</div>
   <div class="dragBoundaryHint" id="dragBoundaryHint" aria-hidden="true"></div>
   <div class="nextClassHint" id="nextClassHint"
-    style="display: none; position: fixed; top: var(--top-space); border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF; margin-left: 10px;">
+    style="display: none; position: fixed; border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF;">
   </div>
   </div>
 
@@ -82,10 +82,8 @@
   }
 
   let nextClassHint = document.getElementById('nextClassHint');
-  let isHintShown = false; // 标记提示是否已显示
-  let hintTimer = null; // 用于清除提示的定时器
-
-
+  let isHintShown = false; 
+  let hintTimer = null; 
 
   function setScheduleClass() {
     let classHtml = '';
@@ -119,11 +117,9 @@
     }
   }
 
-  // 切换元素显示的辅助函数
   function toggleElement(element, show) {
       if (show) {
           element.style.display = 'block';
-          // 强制重排以触发过渡
           void element.offsetWidth;
           element.classList.remove('fade-hidden');
           element.classList.add('fade-element');
@@ -139,7 +135,6 @@
               ipcRenderer.send('updateInteractiveRect', null);
           }
           
-          // 等待过渡完成后隐藏
           setTimeout(() => {
               if (element.classList.contains('fade-hidden')) {
                   element.style.display = 'none';
@@ -157,9 +152,20 @@
     if (scheduleData.currentHighlight.type === 'current' && scheduleData.currentHighlight.countdown === 600 && !isHintShown) {
       const nextClass = getNextClassInfo();
       if (nextClass) {
-        // 显示提示 - 先设置内容和位置
         nextClassHint.innerHTML = `<span class="hint-label">下节</span>: ${nextClass.name}`;
-        nextClassHint.style.left = `calc(45% + ${miniCountdown.offsetWidth}px)`; // 定位在miniCountdown右侧
+        
+        if (!miniCountdownHasMoved) {
+          // 1. 未移动过（在原位）：显示在 miniCountdown 右侧
+          const miniRect = miniCountdown.getBoundingClientRect();
+          nextClassHint.style.left = `${miniRect.right + 10}px`; 
+          nextClassHint.style.top = `${miniRect.top}px`; 
+          nextClassHint.style.transform = 'none'; // 清除居中变换
+        } else {
+          // 2. 被移动过：显示在屏幕顶部正中央
+          nextClassHint.style.left = '50%';
+          nextClassHint.style.top = 'var(--top-space)'; // 保持与初始状态一致的顶部间距
+          nextClassHint.style.transform = 'translateX(-50%)'; // 启用水平居中
+        }
 
         // 先移除淡出类，确保可以重新触发淡入动画
         nextClassHint.classList.remove('fadeOut');
@@ -219,10 +225,6 @@
     }
   }
 
-  /**
-   * 设置倒计时容器位置
-   * 当高亮课程元素尚未渲染到 DOM 时，延迟到下一帧重试，避免启动阶段空指针
-   */
   function setCountdownerPosition() {
     let highlightElement = document.getElementById('highlighted')
     let offset = {}
@@ -269,33 +271,15 @@
     }
   }
 
-  /**
-   * 初始化迷你倒计时的拖动功能
-   * 支持鼠标和触摸屏拖动
-   */
+  // Pointer Events 拖动逻辑
+
   function initMiniCountdownDrag() {
     const miniCountdown = document.getElementById('miniCountdown');
-
-    // 鼠标拖动事件
-    miniCountdown.addEventListener('mousedown', handleDragStart);
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-
-    // 触摸屏拖动事件
-    miniCountdown.addEventListener('touchstart', handleTouchDragStart, { passive: false });
-    document.addEventListener('touchmove', handleTouchDragMove, { passive: false });
-    document.addEventListener('touchend', handleTouchDragEnd);
-    
-    // 初始化时更新一次区域信息
+    miniCountdown.addEventListener('pointerdown', handlePointerDown);
     updateInteractiveRect();
-    
-    // 监听窗口大小变化
     window.addEventListener('resize', updateInteractiveRect);
   }
 
-  /**
-   * 更新交互区域在主进程中的点击区域
-   */
   function updateInteractiveRect() {
     const miniCountdown = document.getElementById('miniCountdown');
     if (miniCountdown.style.display === 'block') {
@@ -311,185 +295,91 @@
     }
   }
 
-  /**
-   * 设置拖动范围提示层显示状态
-   * @param {boolean} visible 是否显示提示层
-   */
   function setDragBoundaryHintVisible(visible) {
     const dragBoundaryHint = document.getElementById('dragBoundaryHint');
     if (!dragBoundaryHint) return;
     dragBoundaryHint.classList.toggle('active', visible);
   }
 
-  /**
-   * 设置迷你倒计时的拖动渲染状态
-   * 拖动中禁用位置过渡，提升跟手性
-   * @param {boolean} dragging 是否处于拖动状态
-   */
   function setMiniCountdownDraggingState(dragging) {
     const miniCountdown = document.getElementById('miniCountdown');
     if (!miniCountdown) return;
     miniCountdown.classList.toggle('dragging', dragging);
   }
 
-  /**
-   * 检测点是否在元素区域内
-   * @param {number} x 点的X坐标
-   * @param {number} y 点的Y坐标
-   * @param {HTMLElement} element 目标元素
-   * @returns {boolean} 是否在元素区域内
-   */
-  function isPointInElement(x, y, element) {
-    const rect = element.getBoundingClientRect();
-    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  function handlePointerDown(event) {
+    const miniCountdown = document.getElementById('miniCountdown');
+    if (miniCountdown.style.display !== 'block' || !event.isPrimary) return;
+
+    isDragging = true;
+    ipcRenderer.send('setDragState', true);
+    setDragBoundaryHintVisible(true);
+    setMiniCountdownDraggingState(true);
+    
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+
+    const rect = miniCountdown.getBoundingClientRect();
+    miniCountdownInitialX = rect.left;
+    miniCountdownInitialY = rect.top;
+
+    miniCountdown.setPointerCapture(event.pointerId);
+
+    miniCountdown.addEventListener('pointermove', handlePointerMoveDrag);
+    miniCountdown.addEventListener('pointerup', handlePointerUp);
+    miniCountdown.addEventListener('pointercancel', handlePointerUp); 
+
+    event.preventDefault();
   }
 
-  /**
-   * 处理鼠标拖动开始
-   */
-  function handleDragStart(event) {
-    // 只有在迷你倒计时显示时才允许拖动
-    if (document.getElementById('miniCountdown').style.display === 'block') {
-      isDragging = true;
-      ipcRenderer.send('setDragState', true);
-      setDragBoundaryHintVisible(true);
-      setMiniCountdownDraggingState(true);
-      dragStartX = event.clientX;
-      dragStartY = event.clientY;
+  function handlePointerMoveDrag(event) {
+    if (!isDragging || !event.isPrimary) return;
 
-      const miniCountdown = document.getElementById('miniCountdown');
-      const rect = miniCountdown.getBoundingClientRect();
-      miniCountdownInitialX = rect.left;
-      miniCountdownInitialY = rect.top;
+    const deltaX = event.clientX - dragStartX;
+    const deltaY = event.clientY - dragStartY;
 
-      event.preventDefault();
-    }
-  }
-
-  /**
-   * 处理鼠标拖动移动
-   */
-  function handleDragMove(event) {
-    if (isDragging) {
-      const deltaX = event.clientX - dragStartX;
-      const deltaY = event.clientY - dragStartY;
-
-      const miniCountdown = document.getElementById('miniCountdown');
-
-      // 计算新位置
-      let newX = miniCountdownInitialX + deltaX;
-      let newY = miniCountdownInitialY + deltaY;
-
-      // 获取窗口尺寸
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
-      // 获取迷你倒计时尺寸
-      const miniWidth = miniCountdown.offsetWidth;
-      const miniHeight = miniCountdown.offsetHeight;
-
-      // 限制在窗口范围内
-      newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
-      newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
-
-      miniCountdown.style.left = newX + 'px';
-      miniCountdown.style.top = newY + 'px';
-      miniCountdown.style.transform = 'none'; // 移除居中变换
-
-      miniCountdownHasMoved = true;
-      event.preventDefault();
-    }
-  }
-
-  /**
-   * 处理鼠标拖动结束
-   */
-  function handleDragEnd(event) {
-    if (isDragging) {
-      isDragging = false;
-      ipcRenderer.send('setDragState', false);
-      setDragBoundaryHintVisible(false);
-      setMiniCountdownDraggingState(false);
-      updateInteractiveRect();
-    }
-  }
-
-  /**
-   * 处理触摸屏拖动开始
-   */
-  function handleTouchDragStart(event) {
     const miniCountdown = document.getElementById('miniCountdown');
 
-    // 只有在迷你倒计时显示时才允许拖动
-    if (miniCountdown.style.display === 'block' && event.touches.length === 1) {
-      isDragging = true;
-      ipcRenderer.send('setDragState', true);
-      setDragBoundaryHintVisible(true);
-      setMiniCountdownDraggingState(true);
-      const touch = event.touches[0];
-      dragStartX = touch.clientX;
-      dragStartY = touch.clientY;
+    let newX = miniCountdownInitialX + deltaX;
+    let newY = miniCountdownInitialY + deltaY;
 
-      const rect = miniCountdown.getBoundingClientRect();
-      miniCountdownInitialX = rect.left;
-      miniCountdownInitialY = rect.top;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const miniWidth = miniCountdown.offsetWidth;
+    const miniHeight = miniCountdown.offsetHeight;
 
-      event.preventDefault();
-    }
-  }
+    newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
+    newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
 
-  /**
-   * 处理触摸屏拖动移动
-   */
-  function handleTouchDragMove(event) {
-    if (isDragging && event.touches.length === 1) {
-      const touch = event.touches[0];
-      const deltaX = touch.clientX - dragStartX;
-      const deltaY = touch.clientY - dragStartY;
-
-      const miniCountdown = document.getElementById('miniCountdown');
-
-      // 计算新位置
-      let newX = miniCountdownInitialX + deltaX;
-      let newY = miniCountdownInitialY + deltaY;
-
-      // 获取窗口尺寸
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
-      // 获取迷你倒计时尺寸
-      const miniWidth = miniCountdown.offsetWidth;
-      const miniHeight = miniCountdown.offsetHeight;
-
-      // 限制在窗口范围内
-      newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
-      newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
-
+    requestAnimationFrame(() => {
       miniCountdown.style.left = newX + 'px';
       miniCountdown.style.top = newY + 'px';
-      miniCountdown.style.transform = 'none'; // 移除居中变换
+      miniCountdown.style.transform = 'none'; 
+    });
 
-      miniCountdownHasMoved = true;
-      event.preventDefault();
-    }
+    miniCountdownHasMoved = true;
+    event.preventDefault();
   }
 
-  /**
-   * 处理触摸屏拖动结束
-   */
-  function handleTouchDragEnd(event) {
-    if (isDragging) {
-      isDragging = false;
-      ipcRenderer.send('setDragState', false);
-      setDragBoundaryHintVisible(false);
-      setMiniCountdownDraggingState(false);
-      updateInteractiveRect();
-    }
+  function handlePointerUp(event) {
+    if (!isDragging) return;
+    
+    const miniCountdown = document.getElementById('miniCountdown');
+
+    isDragging = false;
+    ipcRenderer.send('setDragState', false);
+    setDragBoundaryHintVisible(false);
+    setMiniCountdownDraggingState(false);
+    updateInteractiveRect();
+
+    miniCountdown.releasePointerCapture(event.pointerId);
+
+    miniCountdown.removeEventListener('pointermove', handlePointerMoveDrag);
+    miniCountdown.removeEventListener('pointerup', handlePointerUp);
+    miniCountdown.removeEventListener('pointercancel', handlePointerUp);
   }
 
-  /**
-   * 重置迷你倒计时位置到初始状态
-   */
+
   function resetMiniCountdownPosition() {
     const miniCountdown = document.getElementById('miniCountdown');
     setDragBoundaryHintVisible(false);
@@ -530,8 +420,6 @@
     lastScheduleData = $.extend(true, {}, scheduleData)
   }
 
-
-  // 获取下一节课信息
   function getNextClassInfo() {
     const currentSchedule = getCurrentDaySchedule();
     const dayOfWeek = getCurrentEditedDay(getCurrentEditedDate());
@@ -540,33 +428,28 @@
     const timeKeys = Object.keys(dayTimetable);
     const currentTime = getCurrentTime();
 
-    // 找到当前课程的下一个课程
     for (let i = 0; i < timeKeys.length; i++) {
       const timeRange = timeKeys[i];
       const [startTime, endTime] = timeRange.split('-');
       const classIndex = dayTimetable[timeRange];
 
-      // 如果当前时间在本节课内，查找下一节
       if (typeof classIndex === 'number' && isClassCurrent(startTime, endTime, currentTime)) {
-        // 从下一个时间段开始找下一节课
         for (let j = i + 1; j < timeKeys.length; j++) {
           const nextTimeRange = timeKeys[j];
           const nextClassIndex = dayTimetable[nextTimeRange];
           if (typeof nextClassIndex === 'number' && nextClassIndex < currentSchedule.length) {
             const nextSubject = currentSchedule[nextClassIndex];
-            console.log("找到下节课：", nextSubject, nextTimeRange);
             return {
-              name: scheduleConfig.subject_name[nextSubject], // 下节课全称
-              time: nextTimeRange.split('-')[0] // 下节课开始时间
+              name: scheduleConfig.subject_name[nextSubject], 
+              time: nextTimeRange.split('-')[0] 
             };
           }
         }
         break;
       }
     }
-    return null; // 没有下一节课
+    return null; 
   }
-
 
   let lastTickTime = new Date().getTime()
   setInterval(() => {
@@ -580,36 +463,26 @@
     root.style.setProperty(key, scheduleConfig.css_style[key])
   }
 
-  // 初始化迷你倒计时拖动功能
   initMiniCountdownDrag();
 
   let timer = undefined
 
-  /**
-   * 处理鼠标移动事件
-   * 根据显示状态智能控制隐藏
-   * @param {Event} event 鼠标事件
-   */
   function handlePointerMove(event) {
     const miniCountdown = document.getElementById('miniCountdown');
 
-    // 如果迷你倒计时显示中，不触发隐藏
     if (miniCountdown.style.display === 'block') {
       return;
     }
 
-    // 只有在globalContainer显示时才触发隐藏
     root.style.opacity = '0'
     clearTimeout(timer)
     timer = setTimeout(() => {
       root.style.opacity = '1'
     }, 2500);
 
-    // 启用鼠标穿透
     ipcRenderer.send('setIgnore', true)
   }
 
-  // 注册鼠标事件监听器
   window.addEventListener('mousemove', handlePointerMove);
   ipcRenderer.send('setIgnore', true)
 
@@ -655,8 +528,6 @@
   ipcRenderer.on('openSettingDialog', (e, arg) => {
     setScheduleDialog()
   })
-
-  // 移除点击功能，所有区域都触发触碰隐藏
 
   ipcRenderer.on('setWeekIndex', (e, arg) => {
     scheduleConfig = JSON.parse(JSON.stringify(_scheduleConfig))
