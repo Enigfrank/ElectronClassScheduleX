@@ -147,7 +147,6 @@ class WindowManager {
             }
         });
 
-        // __dirname 是 src/modules，往上一级 '..' 就是 src，然后加载 GUI.html
         const htmlPath = path.join(__dirname, '..', 'GUI.html');
         guiWindow.loadFile(htmlPath);
 
@@ -156,7 +155,7 @@ class WindowManager {
 
         if (isDev) {
             // __dirname 是 src/modules，往上一级 '..' 是 src，再进入 dist 文件夹
-            const bundlePath = path.join(__dirname, '..', 'dist', 'react-gui.bundle.js');
+            const bundlePath = path.join(__dirname, '..', 'dist', 'react-gui.bundle.iife.js');
             
             // 确保文件存在再监听，避免首次启动时 Webpack 还没编译完导致报错
             if (fs.existsSync(bundlePath)) {
