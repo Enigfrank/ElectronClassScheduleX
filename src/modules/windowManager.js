@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { BrowserWindow, screen, Menu, ipcMain, app } = require('electron');
+const { BrowserWindow, screen, app } = require('electron');
 const path = require('path');
 
 /**
@@ -17,10 +17,10 @@ class WindowManager {
         this.windows = {
             main: null,
             gui: null,
-            shutdownWarning: null,
             oobe: null,
             devTools: null
         };
+        this.mainAlwaysOnTopRestoreTimer = null;
     }
 
     /**
@@ -80,6 +80,52 @@ class WindowManager {
     }
 
     /**
+     * 刷新窗口置顶层级
+     * @param {BrowserWindow} win - 目标窗口
+     */
+    refreshWindowAlwaysOnTop(win) {
+        if (!win || win.isDestroyed()) return;
+
+        // 使用 screen-saver 层级，确保主窗口能压过普通窗口和多数全屏窗口。
+        win.setAlwaysOnTop(true, 'screen-saver');
+        if (win.isVisible() && typeof win.moveTop === 'function') {
+            win.moveTop();
+        }
+    }
+
+    /**
+     * 启动主窗口置顶恢复守护
+     * Windows 全屏程序可能重排顶层窗口栈，因此需要定期重新声明主窗口置顶层级。
+     * @param {BrowserWindow} win - 主窗口实例
+     */
+    startMainWindowAlwaysOnTopGuard(win) {
+        this.stopMainWindowAlwaysOnTopGuard();
+        if (!win || win.isDestroyed() || !this.configManager.getWindowAlwaysOnTop()) return;
+
+        this.refreshWindowAlwaysOnTop(win);
+        this.mainAlwaysOnTopRestoreTimer = setInterval(() => {
+            if (!win || win.isDestroyed() || !this.configManager.getWindowAlwaysOnTop()) {
+                this.stopMainWindowAlwaysOnTopGuard();
+                return;
+            }
+
+            this.refreshWindowAlwaysOnTop(win);
+        // 每 2 秒刷新一次置顶层级，修复全屏程序重排 z-order 后置顶失效的问题。
+        }, 2000);
+        this.mainAlwaysOnTopRestoreTimer.unref?.();
+    }
+
+    /**
+     * 停止主窗口置顶恢复守护
+     */
+    stopMainWindowAlwaysOnTopGuard() {
+        if (this.mainAlwaysOnTopRestoreTimer) {
+            clearInterval(this.mainAlwaysOnTopRestoreTimer);
+            this.mainAlwaysOnTopRestoreTimer = null;
+        }
+    }
+
+    /**
      * 创建并初始化主窗口
      * 主窗口是一个横向贯穿屏幕顶部的半透明、响应式窗口
      * @returns {BrowserWindow} 主窗口实例
@@ -112,11 +158,20 @@ class WindowManager {
             this.log('error', `[窗口管理] 加载主窗口页面失败: ${err.message}`);
         });
 
-        if (this.configManager.getWindowAlwaysOnTop()) {
-            win.setAlwaysOnTop(true, 'screen-saver');
-        }
-
         this.windows.main = win;
+        win.on('closed', () => {
+            this.stopMainWindowAlwaysOnTopGuard();
+            if (this.windows.main === win) {
+                this.windows.main = null;
+            }
+        });
+        win.on('show', () => {
+            if (this.configManager.getWindowAlwaysOnTop()) {
+                this.refreshWindowAlwaysOnTop(win);
+            }
+        });
+
+        this.setWindowAlwaysOnTop(win, this.configManager.getWindowAlwaysOnTop());
         return win;
     }
 
@@ -206,16 +261,19 @@ class WindowManager {
      * @param {boolean} alwaysOnTop - 是否置顶
      */
     setWindowAlwaysOnTop(win, alwaysOnTop) {
-        if (win && !win.isDestroyed()) {
-            win.setAlwaysOnTop(alwaysOnTop, 'screen-saver');
-        }
-    }
+        if (!win || win.isDestroyed()) return;
 
-    /**
-     * 彻底隐藏应用程序菜单栏
-     */
-    hideMenuBar() {
-        Menu.setApplicationMenu(null);
+        if (alwaysOnTop) {
+            this.refreshWindowAlwaysOnTop(win);
+            if (win === this.windows.main) {
+                this.startMainWindowAlwaysOnTopGuard(win);
+            }
+        } else {
+            if (win === this.windows.main) {
+                this.stopMainWindowAlwaysOnTopGuard();
+            }
+            win.setAlwaysOnTop(false);
+        }
     }
 
     /**
@@ -225,22 +283,6 @@ class WindowManager {
      */
     getWindow(type) {
         return this.windows[type];
-    }
-
-    /**
-     * 关闭并注销所有当前管理的窗口
-     */
-    closeAllWindows() {
-        Object.values(this.windows).forEach(window => {
-            if (window && !window.isDestroyed()) {
-                window.close();
-            }
-        });
-        this.windows = {
-            main: null,
-            gui: null,
-            shutdownWarning: null
-        };
     }
 
     /**
