@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './GUI.css';
 import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
 import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
+import UpdateManagerView from './features/update/UpdateManagerView.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
   SimpleGrid, Divider, Tooltip, IconButton, Menu, MenuButton,
@@ -11,7 +12,7 @@ import {
 import {
   Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
   EyeOff, Rocket, Power, RotateCcw, Info, X, Plus, MoreHorizontal,
-  Sun, Moon, Globe, FolderOpen, FilePenLine
+  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require('electron');
@@ -268,6 +269,7 @@ const ReactGUI = () => {
     main: { title: '仪表盘', subtitle: 'Dashboard' },
     settings: { title: '设置选项', subtitle: 'Settings' },
     editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
+    update: { title: '在线更新', subtitle: 'Online Update' },
     tools: { title: '其他工具', subtitle: 'Tools' },
     shutdown: { title: '定时关机管理', subtitle: 'Shutdown Manager' },
   };
@@ -354,6 +356,7 @@ const ReactGUI = () => {
             { view: 'main', icon: <Calendar size={20} />, text: '功能选项' },
             { view: 'settings', icon: <Settings size={20} />, text: '设置选项' },
             { view: 'editor', icon: <FilePenLine size={20} />, text: '课表编辑器' },
+            { view: 'update', icon: <DownloadCloud size={20} />, text: '在线更新' },
             { view: 'tools', icon: <Wrench size={20} />, text: '其他工具' },
           ].map(nav => (
             <Button key={nav.view} w="100%" justifyContent="flex-start" gap={3} h="44px"
@@ -388,6 +391,7 @@ const ReactGUI = () => {
           {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} />}
           {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} />}
           {currentView === 'editor' && <ScheduleEditorView ipcRenderer={ipcRenderer} />}
+          {currentView === 'update' && <UpdateManagerView ipcRenderer={ipcRenderer} />}
           {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => setCurrentView('main')} />}
           {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}
         </Box>
