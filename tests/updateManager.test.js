@@ -125,3 +125,18 @@ test('get update settings tolerates invalid persisted custom proxy', () => {
     assert.equal(settings.sources.some((source) => source.id === 'gh-proxy-v4'), true);
     assert.match(settings.updateSettingsError, /自定义更新代理/);
 });
+
+test('set update settings validates custom source before persisting', () => {
+    const configManager = createConfigManager({
+        updateProxyId: 'gh-proxy-v4',
+        customUpdateProxyPrefix: ''
+    });
+    const manager = new UpdateManager({
+        configManager,
+        updaterFactory: () => createUpdaterDouble().updater
+    });
+    manager.initialize();
+
+    assert.throws(() => manager.setUpdateSettings({ updateProxyId: 'custom' }), /自定义更新代理/);
+    assert.equal(configManager.getUpdateSettings().updateProxyId, 'gh-proxy-v4');
+});

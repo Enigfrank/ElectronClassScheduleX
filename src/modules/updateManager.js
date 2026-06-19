@@ -167,13 +167,22 @@ class UpdateManager {
      * @returns {Object} 保存后的设置
      */
     setUpdateSettings(settings = {}) {
-        const nextSettings = { ...settings };
+        const savePatch = { ...settings };
+        const nextSettings = {
+            ...this.configManager.getUpdateSettings(),
+            ...savePatch
+        };
 
         if (Object.prototype.hasOwnProperty.call(nextSettings, 'customUpdateProxyPrefix') && nextSettings.customUpdateProxyPrefix) {
             nextSettings.customUpdateProxyPrefix = normalizeProxyPrefix(nextSettings.customUpdateProxyPrefix);
+            if (Object.prototype.hasOwnProperty.call(savePatch, 'customUpdateProxyPrefix')) {
+                savePatch.customUpdateProxyPrefix = nextSettings.customUpdateProxyPrefix;
+            }
         }
 
-        const saved = this.configManager.setUpdateSettings(nextSettings);
+        resolveUpdateSource(nextSettings);
+
+        const saved = this.configManager.setUpdateSettings(savePatch);
         this.prepareUpdater();
         return {
             ...saved,
