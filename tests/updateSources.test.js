@@ -21,6 +21,11 @@ test('rejects non-https and local proxy values', () => {
     assert.throws(() => normalizeProxyPrefix('javascript:alert(1)'), /https/);
 });
 
+test('rejects proxy prefixes with query or fragment templates', () => {
+    assert.throws(() => normalizeProxyPrefix('https://proxy.example.com/?url='), /查询|片段/);
+    assert.throws(() => normalizeProxyPrefix('https://proxy.example.com/#x'), /查询|片段/);
+});
+
 test('returns built-in update sources with v4 proxy recommended', () => {
     const sources = getUpdateSources();
     assert.equal(sources[0].id, 'github');
@@ -43,6 +48,17 @@ test('resolves source from update settings', () => {
         updateProxyId: 'custom',
         customUpdateProxyPrefix: 'https://custom.example.com/'
     }).prefix, 'https://custom.example.com/');
+});
+
+test('ignores invalid custom proxy when a built-in proxy is selected', () => {
+    assert.equal(
+        resolveUpdateSource({
+            useUpdateProxy: true,
+            updateProxyId: 'gh-proxy-v4',
+            customUpdateProxyPrefix: 'http://bad.local'
+        }).id,
+        'gh-proxy-v4'
+    );
 });
 
 test('builds latest.yml URL with URL-prefix proxy', () => {

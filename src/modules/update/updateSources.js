@@ -33,6 +33,10 @@ function normalizeProxyPrefix(value) {
         throw new Error('自定义更新代理必须是有效的 https URL');
     }
 
+    if (parsedUrl.search || parsedUrl.hash) {
+        throw new Error('自定义更新代理不允许包含查询或片段');
+    }
+
     if (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1' || parsedUrl.hostname === '::1') {
         throw new Error('自定义更新代理不支持本机系统代理地址');
     }
@@ -70,7 +74,17 @@ function resolveUpdateSource(settings = {}) {
         return { ...UPDATE_SOURCES[0] };
     }
 
-    const sources = getUpdateSources(settings.customUpdateProxyPrefix);
+    const sources = UPDATE_SOURCES.map((source) => ({ ...source }));
+
+    if (settings.updateProxyId === 'custom' && settings.customUpdateProxyPrefix) {
+        sources.push({
+            id: 'custom',
+            name: '自定义代理',
+            prefix: normalizeProxyPrefix(settings.customUpdateProxyPrefix),
+            isProxy: true
+        });
+    }
+
     return (
         sources.find((source) => source.id === settings.updateProxyId) ||
         sources.find((source) => source.id === 'gh-proxy-v4')
