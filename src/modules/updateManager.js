@@ -58,10 +58,11 @@ class UpdateManager {
 
     /**
      * 根据当前配置创建 electron-updater 实例。
+     * @param {Object|null} settings 更新设置覆盖项
      */
-    prepareUpdater() {
-        const settings = this.getUpdateSettings();
-        const source = resolveUpdateSource(settings);
+    prepareUpdater(settings = null) {
+        const resolvedSettings = settings || this.getUpdateSettings();
+        const source = resolveUpdateSource(resolvedSettings);
 
         if (this.updater) {
             this.updater.removeAllListeners();
@@ -220,19 +221,56 @@ class UpdateManager {
             this.prepareUpdater();
             return await this.updater.checkForUpdates();
         } catch (error) {
-            if (this.configManager.get('useUpdateProxy')) {
-                this.log('warn', `代理源检查失败，尝试 GitHub 官方源: ${error.message}`);
-                this.configManager.set('useUpdateProxy', false);
-                this.prepareUpdater();
-                return this.updater.checkForUpdates();
+            if (this.shouldRetryWithOfficialSource()) {
+                return this.retryCheckWithOfficialSource(error, options);
             }
 
-            this.handleError(error, this.currentSource);
-            if (options.isManual) {
-                throw error;
-            }
-            return this.status;
+            return this.finalizeCheckFailure(error, options);
         }
+    }
+
+    /**
+     * 判断当前检查失败后是否需要回退到 GitHub 官方源。
+     * @returns {boolean} 是否应执行官方源重试
+     */
+    shouldRetryWithOfficialSource() {
+        return Boolean(this.configManager.get('useUpdateProxy'));
+    }
+
+    /**
+     * 使用 GitHub 官方源在当前检查调用内重试，不改写持久化配置。
+     * @param {Error} proxyError 代理源失败错误
+     * @param {Object} options 检查选项
+     * @returns {Promise<Object>} 更新结果
+     */
+    async retryCheckWithOfficialSource(proxyError, options = {}) {
+        this.log('warn', `代理源检查失败，尝试 GitHub 官方源: ${proxyError.message}`);
+
+        const fallbackSettings = {
+            ...this.configManager.getUpdateSettings(),
+            useUpdateProxy: false
+        };
+
+        try {
+            this.prepareUpdater(fallbackSettings);
+            return await this.updater.checkForUpdates();
+        } catch (fallbackError) {
+            return this.finalizeCheckFailure(fallbackError, options);
+        }
+    }
+
+    /**
+     * 处理检查更新最终失败逻辑，并根据触发方式决定是否继续抛错。
+     * @param {Error} error 最终错误对象
+     * @param {Object} options 检查选项
+     * @returns {Object} 当前更新状态
+     */
+    finalizeCheckFailure(error, options = {}) {
+        this.handleError(error, this.currentSource);
+        if (options.isManual) {
+            throw error;
+        }
+        return this.status;
     }
 
     /**

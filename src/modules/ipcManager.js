@@ -54,13 +54,25 @@ class IpcManager {
      * 注册在线更新相关 IPC 事件。
      */
     setupUpdateEvents() {
-        ipcMain.handle('get-update-settings', () => this.updateManager.getUpdateSettings());
-        ipcMain.handle('set-update-settings', (event, settings) => this.updateManager.setUpdateSettings(settings));
-        ipcMain.handle('get-update-status', () => this.updateManager.getStatus());
-        ipcMain.handle('check-for-updates', () => this.updateManager.checkForUpdates({ isManual: true }));
-        ipcMain.handle('download-update', () => this.updateManager.downloadUpdate());
-        ipcMain.handle('install-update', () => this.updateManager.installUpdate());
-        ipcMain.handle('test-update-sources', () => this.updateManager.testUpdateSources());
+        ipcMain.handle('get-update-settings', () => this.getUpdateManagerOrThrow().getUpdateSettings());
+        ipcMain.handle('set-update-settings', (event, settings) => this.getUpdateManagerOrThrow().setUpdateSettings(settings));
+        ipcMain.handle('get-update-status', () => this.getUpdateManagerOrThrow().getStatus());
+        ipcMain.handle('check-for-updates', () => this.getUpdateManagerOrThrow().checkForUpdates({ isManual: true }));
+        ipcMain.handle('download-update', () => this.getUpdateManagerOrThrow().downloadUpdate());
+        ipcMain.handle('install-update', () => this.getUpdateManagerOrThrow().installUpdate());
+        ipcMain.handle('test-update-sources', () => this.getUpdateManagerOrThrow().testUpdateSources());
+    }
+
+    /**
+     * 获取在线更新管理器，缺失时抛出明确业务错误。
+     * @returns {Object} 在线更新管理器实例
+     */
+    getUpdateManagerOrThrow() {
+        if (this.updateManager) {
+            return this.updateManager;
+        }
+
+        throw new Error('在线更新服务当前不可用，请稍后重试');
     }
 
     setupShutdownEvents() {
