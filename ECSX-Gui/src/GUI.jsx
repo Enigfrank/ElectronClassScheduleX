@@ -269,7 +269,7 @@ const ReactGUI = () => {
     main: { title: '仪表盘', subtitle: 'Dashboard' },
     settings: { title: '设置选项', subtitle: 'Settings' },
     editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
-    update: { title: '在线更新', subtitle: 'Online Update' },
+    update: { title: '在线更新', subtitle: '在线更新' },
     tools: { title: '其他工具', subtitle: 'Tools' },
     shutdown: { title: '定时关机管理', subtitle: 'Shutdown Manager' },
   };

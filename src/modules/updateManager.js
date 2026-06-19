@@ -143,9 +143,21 @@ class UpdateManager {
      */
     getUpdateSettings() {
         const settings = this.configManager.getUpdateSettings();
+        let sources;
+        let updateSettingsError = '';
+
+        try {
+            sources = getUpdateSources(settings.customUpdateProxyPrefix);
+        } catch (error) {
+            updateSettingsError = error instanceof Error ? error.message : String(error);
+            this.log('warn', `忽略无效的自定义更新代理配置: ${updateSettingsError}`);
+            sources = getUpdateSources();
+        }
+
         return {
             ...settings,
-            sources: getUpdateSources(settings.customUpdateProxyPrefix)
+            sources,
+            updateSettingsError
         };
     }
 
@@ -277,6 +289,17 @@ class UpdateManager {
      * @returns {Promise<void>} 下载结果
      */
     async downloadUpdate() {
+        if (!app.isPackaged) {
+            const error = new Error('开发环境不支持下载更新');
+            this.broadcastStatus(createUpdateStatus({
+                ...this.status,
+                state: 'error',
+                message: '开发环境不支持下载更新',
+                error: error.message
+            }));
+            throw error;
+        }
+
         if (!this.updater) {
             this.prepareUpdater();
         }
@@ -287,6 +310,17 @@ class UpdateManager {
      * 退出并安装已下载的更新。
      */
     installUpdate() {
+        if (!app.isPackaged) {
+            const error = new Error('开发环境不支持安装更新');
+            this.broadcastStatus(createUpdateStatus({
+                ...this.status,
+                state: 'error',
+                message: '开发环境不支持安装更新',
+                error: error.message
+            }));
+            throw error;
+        }
+
         this.updater?.quitAndInstall(false, true);
     }
 

@@ -76,7 +76,7 @@ function resolveUpdateSource(settings = {}) {
 
     const sources = UPDATE_SOURCES.map((source) => ({ ...source }));
 
-    if (settings.updateProxyId === 'custom' && settings.customUpdateProxyPrefix) {
+    if (settings.updateProxyId === 'custom') {
         sources.push({
             id: 'custom',
             name: '自定义代理',

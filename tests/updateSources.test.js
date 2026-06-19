@@ -50,6 +50,13 @@ test('resolves source from update settings', () => {
     }).prefix, 'https://custom.example.com/');
 });
 
+test('requires custom proxy prefix when custom source is selected', () => {
+    assert.throws(
+        () => resolveUpdateSource({ useUpdateProxy: true, updateProxyId: 'custom', customUpdateProxyPrefix: '' }),
+        /自定义更新代理/
+    );
+});
+
 test('ignores invalid custom proxy when a built-in proxy is selected', () => {
     assert.equal(
         resolveUpdateSource({
