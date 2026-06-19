@@ -1,0 +1,331 @@
+const { app, dialog } = require('electron');
+const { NsisUpdater } = require('electron-updater');
+const {
+    getUpdateSources,
+    resolveUpdateSource,
+    buildGenericProviderUrl,
+    normalizeProxyPrefix
+} = require('./update/updateSources');
+const { probeUpdateSource } = require('./update/updateProbe');
+const {
+    createUpdateStatus,
+    formatDownloadProgress
+} = require('./update/updateStatus');
+
+/**
+ * 在线更新管理器，负责检查、下载、安装更新及代理测速。
+ */
+class UpdateManager {
+    /**
+     * 构造在线更新管理器。
+     * @param {Object} options 初始化选项
+     */
+    constructor(options = {}) {
+        this.configManager = options.configManager;
+        this.logger = options.logger;
+        this.windowManager = options.windowManager;
+        this.updaterFactory = options.updaterFactory || ((source) => new NsisUpdater({
+            provider: 'generic',
+            url: buildGenericProviderUrl(source)
+        }));
+        this.probeSource = options.probeSource || probeUpdateSource;
+        this.status = createUpdateStatus({ currentVersion: app.getVersion() });
+        this.currentSource = null;
+        this.updater = null;
+        this.initialized = false;
+        this.autoCheckTimer = null;
+    }
+
+    /**
+     * 记录更新模块日志。
+     * @param {string} level 日志级别
+     * @param {string} message 日志内容
+     */
+    log(level, message) {
+        this.logger?.[level]?.(`[在线更新] ${message}`);
+    }
+
+    /**
+     * 初始化更新器事件。
+     */
+    initialize() {
+        if (this.initialized) {
+            return;
+        }
+        this.initialized = true;
+        this.prepareUpdater();
+    }
+
+    /**
+     * 根据当前配置创建 electron-updater 实例。
+     */
+    prepareUpdater() {
+        const settings = this.getUpdateSettings();
+        const source = resolveUpdateSource(settings);
+
+        if (this.updater) {
+            this.updater.removeAllListeners();
+        }
+
+        this.currentSource = source;
+        this.updater = this.updaterFactory(source);
+        this.updater.autoDownload = false;
+        this.updater.autoInstallOnAppQuit = false;
+        this.bindUpdaterEvents(this.updater, source);
+        this.status = createUpdateStatus({
+            ...this.status,
+            currentVersion: app.getVersion(),
+            sourceId: source.id
+        });
+    }
+
+    /**
+     * 绑定 electron-updater 事件并同步 GUI 状态。
+     * @param {Object} updater electron-updater 实例
+     * @param {Object} source 当前更新源
+     */
+    bindUpdaterEvents(updater, source) {
+        updater.on('checking-for-update', () => {
+            this.broadcastStatus(createUpdateStatus({
+                currentVersion: app.getVersion(),
+                sourceId: source.id,
+                state: 'checking',
+                message: '正在检查更新'
+            }));
+        });
+
+        updater.on('update-available', (info) => {
+            this.broadcastStatus(createUpdateStatus({
+                currentVersion: app.getVersion(),
+                latestVersion: info?.version || '',
+                sourceId: source.id,
+                state: 'available',
+                message: `发现新版本 ${info?.version || ''}`
+            }));
+        });
+
+        updater.on('update-not-available', () => {
+            this.broadcastStatus(createUpdateStatus({
+                currentVersion: app.getVersion(),
+                sourceId: source.id,
+                state: 'not-available',
+                message: '当前已是最新版本'
+            }));
+        });
+
+        updater.on('download-progress', (progress) => {
+            this.broadcastStatus(createUpdateStatus({
+                ...this.status,
+                state: 'downloading',
+                message: '正在下载更新',
+                progress: formatDownloadProgress(progress)
+            }));
+        });
+
+        updater.on('update-downloaded', (info) => {
+            this.broadcastStatus(createUpdateStatus({
+                ...this.status,
+                latestVersion: info?.version || this.status.latestVersion,
+                state: 'downloaded',
+                message: '更新已下载，重启后安装'
+            }));
+            this.promptInstall();
+        });
+
+        updater.on('error', (error) => {
+            this.handleError(error, source);
+        });
+    }
+
+    /**
+     * 获取更新设置及可选源列表。
+     * @returns {Object} 更新设置
+     */
+    getUpdateSettings() {
+        const settings = this.configManager.getUpdateSettings();
+        return {
+            ...settings,
+            sources: getUpdateSources(settings.customUpdateProxyPrefix)
+        };
+    }
+
+    /**
+     * 保存更新设置并重建更新器。
+     * @param {Object} settings 用户设置
+     * @returns {Object} 保存后的设置
+     */
+    setUpdateSettings(settings = {}) {
+        const nextSettings = { ...settings };
+
+        if (Object.prototype.hasOwnProperty.call(nextSettings, 'customUpdateProxyPrefix') && nextSettings.customUpdateProxyPrefix) {
+            nextSettings.customUpdateProxyPrefix = normalizeProxyPrefix(nextSettings.customUpdateProxyPrefix);
+        }
+
+        const saved = this.configManager.setUpdateSettings(nextSettings);
+        this.prepareUpdater();
+        return {
+            ...saved,
+            sources: getUpdateSources(saved.customUpdateProxyPrefix)
+        };
+    }
+
+    /**
+     * 启动后延迟执行自动检查。
+     */
+    startAutoCheck() {
+        if (!this.configManager.get('autoCheckUpdates')) {
+            return;
+        }
+
+        if (!app.isPackaged) {
+            this.log('info', '开发环境跳过更新检查');
+            this.broadcastStatus(createUpdateStatus({
+                currentVersion: app.getVersion(),
+                sourceId: this.currentSource?.id || '',
+                state: 'idle',
+                message: '开发环境跳过更新检查'
+            }));
+            return;
+        }
+
+        if (this.autoCheckTimer) {
+            clearTimeout(this.autoCheckTimer);
+        }
+
+        this.autoCheckTimer = setTimeout(() => {
+            this.checkForUpdates({ isManual: false }).catch((error) => this.handleError(error, this.currentSource));
+        }, 5000);
+        this.autoCheckTimer.unref?.();
+    }
+
+    /**
+     * 检查更新。
+     * @param {Object} options 检查选项
+     * @returns {Promise<Object>} 更新结果
+     */
+    async checkForUpdates(options = {}) {
+        if (!app.isPackaged) {
+            this.log('info', '开发环境跳过更新检查');
+            const status = createUpdateStatus({
+                currentVersion: app.getVersion(),
+                sourceId: this.currentSource?.id || '',
+                state: 'idle',
+                message: '开发环境跳过更新检查'
+            });
+            this.broadcastStatus(status);
+            return status;
+        }
+
+        try {
+            this.prepareUpdater();
+            return await this.updater.checkForUpdates();
+        } catch (error) {
+            if (this.configManager.get('useUpdateProxy')) {
+                this.log('warn', `代理源检查失败，尝试 GitHub 官方源: ${error.message}`);
+                this.configManager.set('useUpdateProxy', false);
+                this.prepareUpdater();
+                return this.updater.checkForUpdates();
+            }
+
+            this.handleError(error, this.currentSource);
+            if (options.isManual) {
+                throw error;
+            }
+            return this.status;
+        }
+    }
+
+    /**
+     * 下载已发现的更新。
+     * @returns {Promise<void>} 下载结果
+     */
+    async downloadUpdate() {
+        if (!this.updater) {
+            this.prepareUpdater();
+        }
+        return this.updater.downloadUpdate();
+    }
+
+    /**
+     * 退出并安装已下载的更新。
+     */
+    installUpdate() {
+        this.updater?.quitAndInstall(false, true);
+    }
+
+    /**
+     * 测试所有可用更新源的访问延迟。
+     * @returns {Promise<Array<Object>>} 测速结果
+     */
+    async testUpdateSources() {
+        const settings = this.configManager.getUpdateSettings();
+        const sources = getUpdateSources(settings.customUpdateProxyPrefix);
+        const results = await Promise.all(sources.map((source) => this.probeSource(source)));
+
+        return results.sort((a, b) => {
+            if (a.available !== b.available) {
+                return a.available ? -1 : 1;
+            }
+            return a.totalMs - b.totalMs;
+        });
+    }
+
+    /**
+     * 获取当前更新状态。
+     * @returns {Object} 更新状态
+     */
+    getStatus() {
+        return this.status;
+    }
+
+    /**
+     * 广播更新状态到 GUI 窗口。
+     * @param {Object} status 更新状态
+     */
+    broadcastStatus(status) {
+        this.status = status;
+        const guiWindow = this.windowManager?.getWindow?.('gui');
+        if (guiWindow && !guiWindow.isDestroyed()) {
+            guiWindow.webContents.send('update-status-changed', status);
+        }
+    }
+
+    /**
+     * 下载完成后询问用户是否立即安装。
+     * @returns {Promise<void>} 提示完成结果
+     */
+    async promptInstall() {
+        const { response } = await dialog.showMessageBox({
+            type: 'info',
+            title: '更新已准备好',
+            message: '新版本已下载完成，是否立即重启并安装？',
+            buttons: ['稍后安装', '立即安装'],
+            defaultId: 1,
+            cancelId: 0,
+            noLink: true
+        });
+
+        if (response === 1) {
+            this.installUpdate();
+        }
+    }
+
+    /**
+     * 处理更新错误并同步状态。
+     * @param {Error} error 错误对象
+     * @param {Object} source 当前更新源
+     */
+    handleError(error, source) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log('error', `${source?.id || 'unknown'} 更新失败: ${message}`);
+        this.broadcastStatus(createUpdateStatus({
+            currentVersion: app.getVersion(),
+            sourceId: source?.id || '',
+            state: 'error',
+            message: '更新失败',
+            error: message
+        }));
+    }
+}
+
+module.exports = UpdateManager;

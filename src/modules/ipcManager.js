@@ -13,13 +13,24 @@ const { openConfigFolderThenExit } = require('./scheduleConfigFolderOpener');
  * 负责主进程与渲染进程之间的通信管理
  */
 class IpcManager {
-    constructor(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager) {
+    /**
+     * 构造 IPC 管理器。
+     * @param {Object} configManager 配置管理器
+     * @param {Object} logger 日志记录器
+     * @param {Object} windowManager 窗口管理器
+     * @param {Object} trayManager 托盘管理器
+     * @param {Object} shutdownScheduler 关机调度器
+     * @param {Object} autoLaunchManager 开机自启动管理器
+     * @param {Object} updateManager 在线更新管理器
+     */
+    constructor(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager, updateManager) {
         this.configManager = configManager;
         this.logger = logger;
         this.windowManager = windowManager;
         this.trayManager = trayManager;
         this.shutdownScheduler = shutdownScheduler;
         this.autoLaunchManager = autoLaunchManager;
+        this.updateManager = updateManager;
 
         this.amtlsWindow = null;
 
@@ -36,6 +47,20 @@ class IpcManager {
         this.setupConfigEvents();
         this.setupWindowEvents();
         this.setupUtilityEvents();
+        this.setupUpdateEvents();
+    }
+
+    /**
+     * 注册在线更新相关 IPC 事件。
+     */
+    setupUpdateEvents() {
+        ipcMain.handle('get-update-settings', () => this.updateManager.getUpdateSettings());
+        ipcMain.handle('set-update-settings', (event, settings) => this.updateManager.setUpdateSettings(settings));
+        ipcMain.handle('get-update-status', () => this.updateManager.getStatus());
+        ipcMain.handle('check-for-updates', () => this.updateManager.checkForUpdates({ isManual: true }));
+        ipcMain.handle('download-update', () => this.updateManager.downloadUpdate());
+        ipcMain.handle('install-update', () => this.updateManager.installUpdate());
+        ipcMain.handle('test-update-sources', () => this.updateManager.testUpdateSources());
     }
 
     setupShutdownEvents() {
