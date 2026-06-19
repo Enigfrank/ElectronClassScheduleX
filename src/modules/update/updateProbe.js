@@ -1,12 +1,5 @@
 const https = require('https');
-
-let buildLatestYmlUrl;
-try {
-    ({ buildLatestYmlUrl } = require('./updateSources'));
-} catch {
-    const GITHUB_RELEASE_LATEST_DOWNLOAD_URL = 'https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest/download';
-    buildLatestYmlUrl = (source) => `${source.prefix || ''}${GITHUB_RELEASE_LATEST_DOWNLOAD_URL}/latest.yml`;
-}
+const { buildLatestYmlUrl } = require('./updateSources');
 
 /**
  * 发送默认 HTTPS 请求并记录首字节耗时。
@@ -57,7 +50,6 @@ async function probeUpdateSource(source, options = {}) {
     const request = options.request || defaultRequest;
     const url = buildLatestYmlUrl(source);
     const startedAt = now();
-    const requestStartedAt = now();
 
     try {
         const response = await request(url, timeoutMs);
@@ -81,7 +73,7 @@ async function probeUpdateSource(source, options = {}) {
             available: false,
             statusCode: 0,
             firstByteMs: null,
-            totalMs: requestStartedAt - startedAt,
+            totalMs: now() - startedAt,
             error: error instanceof Error ? error.message : String(error)
         };
     }

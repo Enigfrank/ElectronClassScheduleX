@@ -1,10 +1,8 @@
-const { app, Menu, ipcMain, dialog, protocol, net } = require('electron');
-const path = require('path');
+const { app, Menu, ipcMain, dialog } = require('electron');
 
 // 导入模块
 const Logger = require('./logger');
 const ConfigManager = require('./configManager');
-const AssignmentConfigManager = require('./assignmentConfigManager');
 const WindowManager = require('./windowManager');
 const TrayManager = require('./trayManager');
 const ShutdownScheduler = require('./shutdownScheduler');
@@ -12,9 +10,6 @@ const AutoLaunchManager = require('./autoLaunchManager');
 const Utils = require('./utils');
 const IpcManager = require('./ipcManager');
 const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
-const ClientManager = require('./clientManager');
-const AssignmentWindowManager = require('./assignmentWindowManager');
-const AssignmentManager = require('./assignmentManager');
 
 /**
  * 应用生命周期管理器
@@ -24,7 +19,6 @@ class AppLifecycleManager {
         this.appInitialized = false;
         this.logger = null;
         this.configManager = null;
-        this.assignmentConfigManager = null;
         this.utils = null;
         this.windowManager = null;
         this.trayManager = null;
@@ -32,9 +26,6 @@ class AppLifecycleManager {
         this.autoLaunchManager = null;
         this.ipcManager = null;
         this.scheduleConfigExtractor = null;
-        this.clientManager = null;
-        this.assignmentWindowManager = null;
-        this.assignmentManager = null;
     }
 
     async start() {
@@ -49,7 +40,7 @@ class AppLifecycleManager {
             await this.initializeModules();
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            const msg = `模块初始化失败，程序无法继续运行。\n${errorMsg}`;
+            const msg = `模块初始化失败，程序无法继续运行\n${errorMsg}`;
             console.error(msg);
             this.logger?.error(msg);
             if (error?.stack) this.logger?.error(error.stack);
@@ -59,12 +50,9 @@ class AppLifecycleManager {
             return;      
         }
 
-        // 注册自定义协议
-        this.registerConfigProtocol();
-
         // 确保配置文件存在
         if (!this.ensureScheduleConfig()) {
-            const msg = '配置文件初始化失败，程序无法继续运行。';
+            const msg = '配置文件初始化失败，程序无法继续运行';
             this.logger?.error(msg);
             dialog.showErrorBox('启动错误', msg);
             app.exit(1);
@@ -92,7 +80,7 @@ class AppLifecycleManager {
     checkSingleInstanceLock() {
         const gotTheLock = app.requestSingleInstanceLock({ key: '电子课表' });
         if (!gotTheLock) {
-            console.log('检测到另一个实例已在运行, 退出当前实例。');
+            console.log('检测到另一个实例已在运行, 退出当前实例');
             app.quit();
             return false;
         }
@@ -122,35 +110,18 @@ class AppLifecycleManager {
 
         this.scheduleConfigExtractor = new ScheduleConfigExtractor(this.logger);
         this.configManager = new ConfigManager(this.logger);
-        this.assignmentConfigManager = new AssignmentConfigManager(this.logger);
         this.utils = new Utils(this.logger);
         this.windowManager = new WindowManager(this.configManager, this.logger);
         this.trayManager = new TrayManager(null, this.logger, this.windowManager);
         this.shutdownScheduler = new ShutdownScheduler(this.configManager, this.logger);
         this.autoLaunchManager = new AutoLaunchManager(this.configManager, this.logger);
-        this.clientManager = new ClientManager(this.assignmentConfigManager, this.logger);
-        this.assignmentWindowManager = new AssignmentWindowManager(this.assignmentConfigManager, this.logger);
 
         this.ipcManager = new IpcManager(
-            this.configManager, this.assignmentConfigManager, this.logger, this.windowManager,
-            this.trayManager, this.shutdownScheduler, this.autoLaunchManager, this.clientManager, this.assignmentWindowManager
-        );
-
-        this.assignmentManager = new AssignmentManager(
-            this.assignmentConfigManager, this.clientManager, this.assignmentWindowManager, this.ipcManager, this.logger
+            this.configManager, this.logger, this.windowManager,
+            this.trayManager, this.shutdownScheduler, this.autoLaunchManager
         );
 
         this.logger.info('所有模块初始化完成');
-    }
-
-    registerConfigProtocol() {
-        protocol.handle('config', (request) => {
-            const urlPath = request.url.replace(/^config:\/\//, ''); 
-            const configDir = this.scheduleConfigExtractor.getConfigDir();
-            const filePath = path.join(configDir, urlPath);
-
-            return net.fetch(`file://${filePath}`);
-        });
     }
 
     ensureScheduleConfig() {
@@ -189,7 +160,6 @@ class AppLifecycleManager {
         // 使用通用方法替代重复代码
         this._safeInit(this.autoLaunchManager, 'setAutoLaunch', '自启动模块');
         this._safeInit(this.shutdownScheduler, 'initialize', '关机调度模块');
-        this._safeInit(this.assignmentManager, 'initialize', '作业管理模块');
         
         try {
             if (this.utils && this.trayManager) {
@@ -236,9 +206,6 @@ class AppLifecycleManager {
             this.logger?.flush();
             this.logger?.cleanupOldLogs();
 
-            this.clientManager?.destroy();
-            this.assignmentWindowManager?.hideWindow();
-            this.assignmentManager?.destroy();
             this.trayManager?.destroy();
         });
 
@@ -256,16 +223,12 @@ class AppLifecycleManager {
         return {
             logger: this.logger,
             configManager: this.configManager,
-            assignmentConfigManager: this.assignmentConfigManager,
             windowManager: this.windowManager,
             trayManager: this.trayManager,
             shutdownScheduler: this.shutdownScheduler,
             autoLaunchManager: this.autoLaunchManager,
             utils: this.utils,
-            scheduleConfigExtractor: this.scheduleConfigExtractor,
-            clientManager: this.clientManager,
-            assignmentWindowManager: this.assignmentWindowManager,
-            assignmentManager: this.assignmentManager
+            scheduleConfigExtractor: this.scheduleConfigExtractor
         };
     }
 }

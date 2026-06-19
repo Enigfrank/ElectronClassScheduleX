@@ -6,12 +6,7 @@
 // OOBE状态管理
 const OobeState = {
     currentStep: 1,
-    totalSteps: 3,
-    assignmentConfig: {
-        enabled: false,
-        serverUrl: '',
-        clientName: ''
-    }
+    totalSteps: 2
 };
 
 // DOM元素引用
@@ -21,11 +16,7 @@ const Elements = {
     stepContents: document.querySelectorAll('.step-content'),
     btnPrev: document.getElementById('btnPrev'),
     btnNext: document.getElementById('btnNext'),
-    btnOpenConfigFolder: document.getElementById('btnOpenConfigFolder'),
-    assignmentToggle: document.getElementById('assignmentToggle'),
-    assignmentConfigForm: document.getElementById('assignmentConfigForm'),
-    serverUrl: document.getElementById('serverUrl'),
-    clientName: document.getElementById('clientName')
+    btnOpenConfigFolder: document.getElementById('btnOpenConfigFolder')
 };
 
 /**
@@ -49,10 +40,6 @@ function bindEvents() {
         Elements.btnOpenConfigFolder.addEventListener('click', openConfigFolder);
     }
 
-    // 作业功能开关
-    if (Elements.assignmentToggle) {
-        Elements.assignmentToggle.addEventListener('change', toggleAssignmentConfig);
-    }
 }
 
 /**
@@ -106,9 +93,9 @@ function updateStepContent() {
 function updateNavigationButtons() {
     // 上一步按钮
     if (OobeState.currentStep === 1) {
-        Elements.btnPrev.style.display = 'none';
+        Elements.btnPrev.classList.add('is-hidden');
     } else {
-        Elements.btnPrev.style.display = 'inline-flex';
+        Elements.btnPrev.classList.remove('is-hidden');
     }
 
     // 下一步/完成按钮
@@ -136,11 +123,6 @@ function goToPrevStep() {
  */
 async function goToNextStep() {
     if (OobeState.currentStep < OobeState.totalSteps) {
-        // 如果是第二步，保存作业配置
-        if (OobeState.currentStep === 2) {
-            await saveAssignmentConfig();
-        }
-
         OobeState.currentStep++;
         updateUI();
     } else {
@@ -158,69 +140,10 @@ function openConfigFolder() {
 }
 
 /**
- * 切换作业功能配置显示
- */
-function toggleAssignmentConfig() {
-    const isEnabled = Elements.assignmentToggle.checked;
-    OobeState.assignmentConfig.enabled = isEnabled;
-
-    if (isEnabled) {
-        Elements.assignmentConfigForm.style.display = 'block';
-        Elements.assignmentConfigForm.style.animation = 'fadeIn 0.3s ease';
-    } else {
-        Elements.assignmentConfigForm.style.display = 'none';
-    }
-}
-
-/**
- * 保存作业配置
- */
-async function saveAssignmentConfig() {
-    if (!OobeState.assignmentConfig.enabled) {
-        // 如果未启用，保存禁用状态
-        const { ipcRenderer } = require('electron');
-        await ipcRenderer.invoke('oobe-save-assignment-config', {
-            enabled: false
-        });
-        return;
-    }
-
-    // 获取输入值
-    const serverUrl = Elements.serverUrl.value.trim();
-    const clientName = Elements.clientName.value.trim();
-
-    // 验证输入
-    if (serverUrl && clientName) {
-        OobeState.assignmentConfig.serverUrl = serverUrl;
-        OobeState.assignmentConfig.clientName = clientName;
-
-        const { ipcRenderer } = require('electron');
-        try {
-            const result = await ipcRenderer.invoke('oobe-save-assignment-config', {
-                enabled: true,
-                serverUrl: serverUrl,
-                clientName: clientName
-            });
-
-            if (!result.success) {
-                console.warn('保存作业配置失败:', result.error);
-            }
-        } catch (error) {
-            console.error('保存作业配置时出错:', error);
-        }
-    }
-}
-
-/**
  * 完成OOBE
  */
 async function completeOobe() {
     const { ipcRenderer } = require('electron');
-
-    // 保存第二步的配置（如果还没保存）
-    if (OobeState.currentStep === 2) {
-        await saveAssignmentConfig();
-    }
 
     // 发送完成事件
     ipcRenderer.send('oobe-complete');
@@ -231,22 +154,7 @@ async function completeOobe() {
  * @returns {boolean} 验证是否通过
  */
 function validateCurrentStep() {
-    switch (OobeState.currentStep) {
-        case 2:
-            // 如果启用了作业功能，验证输入
-            if (OobeState.assignmentConfig.enabled) {
-                const serverUrl = Elements.serverUrl.value.trim();
-                const clientName = Elements.clientName.value.trim();
-
-                if (!serverUrl || !clientName) {
-                    showError('请填写完整的服务器地址和客户端名称,或关闭作业功能');
-                    return false;
-                }
-            }
-            return true;
-        default:
-            return true;
-    }
+    return true;
 }
 
 /**
@@ -263,29 +171,13 @@ function showError(message) {
     }
 
     errorEl.textContent = message;
-    errorEl.style.display = 'block';
+    errorEl.classList.add('is-visible');
 
     // 3秒后自动隐藏
     setTimeout(() => {
-        errorEl.style.display = 'none';
+        errorEl.classList.remove('is-visible');
     }, 3000);
 }
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', init);
-
-// 添加错误提示样式
-const errorStyle = document.createElement('style');
-errorStyle.textContent = `
-    .error-message {
-        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
-        color: #c62828;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin-bottom: 16px;
-        font-size: 14px;
-        border: 1px solid #ef9a9a;
-        animation: fadeIn 0.3s ease;
-    }
-`;
-document.head.appendChild(errorStyle);

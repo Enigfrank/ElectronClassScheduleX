@@ -3,27 +3,26 @@ const path = require('path');
 const fs = require('fs');
 const prompt = require('electron-prompt');
 const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
+const ScheduleConfigLoader = require('./scheduleConfigLoader');
+const { saveScheduleConfigSource } = require('./scheduleConfigWriter');
+const { formatScheduleConfigErrorForDialog } = require('./scheduleConfigErrorPresenter');
+const { openConfigFolderThenExit } = require('./scheduleConfigFolderOpener');
 
 /**
  * IPC通信管理模块
  * 负责主进程与渲染进程之间的通信管理
  */
 class IpcManager {
-    constructor(configManager, assignmentConfigManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager, clientManager = null, assignmentWindowManager = null) {
+    constructor(configManager, logger, windowManager, trayManager, shutdownScheduler, autoLaunchManager) {
         this.configManager = configManager;
-        this.assignmentConfigManager = assignmentConfigManager;
         this.logger = logger;
         this.windowManager = windowManager;
         this.trayManager = trayManager;
         this.shutdownScheduler = shutdownScheduler;
         this.autoLaunchManager = autoLaunchManager;
-        this.clientManager = clientManager;
-        this.assignmentWindowManager = assignmentWindowManager;
 
-        this.shutdownManagerWindow = null;
         this.amtlsWindow = null;
 
-        this.setupClientManagerCallbacks();
         this.setupIpcEvents();
         this.setupOobeEvents();
     }
@@ -37,8 +36,6 @@ class IpcManager {
         this.setupConfigEvents();
         this.setupWindowEvents();
         this.setupUtilityEvents();
-        this.setupClientEvents();
-        this.setupAssignmentWindowEvents();
     }
 
     setupShutdownEvents() {
@@ -68,25 +65,6 @@ class IpcManager {
                 this.shutdownScheduler.scheduleShutdown();
                 event.sender.send('shutdownTimesUpdated', times);
             }
-        });
-
-        ipcMain.on('openShutdownManager', async (event) => {
-            if (this.shutdownManagerWindow) {
-                this.shutdownManagerWindow.show();
-                return;
-            }
-
-            this.shutdownManagerWindow = new BrowserWindow({
-                width: 650, height: 650, frame: true, alwaysOnTop: true, modal: true,
-                webPreferences: { nodeIntegration: true, contextIsolation: false }
-            });
-
-            this.shutdownManagerWindow.loadFile(path.join(__dirname, '..', 'shutdownManager.html'));
-            this.shutdownManagerWindow.on('closed', () => { this.shutdownManagerWindow = null; });
-
-            this.shutdownManagerWindow.webContents.on('did-finish-load', () => {
-                this.shutdownManagerWindow.webContents.send('shutdownTimesUpdated', this.configManager.getShutdownTimes());
-            });
         });
 
         ipcMain.on('shutdown-action', (event, action) => {
@@ -300,6 +278,139 @@ class IpcManager {
             });
         });
 
+        ipcMain.handle('load-schedule-config', () => {
+            const configFilePath = new ScheduleConfigExtractor(this.logger).getConfigFilePath();
+            this.log('info', `[课表配置] 加载配置对象: ${configFilePath}`);
+            const loader = new ScheduleConfigLoader(configFilePath, this.logger);
+            return loader.load();
+        });
+
+        ipcMain.handle('read-schedule-config-source', () => {
+            const configFilePath = new ScheduleConfigExtractor(this.logger).getConfigFilePath();
+            this.log('info', `[课表配置] 读取配置源码: ${configFilePath}`);
+
+            try {
+                const source = fs.readFileSync(configFilePath, 'utf8');
+                this.log('info', `[课表配置] 读取配置源码成功: ${configFilePath}，长度: ${source.length}`);
+                return {
+                    success: true,
+                    source,
+                    filePath: configFilePath
+                };
+            } catch (error) {
+                this.log('error', `[课表配置] 读取配置源码失败: ${configFilePath} - ${error.message}`);
+                return {
+                    success: false,
+                    error: {
+                        type: 'read',
+                        title: '课表配置读取失败',
+                        message: error.message,
+                        filePath: configFilePath
+                    }
+                };
+            }
+        });
+
+        ipcMain.handle('save-schedule-config-source', (event, source) => {
+            const configFilePath = new ScheduleConfigExtractor(this.logger).getConfigFilePath();
+            this.log('info', `[课表配置] 收到保存配置源码请求: ${configFilePath}`);
+            return saveScheduleConfigSource({
+                filePath: configFilePath,
+                source,
+                logger: this.logger
+            });
+        });
+
+        ipcMain.handle('apply-schedule-config', () => {
+            this.log('info', '[课表配置] 请求应用配置: 准备重建主课表窗口');
+            try {
+                this.windowManager.reloadMainScheduleWindow();
+                this.log('info', '[课表配置] 应用配置成功: 主课表窗口已重建');
+                return { success: true };
+            } catch (error) {
+                this.log('error', `[课表配置] 应用失败: ${error.message}`);
+                return {
+                    success: false,
+                    error: {
+                        type: 'apply',
+                        title: '课表配置应用失败',
+                        message: error.message
+                    }
+                };
+            }
+        });
+
+        ipcMain.handle('import-schedule-config-source', async () => {
+            this.log('info', '[课表配置] 导入配置源码: 打开文件选择对话框');
+            const result = await dialog.showOpenDialog({
+                title: '导入课表配置',
+                filters: [{ name: 'JavaScript 配置文件', extensions: ['js'] }],
+                properties: ['openFile']
+            });
+
+            if (result.canceled || result.filePaths.length === 0) {
+                this.log('info', '[课表配置] 导入配置源码已取消');
+                return { success: false, canceled: true };
+            }
+
+            const filePath = result.filePaths[0];
+            try {
+                const source = fs.readFileSync(filePath, 'utf8');
+                this.log('info', `[课表配置] 导入配置源码成功: ${filePath}，长度: ${source.length}`);
+                return {
+                    success: true,
+                    source,
+                    filePath
+                };
+            } catch (error) {
+                this.log('error', `[课表配置] 导入配置源码失败: ${filePath} - ${error.message}`);
+                return {
+                    success: false,
+                    error: {
+                        type: 'read',
+                        title: '导入配置读取失败',
+                        message: error.message,
+                        filePath
+                    }
+                };
+            }
+        });
+
+        ipcMain.handle('export-schedule-config-source', async (event, source) => {
+            this.log('info', '[课表配置] 导出配置源码: 打开保存对话框');
+            const result = await dialog.showSaveDialog({
+                title: '导出课表配置',
+                defaultPath: 'scheduleConfig.js',
+                filters: [{ name: 'JavaScript 配置文件', extensions: ['js'] }]
+            });
+
+            if (result.canceled || !result.filePath) {
+                this.log('info', '[课表配置] 导出配置源码已取消');
+                return { success: false, canceled: true };
+            }
+
+            try {
+                fs.writeFileSync(result.filePath, String(source || ''), 'utf8');
+                this.log('info', `[课表配置] 导出配置源码成功: ${result.filePath}，长度: ${String(source || '').length}`);
+                return { success: true, filePath: result.filePath };
+            } catch (error) {
+                this.log('error', `[课表配置] 导出配置源码失败: ${result.filePath} - ${error.message}`);
+                return {
+                    success: false,
+                    error: {
+                        type: 'write',
+                        title: '导出配置失败',
+                        message: error.message,
+                        filePath: result.filePath
+                    }
+                };
+            }
+        });
+
+        ipcMain.on('show-schedule-config-error', async (event, error) => {
+            await this.showScheduleConfigErrorAndExit(error);
+        });
+
         ipcMain.handle('get-logs', async () => {
             try {
                 const logsDir = app.getPath('logs'); 
@@ -325,104 +436,41 @@ class IpcManager {
         });
     }
 
-    setupClientManagerCallbacks() {
-        if (!this.clientManager) return;
-        this.clientManager.setOnWsStatus((status) => this.sendWsStatusToRenderer(status));
-        this.log('info', '[IPC管理] 客户端管理器回调设置完成');
-    }
-
-    sendWsStatusToRenderer(status) {
+    /**
+     * 关闭主课表窗口，显示独立错误提示，并按用户选择打开配置文件夹或退出
+     * @param {Object} error - 课表配置加载错误
+     */
+    async showScheduleConfigErrorAndExit(error) {
         const mainWindow = this.windowManager.getWindow('main');
         if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('ws-status', status);
+            mainWindow.close();
         }
-    }
 
-    setupClientEvents() {
-        ipcMain.handle('getAssignmentConfig', async () => {
-            try {
-                return { 
-                    success: true, 
-                    data: {
-                        assignmentEnabled: this.assignmentConfigManager.getAssignmentEnabled(),
-                        serverURL: this.assignmentConfigManager.getServerURL(),
-                        wsURL: this.assignmentConfigManager.getWsURL(),
-                        clientId: this.assignmentConfigManager.getClientId(),
-                        clientName: this.assignmentConfigManager.getClientName(),
-                        assignmentDisplayPeriod: this.assignmentConfigManager.getAssignmentDisplayPeriod()
-                    } 
-                };
-            } catch (error) {
-                return { success: false, error: error.message };
-            }
+        const dialogData = formatScheduleConfigErrorForDialog(error);
+        const result = await dialog.showMessageBox({
+            type: 'error',
+            title: dialogData.title,
+            message: dialogData.message,
+            detail: dialogData.detail,
+            buttons: ['打开课表文件夹', '退出程序'],
+            defaultId: 0,
+            cancelId: 1,
+            noLink: true
         });
 
-        ipcMain.handle('saveAssignmentConfig', async (event, config) => {
-            try {
-                const savedClientId = this.assignmentConfigManager.getClientId();
-                const savedClientName = this.assignmentConfigManager.getClientName();
+        if (result.response === 0) {
+            const configDir = new ScheduleConfigExtractor(this.logger).getConfigDir();
+            await openConfigFolderThenExit({
+                configDir,
+                shell,
+                app,
+                dialog,
+                logger: this.logger
+            });
+            return;
+        }
 
-                this.assignmentConfigManager.setAssignmentEnabled(config.assignmentEnabled || false);
-                this.assignmentConfigManager.setServerURL(config.serverURL);
-                this.assignmentConfigManager.setWsURL(config.wsURL);
-                if (config.assignmentDisplayPeriod !== undefined) {
-                    this.assignmentConfigManager.setAssignmentDisplayPeriod(config.assignmentDisplayPeriod);
-                }
-
-                if (this.clientManager) {
-                    if (config.clientName && !savedClientId) {
-                        const result = await this.clientManager.registerClient({ name: config.clientName });
-                        return { success: true, clientId: result.client_id };
-                    } else if (savedClientId && config.clientName && config.clientName !== savedClientName) {
-                        this.assignmentConfigManager.setClientName(config.clientName);
-                    }
-                }
-                return { success: true, clientId: savedClientId };
-            } catch (error) {
-                return { success: false, error: error.message };
-            }
-        });
-
-        ipcMain.handle('testServerConnection', async (event, serverURL) => {
-            if (!this.clientManager) return { success: false, error: '客户端管理器未初始化' };
-            try {
-                return { success: true, data: await this.clientManager.testConnection(serverURL) };
-            } catch (error) {
-                return { success: false, error: error.message };
-            }
-        });
-
-        ipcMain.handle('getWsStatus', () => {
-            try {
-                return { success: true, status: this.clientManager ? this.clientManager.getWsStatus() : 'disconnected' };
-            } catch (error) {
-                return { success: false, status: 'disconnected', error: error.message };
-            }
-        });
-
-        ipcMain.on('setAssignmentEnabled', (event, enabled) => {
-            this.assignmentConfigManager.setAssignmentEnabled(enabled);
-            if (enabled) {
-                this.clientManager?.connect();
-            } else {
-                this.clientManager?.disconnect();
-                this.assignmentWindowManager?.hideWindow();
-            }
-        });
-    }
-
-    setupAssignmentWindowEvents() {
-        ipcMain.on('showAssignmentWindow', () => {
-            if (this.assignmentWindowManager) {
-                this.assignmentWindowManager.showWindow(this.assignmentWindowManager.getCurrentAssignments());
-            }
-        });
-
-        ipcMain.on('hideAssignmentWindow', () => this.assignmentWindowManager?.hideWindow());
-
-        ipcMain.on('updateAssignments', (event, assignments) => {
-            this.assignmentWindowManager?.updateAssignments(assignments);
-        });
+        app.quit();
     }
 
     handleTimeOffsetSetting(e, arg = 0) {
@@ -481,29 +529,6 @@ class IpcManager {
             shell.openPath(configDir).catch((err) => {
                 this.log('error', `[IPC管理] 打开配置文件夹失败: ${err.message}`);
             });
-        });
-
-        ipcMain.handle('oobe-save-assignment-config', async (event, config) => {
-            try {
-                this.assignmentConfigManager.setAssignmentEnabled(config.enabled || false);
-                if (config.serverUrl) {
-                    this.assignmentConfigManager.setServerURL(config.serverUrl);
-                    this.assignmentConfigManager.setWsURL(config.serverUrl.replace(/^http/, 'ws'));
-                }
-                if (config.clientName) this.assignmentConfigManager.setClientName(config.clientName);
-
-                if (config.enabled && config.clientName && this.clientManager) {
-                    try {
-                        const result = await this.clientManager.registerClient({ name: config.clientName });
-                        return { success: true, clientId: result.client_id };
-                    } catch (registerError) {
-                        return { success: true, warning: `注册失败: ${registerError.message}` };
-                    }
-                }
-                return { success: true };
-            } catch (error) {
-                return { success: false, error: error.message };
-            }
         });
 
         ipcMain.on('open-oobe', () => this.windowManager.createOobeWindow());

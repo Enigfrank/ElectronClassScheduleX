@@ -8,7 +8,7 @@ test('returns available probe result when requester resolves', async () => {
         { id: 'github', name: 'GitHub 官方源', prefix: '' },
         {
             now: (() => {
-                const values = [100, 160, 180];
+                const values = [100, 180];
                 return () => values.shift();
             })(),
             request: async () => ({ statusCode: 200, firstByteMs: 60 })
@@ -20,6 +20,7 @@ test('returns available probe result when requester resolves', async () => {
     assert.equal(result.statusCode, 200);
     assert.equal(result.firstByteMs, 60);
     assert.equal(result.totalMs, 80);
+    assert.equal(result.url, 'https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest/download/latest.yml');
 });
 
 test('returns unavailable probe result when requester rejects', async () => {
