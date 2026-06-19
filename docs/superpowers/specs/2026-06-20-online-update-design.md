@@ -273,8 +273,22 @@ https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest/download/lat
 
 - 新增依赖 `electron-updater`。
 - 增加 `build.publish`，指向 GitHub 仓库。
+- 增加 `build.artifactName`，显式固定 Windows 产物名称。
 - 保留 `--publish never` 的普通本地构建。
 - 增加发布脚本用于 CI 或手动发布。
+
+产物命名约束：
+
+- 当前 CI 实际产物名称为 `Setup.x.x.x.exe`，不包含 `productName`。
+- 实现时仍然需要显式配置 `artifactName`，避免未来 `electron-builder` 默认命名规则、`productName` 或本地环境差异导致 Release 附件名称变化。
+- 推荐固定为 ASCII 名称：
+
+```json
+"artifactName": "Setup.${version}.${ext}"
+```
+
+- 更新代码不硬编码 `Setup.x.x.x.exe`，仍以 `latest.yml` 中的 `path` 和 `files` 为准。
+- 代理下载 URL 只拼接 `latest.yml` 和其声明的文件路径，避免中文文件名、空格或 URL 编码差异影响代理下载。
 
 GitHub Actions：
 
