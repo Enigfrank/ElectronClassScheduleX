@@ -79,6 +79,23 @@ function buildSourceOptions(sources = []) {
 }
 
 /**
+ * 根据当前设置与状态计算界面展示的更新源名称。
+ * @param {object} settings 更新设置
+ * @param {object} status 当前更新状态
+ * @param {Array<object>} sourceOptions 可选更新源
+ * @returns {string} 当前更新源展示文案
+ */
+function getCurrentSourceLabel(settings, status, sourceOptions) {
+  if (!settings.useUpdateProxy) {
+    return 'GitHub 官方源';
+  }
+
+  const activeSourceId = status.sourceId || settings.updateProxyId || 'github';
+  const matchedSource = sourceOptions.find((source) => source.id === activeSourceId);
+  return matchedSource?.name || activeSourceId;
+}
+
+/**
  * 在线更新管理页面。
  * @param {{ipcRenderer: Electron.IpcRenderer}} props 组件属性
  * @returns {JSX.Element} 在线更新页面
@@ -104,6 +121,10 @@ function UpdateManagerView({ ipcRenderer }) {
   const [settingsError, setSettingsError] = useState('');
 
   const sourceOptions = useMemo(() => buildSourceOptions(settings.sources), [settings.sources]);
+  const currentSourceLabel = useMemo(
+    () => getCurrentSourceLabel(settings, status, sourceOptions),
+    [settings, status, sourceOptions]
+  );
 
   /**
    * 将后端返回的设置合并到本地状态。
@@ -181,15 +202,14 @@ function UpdateManagerView({ ipcRenderer }) {
    */
   const saveSettings = useCallback(async (patch) => {
     try {
-      const payload = { ...settings, ...patch };
-      const nextSettings = await ipcRenderer.invoke('set-update-settings', payload);
-      applySettings(nextSettings || payload);
+      const nextSettings = await ipcRenderer.invoke('set-update-settings', patch);
+      applySettings({ ...patch, ...(nextSettings || {}) });
       setSettingsError('');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setSettingsError(errorMessage);
     }
-  }, [applySettings, ipcRenderer, settings]);
+  }, [applySettings, ipcRenderer]);
 
   /**
    * 手动检查更新。
@@ -309,7 +329,7 @@ function UpdateManagerView({ ipcRenderer }) {
         <Card bg={cardBg}>
           <CardBody>
             <Text fontSize="sm" color={mutedTextColor}>当前更新源</Text>
-            <Text fontSize="xl" fontWeight="semibold" mt={1}>{status.sourceId || settings.updateProxyId || 'github'}</Text>
+            <Text fontSize="xl" fontWeight="semibold" mt={1}>{currentSourceLabel}</Text>
           </CardBody>
         </Card>
       </SimpleGrid>

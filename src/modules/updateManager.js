@@ -1,4 +1,4 @@
-const { app, dialog } = require('electron');
+const { app } = require('electron');
 const { NsisUpdater } = require('electron-updater');
 const {
     getUpdateSources,
@@ -130,7 +130,6 @@ class UpdateManager {
                 state: 'downloaded',
                 message: '更新已下载，重启后安装'
             }));
-            this.promptInstall();
         });
 
         updater.on('error', (error) => {
@@ -325,26 +324,6 @@ class UpdateManager {
         const guiWindow = this.windowManager?.getWindow?.('gui');
         if (guiWindow && !guiWindow.isDestroyed()) {
             guiWindow.webContents.send('update-status-changed', status);
-        }
-    }
-
-    /**
-     * 下载完成后询问用户是否立即安装。
-     * @returns {Promise<void>} 提示完成结果
-     */
-    async promptInstall() {
-        const { response } = await dialog.showMessageBox({
-            type: 'info',
-            title: '更新已准备好',
-            message: '新版本已下载完成，是否立即重启并安装？',
-            buttons: ['稍后安装', '立即安装'],
-            defaultId: 1,
-            cancelId: 0,
-            noLink: true
-        });
-
-        if (response === 1) {
-            this.installUpdate();
         }
     }
 
