@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './GUI.css';
+import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
+import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
   SimpleGrid, Divider, Tooltip, IconButton, Menu, MenuButton,
@@ -9,7 +11,7 @@ import {
 import {
   Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
   EyeOff, Rocket, Power, RotateCcw, Info, X, Plus, MoreHorizontal,
-  Sun, Moon, Globe, FolderOpen
+  Sun, Moon, Globe, FolderOpen, FilePenLine
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require('electron');
@@ -49,16 +51,16 @@ const QuickActions = () => {
           编辑课表
         </Button>
       </Tooltip>
-      <Tooltip label="分享课表" placement="bottom">
-        <Button isDisabled leftIcon={<RefreshCw size={18} />}>同步课表(TODO)</Button>
+      <Tooltip label="NULL" placement="bottom">
+        <Button isDisabled leftIcon={<RefreshCw size={18} />}>NULL</Button>
       </Tooltip>
       <Menu>
         <MenuButton as={Button} variant="outline" leftIcon={<MoreHorizontal size={18} />}>更多</MenuButton>
         <MenuList>
-          <MenuItem isDisabled>导入课表(TODO)</MenuItem>
-          <MenuItem isDisabled>高级设置(TODO)</MenuItem>
+          <MenuItem isDisabled>NULL</MenuItem>
+          <MenuItem isDisabled>NULL</MenuItem>
           <Divider />
-          <MenuItem isDisabled>关于(TODO)</MenuItem>
+          <MenuItem isDisabled>NULL</MenuItem>
         </MenuList>
       </Menu>
     </Flex>
@@ -170,7 +172,6 @@ const SettingsView = ({ settings, handleSettingChange }) => {
     { id: 'isWindowAlwaysOnTop', icon: <Pin size={20} />, label: '窗口置顶', desc: '保持窗口始终在最前端' },
     { id: 'isDuringClassHidden', icon: <EyeOff size={20} />, label: '上课隐藏', desc: '上课期间自动隐藏窗口' },
     { id: 'isAutoLaunch', icon: <Rocket size={20} />, label: '开机启动', desc: '系统启动时自动运行' },
-    { id: 'scheduleShutdown', icon: <Power size={20} />, label: '定时关机', desc: '启用自动关机功能' },
   ];
 
   return (
@@ -180,7 +181,7 @@ const SettingsView = ({ settings, handleSettingChange }) => {
         <CardBody>
           {settingItems.map((item, index) => (
             <Flex key={item.id} align="center" justify="space-between" py={4}
-                  borderBottom={index < settingItems.length - 1 ? '1px' : 'none'} borderColor={borderColor}>
+              borderBottom={index < settingItems.length - 1 ? '1px' : 'none'} borderColor={borderColor}>
               <Flex align="center" gap={3}>
                 {item.icon}
                 <Box>
@@ -229,10 +230,10 @@ const ToolsView = ({ logs, isLoadingLogs, loadLogs, openLogsFolder }) => {
             <Text color={textMuted} fontSize="sm">暂无日志内容，点击"加载日志"按钮查看最新日志</Text>
           ) : (
             <Box h="300px" maxH="300px" overflowY="auto" p={3} bg={logBoxBg} borderRadius="md"
-                 border="1px" borderColor={borderColor} fontSize="sm" fontFamily="monospace"
-                 display="flex" flexDirection="column">
-              {isLoadingLogs ? <Text color={textMuted}>正在加载日志...</Text> 
-                             : logs.map((log, index) => <Text key={index} fontSize="xs" mb={1}>{log}</Text>)}
+              border="1px" borderColor={borderColor} fontSize="sm" fontFamily="monospace"
+              display="flex" flexDirection="column">
+              {isLoadingLogs ? <Text color={textMuted}>正在加载日志...</Text>
+                : logs.map((log, index) => <Text key={index} fontSize="xs" mb={1}>{log}</Text>)}
             </Box>
           )}
           <Box mt={4} display="flex" gap={2}>
@@ -262,6 +263,14 @@ const ReactGUI = () => {
   const textColor = useColorModeValue('gray.800', 'white');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
+
+  const viewTitles = {
+    main: { title: '仪表盘', subtitle: 'Dashboard' },
+    settings: { title: '设置选项', subtitle: 'Settings' },
+    editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
+    tools: { title: '其他工具', subtitle: 'Tools' },
+    shutdown: { title: '定时关机管理', subtitle: 'Shutdown Manager' },
+  };
 
   useEffect(() => {
     // 优化 IPC 监听器清理
@@ -295,16 +304,20 @@ const ReactGUI = () => {
       isWindowAlwaysOnTop: 'setWindowAlwaysOnTop',
       isDuringClassHidden: 'setDuringClassHidden',
       isAutoLaunch: 'setAutoLaunch',
-      scheduleShutdown: 'setScheduleShutdown'
     };
     ipcRenderer.send(ipcMessages[settingName], newValue);
   };
 
   const handleButtonClick = (action) => {
+    if (action === 'manageShutdown') {
+      setCurrentView('shutdown');
+      return;
+    }
+
     const ipcMessages = {
       week1: ['setWeekIndex', 0], week2: ['setWeekIndex', 1],
       openSetting: ['openSettingDialog'], correctTime: ['getTimeOffset', 0],
-      toggleSchedule: ['setDayOffset'], manageShutdown: ['openShutdownManager'],
+      toggleSchedule: ['setDayOffset'],
       devTools: ['openDevTools'], resetSettings: ['resetSettings'],
       moreInfo: ['showMoreInfo'], quitApp: ['quitApp']
     };
@@ -340,12 +353,13 @@ const ReactGUI = () => {
           {[
             { view: 'main', icon: <Calendar size={20} />, text: '功能选项' },
             { view: 'settings', icon: <Settings size={20} />, text: '设置选项' },
+            { view: 'editor', icon: <FilePenLine size={20} />, text: '课表编辑器' },
             { view: 'tools', icon: <Wrench size={20} />, text: '其他工具' },
           ].map(nav => (
             <Button key={nav.view} w="100%" justifyContent="flex-start" gap={3} h="44px"
-                    variant={currentView === nav.view ? 'solid' : 'ghost'}
-                    colorScheme={currentView === nav.view ? 'blue' : 'gray'}
-                    onClick={() => setCurrentView(nav.view)} leftIcon={nav.icon}>
+              variant={currentView === nav.view ? 'solid' : 'ghost'}
+              colorScheme={currentView === nav.view ? 'blue' : 'gray'}
+              onClick={() => setCurrentView(nav.view)} leftIcon={nav.icon}>
               {nav.text}
             </Button>
           ))}
@@ -359,20 +373,22 @@ const ReactGUI = () => {
       {/* 主内容区 */}
       <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
         <Box display="flex" alignItems="center" justifyContent="space-between" px={8} py={5}
-             bg={headerBg} borderBottom="1px" borderColor={borderColor}>
+          bg={headerBg} borderBottom="1px" borderColor={borderColor}>
           <Box>
-            <Heading size="md">仪表盘</Heading>
-            <Text fontSize="sm" color={mutedTextColor}>Dashboard</Text>
+            <Heading size="md">{viewTitles[currentView]?.title || '仪表盘'}</Heading>
+            <Text fontSize="sm" color={mutedTextColor}>{viewTitles[currentView]?.subtitle || 'Dashboard'}</Text>
           </Box>
           <Tooltip label={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="bottom">
             <IconButton onClick={toggleColorMode} variant="ghost" aria-label="切换主题"
-                        icon={isDarkMode ? <Sun size={20} /> : <Moon size={20} />} />
+              icon={isDarkMode ? <Sun size={20} /> : <Moon size={20} />} />
           </Tooltip>
         </Box>
 
         <Box flex={1} p={8} overflowY="auto" bg={bgColor}>
           {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} />}
           {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} />}
+          {currentView === 'editor' && <ScheduleEditorView ipcRenderer={ipcRenderer} />}
+          {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => setCurrentView('main')} />}
           {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}
         </Box>
       </Box>

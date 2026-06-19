@@ -7,8 +7,8 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script type="text/javascript" src="js/jquery.min.js"></script>
-  <script type="text/javascript" src="config://scheduleConfig.js"></script>
   <script type="text/javascript" src="js/index.js"></script>
+  <script type="text/javascript" src="js/scheduleBootstrap.js"></script>
   <link rel="stylesheet" type="text/css" href="css/style.css">
 </head>
 
@@ -35,9 +35,7 @@
   </div>
   <div class="miniCountdown" id="miniCountdown">00:00</div>
   <div class="dragBoundaryHint" id="dragBoundaryHint" aria-hidden="true"></div>
-  <div class="nextClassHint" id="nextClassHint"
-    style="display: none; position: fixed; border-radius: var(--global-border-radius); background-color: rgba(0, 0, 0, var(--global-bg-opacity)); padding: var(--countdown-bg-padding); font-size: var(--countdown-font-size); font-family: JETB; color: #FFF;">
-  </div>
+  <div class="nextClassHint" id="nextClassHint"></div>
   </div>
 
 </body>
@@ -45,7 +43,9 @@
 
 <script>
   const { ipcRenderer } = require('electron');
-  let scheduleData = getScheduleData();
+  let _scheduleConfig = null
+  let scheduleConfig = null
+  let scheduleData = null
   let globalContainer = document.getElementById('globalContainer')
   let classContainer = document.getElementById('classContainer')
   let countdownContainer = document.getElementById('countdownContainer')
@@ -90,7 +90,7 @@
     for (let i = 0; i < scheduleData.scheduleArray.length; i++) {
       let inner = scheduleData.scheduleArray[i]
       if (scheduleData.scheduleArray[i].indexOf('@') != -1) {
-        inner = `<div><div style="display:inline">${inner.split('@')[0]}</div><div class="subClass">${inner.split('@')[1]}</div></div>`
+        inner = `<div><div class="classNamePart">${inner.split('@')[0]}</div><div class="subClass">${inner.split('@')[1]}</div></div>`
       }
       if (scheduleData.currentHighlight.index == i) {
         if (scheduleData.currentHighlight.type === 'current')
@@ -100,7 +100,7 @@
       }
       else {
         if (scheduleData.currentHighlight.index > i)
-          classHtml += `<div class="class" style="color:rgba(166,166,166);">${inner}</div>`
+          classHtml += `<div class="class elapsed">${inner}</div>`
         else
           classHtml += `<div class="class">${inner}</div>`
       }
@@ -192,7 +192,7 @@
     if (scheduleData.currentHighlight.type === 'current') {
       if (isClassCountdown) {
         if (isClassHidden) { // 上课 并且开启了倒计时 并且 隐藏主体 -> 显示小窗口 
-          miniCountdown.innerHTML = `<div class="currentClass">${currentFullName.innerText = scheduleData.currentHighlight.fullName}</div><div class="countdown" style="margin-left:5px">${scheduleData.currentHighlight.countdownText}</div>`
+          miniCountdown.innerHTML = `<div class="currentClass">${currentFullName.innerText = scheduleData.currentHighlight.fullName}</div><div class="countdown miniCountdownText">${scheduleData.currentHighlight.countdownText}</div>`
           
           toggleElement(countdownContainer, false);
           toggleElement(miniCountdown, true);
@@ -451,20 +451,6 @@
     return null; 
   }
 
-  let lastTickTime = new Date().getTime()
-  setInterval(() => {
-    if (new Date().getTime() - lastTickTime >= 1000) {
-      lastTickTime = new Date().getTime()
-      tick()
-    }
-  }, 20);
-
-  for (key in scheduleConfig.css_style) {
-    root.style.setProperty(key, scheduleConfig.css_style[key])
-  }
-
-  initMiniCountdownDrag();
-
   let timer = undefined
 
   function handlePointerMove(event) {
@@ -482,9 +468,6 @@
 
     ipcRenderer.send('setIgnore', true)
   }
-
-  window.addEventListener('mousemove', handlePointerMove);
-  ipcRenderer.send('setIgnore', true)
 
   function setScheduleDialog() {
     ipcRenderer.send('dialog', {
@@ -586,6 +569,35 @@
     dayOffset = -1
     setDayOffsetLastDay = -1
   })
+
+  /**
+   * 使用主进程校验通过的课表配置启动页面。
+   * @param {Object} loadedScheduleConfig - 已校验的课表配置
+   */
+  function startSchedulePage(loadedScheduleConfig) {
+    _scheduleConfig = JSON.parse(JSON.stringify(loadedScheduleConfig))
+    scheduleConfig = JSON.parse(JSON.stringify(loadedScheduleConfig))
+    scheduleData = getScheduleData()
+
+    for (const key in scheduleConfig.css_style) {
+      root.style.setProperty(key, scheduleConfig.css_style[key])
+    }
+
+    tick(true)
+    initMiniCountdownDrag()
+    window.addEventListener('mousemove', handlePointerMove)
+    ipcRenderer.send('setIgnore', true)
+
+    let lastTickTime = new Date().getTime()
+    setInterval(() => {
+      if (new Date().getTime() - lastTickTime >= 1000) {
+        lastTickTime = new Date().getTime()
+        tick()
+      }
+    }, 20)
+  }
+
+  window.startSchedulePage = startSchedulePage
 </script>
 
 </html>
