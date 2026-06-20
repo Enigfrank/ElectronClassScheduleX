@@ -378,14 +378,23 @@ function UpdateManagerView({ ipcRenderer }) {
 
           {status.progress ? (
             <Box mt={4}>
-              <Progress
-                value={status.progress.percent}
-                size="sm"
-                borderRadius="md"
-                bg={progressTrackColor}
-              />
+              <Flex align="center" gap={3}>
+                <Progress
+                  value={status.progress.percent}
+                  size="sm"
+                  borderRadius="md"
+                  bg={progressTrackColor}
+                  flex={1}
+                />
+                <Text fontSize="sm" fontWeight="medium" color={mutedTextColor} minW="48px" textAlign="right">
+                  {status.progress.percent}%
+                </Text>
+              </Flex>
               <Text mt={2} fontSize="sm" color={mutedTextColor}>
-                {status.progress.percent}% · {status.progress.transferredText}/{status.progress.totalText} · {status.progress.speedText}
+                {status.progress.transferredText} / {status.progress.totalText} · {status.progress.speedText}
+              </Text>
+              <Text mt={1} fontSize="xs" color="gray.400">
+                全量安装包，非差分更新
               </Text>
             </Box>
           ) : null}
