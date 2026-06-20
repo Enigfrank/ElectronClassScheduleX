@@ -10,10 +10,12 @@ class TrayManager {
      * @param {Object} configManager - [冗余占位] 配置管理器实例（当前未使用，保留以防外部按位置传参错位）
      * @param {Object} logger - 日志记录器实例
      * @param {WindowManager} windowManager - 窗口管理器实例
+     * @param {Object|null} updateManager - 在线更新管理器实例
      */
-    constructor(configManager, logger, windowManager) {
+    constructor(configManager, logger, windowManager, updateManager = null) {
         this.logger = logger;
         this.windowManager = windowManager;
+        this.updateManager = updateManager;
         this.tray = null;
     }
 
@@ -57,6 +59,10 @@ class TrayManager {
                 label: '打开配置界面',
                 click: () => this.windowManager.createReactGUIWindow()
             },
+            {
+                label: '检查更新',
+                click: () => this.checkForUpdates()
+            },
             { type: 'separator' },
             {
                 icon: this.getAssetPath('image', 'quit.png'),
@@ -78,6 +84,25 @@ class TrayManager {
             cancelId: 0
         }).then(({ response }) => {
             if (response === 1) app.quit();
+        });
+    }
+
+    /**
+     * 从托盘触发手动检查更新。
+     */
+    checkForUpdates() {
+        if (!this.updateManager) {
+            this.log('warn', '[托盘管理] 更新管理器未初始化');
+            return;
+        }
+
+        this.updateManager.checkForUpdates({ isManual: true }).catch((error) => {
+            this.log('error', `[托盘管理] 检查更新失败: ${error.message}`);
+            dialog.showMessageBox({
+                type: 'error',
+                title: '检查更新失败',
+                message: error.message
+            });
         });
     }
 

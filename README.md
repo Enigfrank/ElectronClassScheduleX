@@ -1,37 +1,118 @@
+<p align="center">
+  <img src="src/image/icon.png" width="128" alt="电子课表" />
+</p>
 
+<h1 align="center">Electron Class Schedule X</h1>
+<p align="center">
+  一个基于 Electron 的桌面课程表应用，支持多周轮换、窗口置顶与穿透，专为 Windows 平台打造。
+</p>
 
-> 此项目对原版 `ECS V1` 进行更改 [原仓库](https://github.com/EnderWolf006/ElectronClassSchedule)
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/Enigfrank/ElectronClassScheduleX?color=%23238b00&label=release" alt="release" />
+  <img src="https://img.shields.io/github/license/Enigfrank/ElectronClassScheduleX?color=%234c1" alt="license" />
+  <img src="https://img.shields.io/badge/platform-Windows%20x64-blue" alt="platform" />
+  <img src="https://img.shields.io/github/actions/workflow/status/Enigfrank/ElectronClassScheduleX/main.yml?branch=main" alt="build" />
+</p>
 
-## 📋 功能说明
-- 显示每日/每周课程安排
-- 支持多周课表轮换
-- 窗口置顶、点击穿透
-- 本地存储，无需联网
+---
 
-## 构建方法
- - 1. 下载本仓库
- - 2. 执行 npm install ; npm rebuild
- - 3. 调试使用 npm start 构建使用npm run build
+## 功能特性
 
+- **每日 / 每周课表** - 清晰展示当日课程与完整周视图
+- **多周轮换** - 支持学校常见单双周 / 多周轮换课表
+- **窗口置顶** - 课表始终悬浮在桌面上方，方便随时查看
+- **点击穿透** - 透传鼠标事件至下层窗口，不影响正常操作
+- **自动更新** - 内建更新检测，有新版本时自动提醒安装
+- **本地优先** - 所有数据保存在本地，无需联网即可正常使用
 
-## 🔐 隐私政策
-本程序为纯本地应用，**不会收集、存储或传输任何用户数据**到网络系统。所有课表数据仅保存在用户本地设备。
+## 安装
 
-## 📜 Code signing policy
-Free code signing provided by SignPath.io, certificate by SignPath Foundation
+从 [Releases](https://github.com/Enigfrank/ElectronClassScheduleX/releases) 页面下载最新 `Setup.*.exe` 安装包，双击运行即可。
 
-### 团队角色
-| 角色 | 成员 |
-|------|------|
-| Author/Reviewer/Approver | [@Enigfrank](https://github.com/Enigfrank) |
+> 首次运行时 Windows SmartScreen 可能会弹出警告，请点击 **"更多信息" → "仍要运行"**。这是未签名应用在 Windows 上的正常行为。
 
-> 注：本项目为个人维护的开源项目，所有代码变更与签名请求均由单一维护者负责。
+## 开发
 
+### 环境要求
 
+- [Node.js](https://nodejs.org/) >= 24
+- [Yarn](https://yarnpkg.com/) >= 4（通过 Corepack 启用）
+- Windows 10+ (x64)
 
+### 克隆并启动
 
-## 开源协议
+```bash
+git clone https://github.com/Enigfrank/ElectronClassScheduleX.git
+cd ElectronClassScheduleX
 
-本软件遵循 `GPLv3` 开源协议
+corepack enable
+corepack yarn install --frozen-lockfile
+corepack yarn start
+```
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Enigfrank/ElectronClassScheduleX&type=Date)](https://www.star-history.com/#Enigfrank/ElectronClassScheduleX&Date)
+### 构建安装包
+
+```bash
+corepack yarn build
+```
+
+构建产物位于 `out/` 目录。
+
+### 运行测试
+
+```bash
+corepack yarn test
+```
+
+## 技术栈
+
+| 层级 | 技术 |
+| :--- | :--- |
+| 桌面框架 | Electron 42 |
+| 前端 UI | React 19 + Vite 8 |
+| 样式 | CSS Variables（设计令牌驱动） |
+| 图标 | Lucide React |
+| 本地存储 | electron-store |
+| 自动更新 | electron-updater |
+| 构建 | electron-builder (NSIS) |
+
+## 项目结构
+
+```
+.
+├── .github/workflows/    # CI/CD 工作流
+├── docs/                  # 设计文档
+├── ECSX-Gui/              # React 前端（独立 Vite 项目）
+│   └── src/
+├── src/                   # Electron 主进程
+│   ├── main.js            # 入口
+│   ├── modules/           # 功能模块
+│   └── image/             # 图标资源
+├── tests/                 # 测试文件
+├── package.json           # 项目元数据与构建配置
+└── yarn.lock              # 依赖锁文件
+```
+
+## 隐私
+
+本应用为纯本地程序，**不收集、存储或传输任何用户数据**至远程服务器。所有课表配置仅保存在用户本地设备的 `%APPDATA%\electron-class-schedule-x` 目录下。
+
+## 代码签名
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+## 致谢
+
+本项目基于 [ElectronClassSchedule](https://github.com/EnderWolf006/ElectronClassSchedule)（ECS V1）重构开发，感谢原作者的贡献。
+
+## 许可证
+
+本项目采用 [GNU General Public License v3.0](LICENSE) 开源协议。
+
+---
+
+<p align="center">
+  <a href="https://www.star-history.com/#Enigfrank/ElectronClassScheduleX&Date">
+    <img src="https://api.star-history.com/svg?repos=Enigfrank/ElectronClassScheduleX&type=Date" alt="Star History" width="600" />
+  </a>
+</p>

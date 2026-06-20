@@ -20,7 +20,11 @@ class ConfigManager {
             scheduleShutdown: false,
             shutdownTimes: [],
             isFirstRun: true,
-            isOobeCompleted: false
+            isOobeCompleted: false,
+            autoCheckUpdates: true,
+            useUpdateProxy: true,
+            updateProxyId: 'gh-proxy-v4',
+            customUpdateProxyPrefix: ''
         };
     }
 
@@ -126,6 +130,34 @@ class ConfigManager {
 
     setOobeCompleted(value) {
         this.set('isOobeCompleted', value);
+    }
+
+    /**
+     * 获取在线更新配置。
+     * @returns {Object} 在线更新配置
+     */
+    getUpdateSettings() {
+        return {
+            autoCheckUpdates: this.get('autoCheckUpdates'),
+            useUpdateProxy: this.get('useUpdateProxy'),
+            updateProxyId: this.get('updateProxyId'),
+            customUpdateProxyPrefix: this.get('customUpdateProxyPrefix')
+        };
+    }
+
+    /**
+     * 保存在线更新配置。
+     * @param {Object} settings 在线更新配置
+     * @returns {Object} 保存后的配置
+     */
+    setUpdateSettings(settings = {}) {
+        const allowedKeys = ['autoCheckUpdates', 'useUpdateProxy', 'updateProxyId', 'customUpdateProxyPrefix'];
+        for (const key of allowedKeys) {
+            if (Object.prototype.hasOwnProperty.call(settings, key)) {
+                this.set(key, settings[key]);
+            }
+        }
+        return this.getUpdateSettings();
     }
 }
 

@@ -36,6 +36,32 @@
 }
 
 :root {
+    --color-primary: #2563eb;
+    --color-secondary: #4b5563;
+    --color-neutral-50: #f8f9fa;
+    --color-neutral-100: #f3f4f6;
+    --color-neutral-200: #e5e7eb;
+    --color-neutral-300: #d1d5db;
+    --color-neutral-400: #9ca3af;
+    --color-neutral-500: #6b7280;
+    --color-neutral-900: #111827;
+    --color-success: #16a34a;
+    --color-warning: #d97706;
+    --color-error: #dc2626;
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 20px;
+    --text-xl: 24px;
+    --text-2xl: 32px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --space-16: 64px;
     transition: opacity .5s .2s;
 }
 
@@ -95,6 +121,10 @@
 .class {
     color: rgba(255, 255, 255, 1);
     margin: 0 var(--main-horizontal-space);
+}
+
+.elapsed {
+    color: rgba(166, 166, 166);
 }
 
 .current {
@@ -302,7 +332,23 @@
     font-size: var(--sub-font-size);
 }
 
+.classNamePart {
+    display: inline;
+}
+
+.miniCountdownText {
+    margin-left: var(--space-1);
+}
+
 .nextClassHint {
+    display: none;
+    position: fixed;
+    border-radius: var(--global-border-radius);
+    background-color: rgba(0, 0, 0, var(--global-bg-opacity));
+    padding: var(--countdown-bg-padding);
+    font-size: var(--countdown-font-size);
+    font-family: JETB;
+    color: #FFF;
     transition: opacity 0.5s;
     border: 2px solid #4CAF50;
     /* 绿色边框突出提示 */

@@ -4,7 +4,7 @@ const path = require('path');
 
 /**
  * 窗口管理模块
- * 负责应用程序中所有 Electron 窗口（主窗口、仪表盘、OOBE、加载框等）的创建、显示、关闭及层级管理。
+ * 负责应用程序中所有 Electron 窗口（主窗口、仪表盘、OOBE、加载框等）的创建、显示、关闭及层级管理
  */
 class WindowManager {
     /**
@@ -86,7 +86,7 @@ class WindowManager {
     refreshWindowAlwaysOnTop(win) {
         if (!win || win.isDestroyed()) return;
 
-        // 使用 screen-saver 层级，确保主窗口能压过普通窗口和多数全屏窗口。
+        // 使用 screen-saver 层级，确保主窗口能压过普通窗口和多数全屏窗口
         win.setAlwaysOnTop(true, 'screen-saver');
         if (win.isVisible() && typeof win.moveTop === 'function') {
             win.moveTop();
@@ -95,7 +95,7 @@ class WindowManager {
 
     /**
      * 启动主窗口置顶恢复守护
-     * Windows 全屏程序可能重排顶层窗口栈，因此需要定期重新声明主窗口置顶层级。
+     * Windows 全屏程序可能重排顶层窗口栈，因此需要定期重新声明主窗口置顶层级
      * @param {BrowserWindow} win - 主窗口实例
      */
     startMainWindowAlwaysOnTopGuard(win) {
@@ -110,7 +110,7 @@ class WindowManager {
             }
 
             this.refreshWindowAlwaysOnTop(win);
-        // 每 2 秒刷新一次置顶层级，修复全屏程序重排 z-order 后置顶失效的问题。
+        // 每 2 秒刷新一次置顶层级，修复全屏程序重排 z-order 后置顶失效的问题
         }, 2000);
         this.mainAlwaysOnTopRestoreTimer.unref?.();
     }
@@ -173,6 +173,24 @@ class WindowManager {
 
         this.setWindowAlwaysOnTop(win, this.configManager.getWindowAlwaysOnTop());
         return win;
+    }
+
+    /**
+     * 销毁并重新创建主课表窗口，使 index.html 重新加载最新课表配置
+     * @returns {BrowserWindow} 新创建或复用的主窗口实例
+     */
+    reloadMainScheduleWindow() {
+        const currentWindow = this.windows.main;
+        if (currentWindow && !currentWindow.isDestroyed()) {
+            this.log('info', '[窗口管理] 重建主课表窗口: 销毁旧主窗口');
+            currentWindow.destroy();
+        } else {
+            this.log('info', '[窗口管理] 重建主课表窗口: 未发现可销毁的旧主窗口');
+        }
+
+        const newWindow = this.createMainWindow();
+        this.log('info', '[窗口管理] 重建主课表窗口: 新主窗口已创建');
+        return newWindow;
     }
 
     /**
@@ -306,7 +324,7 @@ class WindowManager {
 
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-        const windowWidth = 900;
+        const windowWidth = 1080;
         const windowHeight = 650;
 
         const oobeWindow = new BrowserWindow({

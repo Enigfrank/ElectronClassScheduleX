@@ -9,163 +9,141 @@
 </head>
 
 <body>
-    <div class="oobe-container">
-        <!-- 顶部步骤指示器 -->
-        <div class="step-indicator">
-            <div class="step active" data-step="1">
-                <div class="step-number">1</div>
-                <div class="step-label">课表配置</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="2">
-                <div class="step-number">2</div>
-                <div class="step-label">作业功能</div>
-            </div>
-            <div class="step-line"></div>
-            <div class="step" data-step="3">
-                <div class="step-number">3</div>
-                <div class="step-label">完成</div>
-            </div>
-        </div>
-
-        <!-- 内容区域 -->
-        <div class="content-area">
-            <!-- 步骤一：课表配置引导 -->
-            <div class="step-content active" id="step1">
-                <div class="step-header">
-                    <h1 class="step-title">配置您的课表</h1>
-                    <p class="step-description">首先,您需要配置课程表信息,这是应用正常运行的基础</p>
+    <div class="oobe-shell">
+        <aside class="oobe-sidebar" aria-label="初始设置步骤">
+            <div class="brand-block">
+                <span class="brand-icon icon icon-calendar" aria-hidden="true"></span>
+                <div>
+                    <p class="brand-title">课表管理</p>
+                    <p class="brand-subtitle">Initial setup</p>
                 </div>
+            </div>
 
-                <div class="info-card">
-                    <div class="info-icon">📚</div>
-                    <div class="info-text">
-                        <h3>为什么需要配置课表？</h3>
-                        <p>配置决定了应用显示的课程内容,时间安排和倒计时功能.正确配置后,应用将自动显示当前课程和倒计时.</p>
+            <div class="step-indicator">
+                <div class="step active" data-step="1">
+                    <div class="step-number">1</div>
+                    <div class="step-meta">
+                        <div class="step-label">课表配置</div>
+                        <div class="step-note">准备 scheduleConfig.js</div>
                     </div>
                 </div>
-
-                <div class="config-section">
-                    <h3>配置步骤</h3>
-                    <ol class="config-steps">
-                        <li>点击下方的"打开配置文件夹"按钮</li>
-                        <li>编辑 <code>scheduleConfig.js</code> 文件</li>
-                        <li>可选: 将文件上传到config.cavendi.top进行可视化编辑</li>
-                        <li>按照文件中的注释修改课程信息</li>
-                        <li>保存文件后请点击下一步</li>
-                    </ol>
+                <div class="step-line"></div>
+                <div class="step" data-step="2">
+                    <div class="step-number">2</div>
+                    <div class="step-meta">
+                        <div class="step-label">完成</div>
+                        <div class="step-note">保存并重新启动</div>
+                    </div>
                 </div>
+            </div>
 
-                <div class="config-example">
-                    <h4>配置文件示例</h4>
-                    <pre class="code-block"><code>// 科目名称映射
+            <div class="sidebar-footer">
+                <p>© 2026 Enigfrank 版权所有</p>
+            </div>
+        </aside>
+
+        <main class="oobe-main">
+            <header class="oobe-header">
+                <div>
+                    <h1>初始设置</h1>
+                    <p>配置应用运行所需的课表文件</p>
+                </div>
+            </header>
+
+            <section class="content-area" aria-live="polite">
+                <div class="step-content active" id="step1">
+                    <div class="step-header">
+                        <p class="section-kicker">Schedule Config</p>
+                        <h2 class="step-title">配置您的课表</h2>
+                        <p class="step-description">请先准备课程表信息，这是应用显示课程、时间安排和倒计时的基础</p>
+                    </div>
+
+                    <div class="content-grid">
+                        <div class="panel">
+                            <div class="panel-heading">
+                                <span class="panel-icon icon icon-list" aria-hidden="true"></span>
+                                <h3>配置步骤</h3>
+                            </div>
+                            <ol class="config-steps">
+                                <li>请直接点击下一步,将会生成默认课表</li>
+                                <li>请前往仪表盘配置</li>
+                            </ol>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-heading">
+                                <span class="panel-icon icon icon-code" aria-hidden="true"></span>
+                                <h3>配置文件示例</h3>
+                            </div>
+                            <pre class="code-block"><code>// 科目名称映射
 subject_name: {
     "YW": "语文",
     "SX": "数学",
-    "YY": "英语",
-    // ... 更多科目
+    "YY": "英语"
 }
 
 // 每日课程安排
 daily_class: {
-    1: {  // 星期一
-        classList: ["YW", "SX", "YY", ...],
+    1: {
+        classList: ["YW", "SX", "YY"],
         timetable: "default"
     }
 }</code></pre>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-open-folder" id="btnOpenConfigFolder">
+                        <span class="btn-icon icon icon-folder" aria-hidden="true"></span>
+                        打开配置文件夹
+                    </button>
                 </div>
 
-                <button class="btn btn-primary btn-open-folder" id="btnOpenConfigFolder">
-                    <span class="btn-icon">📁</span>
-                    打开配置文件夹
+                <div class="step-content" id="step2">
+                    <div class="completion-content">
+                        <span class="success-icon icon icon-check" aria-hidden="true"></span>
+                        <p class="section-kicker">Ready</p>
+                        <h2 class="step-title">设置完成</h2>
+                        <p class="step-description">请点击开始使用保存状态，然后重新打开课表程序</p>
+                    </div>
+
+                    <div class="summary-grid">
+                        <div class="panel author-card">
+                            <div class="author-avatar">E</div>
+                            <div class="author-info">
+                                <h3>Enigfrank</h3>
+                                <p>开发者 & 设计者</p>
+                            </div>
+                        </div>
+
+                        <div class="panel license-section">
+                            <h3>许可证声明</h3>
+                            <p>本软件基于开源协议发布，仅供学习和个人使用</p>
+                            <p class="license-text">GPL-3.0 License - Copyright (c) 2026 Enigfrank</p>
+                        </div>
+                    </div>
+
+                    <div class="panel features-preview">
+                        <h3>现在可以使用以下功能</h3>
+                        <ul class="feature-list">
+                            <li><span class="icon icon-calendar" aria-hidden="true"></span>实时课程表显示</li>
+                            <li><span class="icon icon-clock" aria-hidden="true"></span>课程倒计时提醒</li>
+                            <li><span class="icon icon-refresh" aria-hidden="true"></span>单双周自动切换</li>
+                            <li><span class="icon icon-power" aria-hidden="true"></span>定时关机管理</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="navigation">
+                <button class="btn btn-secondary is-hidden" id="btnPrev">
+                    上一步
                 </button>
-            </div>
-
-            <!-- 步骤二：作业功能配置 -->
-            <div class="step-content" id="step2">
-                <div class="step-header">
-                    <h1 class="step-title">作业接收功能</h1>
-                    <p class="step-description">可选配置,启用后可以从服务器接收作业信息</p>
-                </div>
-
-                <div class="feature-toggle">
-                    <div class="toggle-info">
-                        <h3>启用作业功能</h3>
-                        <p>开启后,应用将从服务器获取作业信息并在适当时间显示</p>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="assignmentToggle">
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                <div class="config-form" id="assignmentConfigForm" style="display: none;">
-                    <div class="form-group">
-                        <label for="serverUrl">服务器地址</label>
-                        <input type="text" id="serverUrl" placeholder="http://example.com:3000">
-                        <span class="form-hint">服务器地址,用于接收作业推送</span>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="clientName">客户端名称</label>
-                        <input type="text" id="clientName" placeholder="例如:高二(1)班">
-                        <span class="form-hint">此名称将显示在服务器端,用于标识此设备</span>
-                    </div>
-                </div>
-
-                <div class="info-card info-tip">
-                    <div class="info-icon">💡</div>
-                    <div class="info-text">
-                        <p>如果您没有作业服务器,可以跳过此步骤,稍后在设置中随时启用.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 步骤三：完成页面 -->
-            <div class="step-content" id="step3">
-                <div class="completion-content">
-                    <div class="success-icon">✓</div>
-                    <h1 class="step-title">设置完成！</h1>
-                    <p class="step-description">您已完成初始配置,请点击下一步保存然后重新打开课表程序</p>
-                </div>
-
-                <div class="info-card author-card">
-                    <div class="author-avatar">E</div>
-                    <div class="author-info">
-                        <h3>Enigfrank</h3>
-                        <p>开发者 & 设计者</p>
-                    </div>
-                </div>
-
-                <div class="license-section">
-                    <h4>许可证声明</h4>
-                    <p>本软件基于开源协议发布,仅供学习和个人使用.</p>
-                    <p class="license-text">GPL-3.0 License - Copyright (c) 2026 Enigfrank</p>
-                </div>
-
-                <div class="features-preview">
-                    <h4>您现在可以使用以下功能：</h4>
-                    <ul class="feature-list">
-                        <li>📅 实时课程表显示</li>
-                        <li>⏰ 课程倒计时提醒</li>
-                        <li>🔄 单双周自动切换</li>
-                        <li>📚 作业接收与显示（如已启用）</li>
-                        <li>⚡ 定时关机管理</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- 底部导航 -->
-        <div class="navigation">
-            <button class="btn btn-secondary" id="btnPrev" style="display: none;">
-                上一步
-            </button>
-            <div class="nav-spacer"></div>
-            <button class="btn btn-primary" id="btnNext">
-                下一步
-            </button>
-        </div>
+                <div class="nav-spacer"></div>
+                <button class="btn btn-primary" id="btnNext">
+                    下一步
+                </button>
+            </footer>
+        </main>
     </div>
 
     <script src="./js/oobe.js"></script>
