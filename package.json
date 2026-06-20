@@ -36,20 +36,17 @@
     "artifactName": "Setup.${version}.${ext}",
     "compression": "maximum",
     "copyright": "Copyright © Enigfrank",
+    "electronLanguages": ["zh-CN", "en-US"],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "src/image/icon.ico",
       "signtoolOptions": {
-        "signingHashAlgorithms": [
-          "sha256"
-        ],
+        "signingHashAlgorithms": ["sha256"],
         "rfc3161TimeStampServer": "http://timestamp.digicert.com"
       }
     },
