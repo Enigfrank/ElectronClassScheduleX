@@ -1,6 +1,6 @@
 {
   "name": "electron-class-schedule-x",
-  "version": "1.6.0",
+  "version": "1.7.1",
   "description": "电子课表",
   "main": "src/main.js",
   "author": {
@@ -22,6 +22,7 @@
     "electron-log": "^5.4.4",
     "electron-prompt": "^1.7.0",
     "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.9",
     "iconv-lite": "^0.7.2",
     "json5": "^2.2.3",
     "react": "^19.2.6",
@@ -32,6 +33,7 @@
     "asarUnpack": [],
     "appId": "com.enigfrank.ElectronClassScheduleX",
     "productName": "电子课表",
+    "artifactName": "Setup.${version}.${ext}",
     "compression": "maximum",
     "copyright": "Copyright © Enigfrank",
     "win": {
@@ -62,7 +64,14 @@
     ],
     "directories": {
       "output": "out"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Enigfrank",
+        "repo": "ElectronClassScheduleX"
+      }
+    ]
   },
   "packageManager": "yarn@4.14.1"
 }

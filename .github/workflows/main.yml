@@ -84,6 +84,22 @@ jobs:
             Write-Warning "⚠️ 未找到 .blockmap 文件（自动更新可能无法工作）"
           }
 
+          $warningBytes = 120MB
+          $failBytes = 150MB
+          foreach ($exe in $exeFiles) {
+            $sizeMb = [Math]::Round($exe.Length / 1MB, 2)
+            Write-Host "安装包大小: $($exe.Name) = ${sizeMb}MB"
+
+            if ($exe.Length -gt $failBytes) {
+              Write-Error "❌ 安装包超过 150MB: $($exe.Name) (${sizeMb}MB)"
+              exit 1
+            }
+
+            if ($exe.Length -gt $warningBytes) {
+              Write-Warning "⚠️ 安装包超过 120MB: $($exe.Name) (${sizeMb}MB)"
+            }
+          }
+
           Write-Host "✅ 构建产物已就绪"
 
       - name: 创建 GitHub 发布

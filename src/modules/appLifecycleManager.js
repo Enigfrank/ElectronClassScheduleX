@@ -7,6 +7,7 @@ const WindowManager = require('./windowManager');
 const TrayManager = require('./trayManager');
 const ShutdownScheduler = require('./shutdownScheduler');
 const AutoLaunchManager = require('./autoLaunchManager');
+const UpdateManager = require('./updateManager');
 const Utils = require('./utils');
 const IpcManager = require('./ipcManager');
 const ScheduleConfigExtractor = require('./scheduleConfigExtractor');
@@ -24,6 +25,7 @@ class AppLifecycleManager {
         this.trayManager = null;
         this.shutdownScheduler = null;
         this.autoLaunchManager = null;
+        this.updateManager = null;
         this.ipcManager = null;
         this.scheduleConfigExtractor = null;
     }
@@ -112,13 +114,19 @@ class AppLifecycleManager {
         this.configManager = new ConfigManager(this.logger);
         this.utils = new Utils(this.logger);
         this.windowManager = new WindowManager(this.configManager, this.logger);
-        this.trayManager = new TrayManager(null, this.logger, this.windowManager);
         this.shutdownScheduler = new ShutdownScheduler(this.configManager, this.logger);
         this.autoLaunchManager = new AutoLaunchManager(this.configManager, this.logger);
+        this.updateManager = new UpdateManager({
+            configManager: this.configManager,
+            logger: this.logger,
+            windowManager: this.windowManager
+        });
+        this.updateManager.initialize();
+        this.trayManager = new TrayManager(null, this.logger, this.windowManager, this.updateManager);
 
         this.ipcManager = new IpcManager(
             this.configManager, this.logger, this.windowManager,
-            this.trayManager, this.shutdownScheduler, this.autoLaunchManager
+            this.trayManager, this.shutdownScheduler, this.autoLaunchManager, this.updateManager
         );
 
         this.logger.info('所有模块初始化完成');
@@ -168,6 +176,8 @@ class AppLifecycleManager {
         } catch (error) {
             this.logger?.error(`[启动流程] 托盘模块初始化失败: ${error.message}`);
         }
+
+        this.updateManager?.startAutoCheck();
 
         this.logger?.info('应用初始化完成');
     }
@@ -227,6 +237,7 @@ class AppLifecycleManager {
             trayManager: this.trayManager,
             shutdownScheduler: this.shutdownScheduler,
             autoLaunchManager: this.autoLaunchManager,
+            updateManager: this.updateManager,
             utils: this.utils,
             scheduleConfigExtractor: this.scheduleConfigExtractor
         };
