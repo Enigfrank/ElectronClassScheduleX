@@ -305,8 +305,6 @@ function UpdateManagerView({ ipcRenderer }) {
 
   return (
     <>
-      <Text fontSize="xl" fontWeight="semibold" mb={4}>在线更新</Text>
-
       <SimpleGrid columns={[1, 2, 4]} gap={4} mb={6}>
         <Card bg={cardBg}>
           <CardBody>
