@@ -117,3 +117,7 @@ out/
 agent.md
 tests
 /docs
+/.agents
+/.codex
+/.trellis
+AGENTS.md
