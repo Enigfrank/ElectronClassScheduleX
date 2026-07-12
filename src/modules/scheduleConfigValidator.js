@@ -1,3 +1,5 @@
+const { isValidSemesterStartDate } = require('../shared/weekRotation');
+
 /**
  * 判断值是否为普通对象
  * @param {*} value - 待检查的值
@@ -106,6 +108,18 @@ function validateTimetableRanges(timetable, errors) {
 }
 
 /**
+ * 校验可选的学期起始日期。
+ * @param {Object} config 课表配置对象
+ * @param {Array} errors 错误收集数组
+ */
+function validateSemesterStartDate(config, errors) {
+    if (config.semester_start_date === undefined || config.semester_start_date === '') return;
+    if (!isValidSemesterStartDate(config.semester_start_date)) {
+        errors.push(createError('semester_start_date', '“学期起始日期”格式不正确，请使用有效的 YYYY-MM-DD 日期，例如 2026-09-01'));
+    }
+}
+
+/**
  * 校验单个课程简称是否存在于 subject_name
  * @param {*} subject - 课程简称或轮换课程数组
  * @param {string} path - 字段路径
@@ -198,6 +212,7 @@ function validateScheduleConfig(config) {
     validateTopLevelSections(config, errors);
     if (errors.some((error) => error.path === 'scheduleConfig')) return errors;
 
+    validateSemesterStartDate(config, errors);
     validateTimetableRanges(config?.timetable, errors);
     validateDailyClassReferences(config, errors);
 

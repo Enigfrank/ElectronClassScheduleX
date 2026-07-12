@@ -1,4 +1,4 @@
-const SELECT_DIALOG_WIDTH = 350;
+const SELECT_DIALOG_WIDTH = 520;
 const SELECT_DIALOG_HEIGHT = 200;
 
 /**
@@ -15,7 +15,7 @@ function buildSelectOptions(items) {
 
 /**
  * 注册应用级操作、通用对话框与计时校正 IPC 事件。
- * @param {{ipcMain: Electron.IpcMain, configManager: Object, windowManager: Object, app: Electron.App, dialog: Electron.Dialog, shell: Electron.Shell, BrowserWindow: typeof Electron.BrowserWindow, prompt: Function, path: Object, log: Function}} dependencies 注册依赖
+ * @param {{ipcMain: Electron.IpcMain, configManager: Object, windowManager: Object, app: Electron.App, dialog: Electron.Dialog, shell: Electron.Shell, prompt: Function, log: Function}} dependencies 注册依赖
  */
 function registerApplicationIpc({
     ipcMain,
@@ -24,13 +24,9 @@ function registerApplicationIpc({
     app,
     dialog,
     shell,
-    BrowserWindow,
     prompt,
-    path,
     log
 }) {
-    let amtlsWindow = null;
-
     /**
      * 获取课程选择窗口的父窗口，优先挂载到 Dashboard。
      * @returns {Electron.BrowserWindow|undefined} 可用的父窗口
@@ -107,24 +103,6 @@ function registerApplicationIpc({
     }
 
     /**
-     * 显示 AMTLS 提示窗口并在五秒后自动关闭。
-     */
-    function showAmtlsWindow() {
-        amtlsWindow = new BrowserWindow({
-            width: 800,
-            height: 680,
-            frame: false,
-            alwaysOnTop: true,
-            modal: true,
-            webPreferences: { nodeIntegration: true, contextIsolation: false }
-        });
-
-        amtlsWindow.loadFile(path.join(__dirname, '..', '..', 'amtls.html'));
-        setTimeout(() => amtlsWindow?.close(), 5000);
-        amtlsWindow.on('closed', () => { amtlsWindow = null; });
-    }
-
-    /**
      * 显示计时偏移输入框并把结果发送给主课表窗口。
      * @param {Electron.IpcMainEvent} event IPC 事件
      * @param {*} arg 初始偏移值
@@ -163,18 +141,18 @@ function registerApplicationIpc({
     ipcMain.on('resetSettings', () => {
         log('info', '[IPC管理] 重置设置');
         dialog.showMessageBox({
+            type: 'warning',
             title: '重置设置',
-            message: '请选择重置内容',
-            buttons: ['恢复初始设置', '其他操作']
+            message: '恢复初始设置后，应用将重新打开首次设置向导。',
+            buttons: ['取消', '恢复初始设置'],
+            defaultId: 0,
+            cancelId: 0
         }).then((data) => {
-            if (data.response === 0) {
-                log('info', '[IPC管理] 用户选择恢复初始设置');
-                configManager.set('isFirstRun', true);
-                app.relaunch();
-                app.exit(0);
-            } else if (data.response === 1) {
-                showAmtlsWindow();
-            }
+            if (data.response !== 1) return;
+            log('info', '[IPC管理] 用户选择恢复初始设置');
+            configManager.set('isFirstRun', true);
+            app.relaunch();
+            app.exit(0);
         }).catch((error) => log('error', `[IPC管理] 重置设置时出错: ${error.message}`));
     });
 

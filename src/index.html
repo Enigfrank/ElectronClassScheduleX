@@ -7,6 +7,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script type="text/javascript" src="js/jquery.min.js"></script>
+  <script type="text/javascript" src="shared/weekRotation.js"></script>
   <script type="text/javascript" src="js/index.js"></script>
   <script type="text/javascript" src="js/scheduleBootstrap.js"></script>
   <link rel="stylesheet" type="text/css" href="css/style.css">
@@ -56,6 +57,7 @@
   let miniCountdown = document.getElementById('miniCountdown')
   let countdownSidebar = document.getElementById('countdownSidebar')
   let root = document.querySelector(':root');
+  const globalContainerHitTargets = [globalContainer, ...globalContainer.children];
   let isClassCountdown = true
   let isClassHidden = true
   let isCountdownerPositionRetryPending = false
@@ -84,6 +86,9 @@
   let nextClassHint = document.getElementById('nextClassHint');
   let isHintShown = false; 
   let hintTimer = null; 
+  const visibilityTransitionDurationMs = 200;
+  const toolbarRestoreDelayMs = 2500;
+  const visibilityHideTimers = new WeakMap();
 
   function setScheduleClass() {
     let classHtml = '';
@@ -117,7 +122,25 @@
     }
   }
 
+  /**
+   * 使用统一透明度过渡切换倒计时元素，并跳过重复状态更新。
+   * @param {HTMLElement} element - 要切换的元素
+   * @param {boolean} show - 是否显示元素
+   */
   function toggleElement(element, show) {
+      const isVisible = element.classList.contains('fade-element');
+      const isHidden = element.classList.contains('fade-hidden');
+
+      if ((show && isVisible) || (!show && (isHidden || element.style.display === 'none'))) {
+          return;
+      }
+
+      const pendingHideTimer = visibilityHideTimers.get(element);
+      if (pendingHideTimer) {
+          clearTimeout(pendingHideTimer);
+          visibilityHideTimers.delete(element);
+      }
+
       if (show) {
           element.style.display = 'block';
           void element.offsetWidth;
@@ -135,11 +158,13 @@
               ipcRenderer.send('updateInteractiveRect', null);
           }
           
-          setTimeout(() => {
+          const hideTimer = setTimeout(() => {
               if (element.classList.contains('fade-hidden')) {
                   element.style.display = 'none';
               }
-          }, 500);
+              visibilityHideTimers.delete(element);
+          }, visibilityTransitionDurationMs);
+          visibilityHideTimers.set(element, hideTimer);
       }
   }
 
@@ -184,7 +209,7 @@
             nextClassHint.style.display = 'none';
             nextClassHint.classList.remove('fadeOut');
             isHintShown = false; // 重置状态，允许下次触发
-          }, 500); // 等待淡出动画完成
+          }, visibilityTransitionDurationMs); // 等待淡出动画完成
         }, 12500);
       }
     }
@@ -451,22 +476,34 @@
     return null; 
   }
 
-  let timer = undefined
+  let toolbarRestoreTimer = undefined
 
+  /**
+   * 指针进入课表主体时立即隐藏工具条，并在停止移动后恢复显示。
+   * @param {MouseEvent} event - 窗口转发的鼠标移动事件
+   */
   function handlePointerMove(event) {
-    const miniCountdown = document.getElementById('miniCountdown');
-
     if (miniCountdown.style.display === 'block') {
       return;
     }
 
-    root.style.opacity = '0'
-    clearTimeout(timer)
-    timer = setTimeout(() => {
-      root.style.opacity = '1'
-    }, 2500);
+    const isInsideGlobalContainer = globalContainerHitTargets.some((element) => {
+      const bounds = element.getBoundingClientRect();
+      return event.clientX >= bounds.left
+        && event.clientX <= bounds.right
+        && event.clientY >= bounds.top
+        && event.clientY <= bounds.bottom;
+    });
 
-    ipcRenderer.send('setIgnore', true)
+    if (!isInsideGlobalContainer) {
+      return;
+    }
+
+    root.style.opacity = '0'
+    clearTimeout(toolbarRestoreTimer)
+    toolbarRestoreTimer = setTimeout(() => {
+      root.style.opacity = '1'
+    }, toolbarRestoreDelayMs);
   }
 
   function setScheduleDialog() {
@@ -547,8 +584,7 @@
   })
 
   ipcRenderer.on('getWeekIndex', (e, arg) => {
-    let index = localStorage.getItem('weekIndex');
-    ipcRenderer.send('getWeekIndex', index === null ? 0 : Number(index))
+    ipcRenderer.send('getWeekIndex', getCurrentWeekIndex(getCurrentEditedDate()))
   })
 
   ipcRenderer.on('getTimeOffset', (e, arg) => {

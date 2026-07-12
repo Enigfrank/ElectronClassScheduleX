@@ -39,7 +39,8 @@ export function parseTypedValue(value) {
  * @returns {string|string[]} 课程项
  */
 export function parseClassItem(value) {
-  const tokens = value.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);
+  const tokens = value.split(/[,，、]/).map((item) => item.trim());
+  if (tokens.every((item) => item === '')) return '';
   return tokens.length > 1 ? tokens : tokens[0] || '';
 }
 

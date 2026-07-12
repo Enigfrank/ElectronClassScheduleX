@@ -8,6 +8,7 @@ import {
   CardBody,
   Flex,
   FormControl,
+  FormHelperText,
   FormLabel,
   HStack,
   Input,
@@ -36,6 +37,7 @@ import {
   detectSourceStructure,
   formatScheduleConfigError,
   generateScheduleConfigSource,
+  getStyleFieldComment,
   normalizeScheduleConfig,
   normalizeScheduleConfigForEditor,
   normalizeTimeRange,
@@ -58,12 +60,12 @@ import {
 
 /**
  * ECSX GUI 内嵌课表配置编辑器
- * @param {{ipcRenderer: Electron.IpcRenderer}} props 组件属性
+ * @param {{ipcRenderer: Electron.IpcRenderer, onConfigApplied?: (config: Object) => void}} props 组件属性
  * @returns {React.ReactElement} 课表配置编辑界面
  */
-const ScheduleEditorView = ({ ipcRenderer }) => {
+const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
   const [config, setConfig] = useState(() => normalizeScheduleConfigForEditor({}));
-  const [sourceStructure, setSourceStructure] = useState({ hasWeekDisplay: false });
+  const [sourceStructure, setSourceStructure] = useState({ hasWeekDisplay: false, hasSemesterStartDate: false });
   const [sourceText, setSourceText] = useState('');
   const [filePath, setFilePath] = useState('');
   const [status, setStatus] = useState({ type: 'info', message: '正在加载当前课表配置...' });
@@ -164,6 +166,7 @@ const ScheduleEditorView = ({ ipcRenderer }) => {
         return;
       }
 
+      onConfigApplied?.(normalized);
       setStatus({ type: 'success', message: '已保存配置并重新应用到主课表' });
     } catch (error) {
       setStatus({ type: 'error', message: `保存失败: ${error.message}` });
@@ -356,11 +359,16 @@ const ScheduleEditorView = ({ ipcRenderer }) => {
         </TabList>
         <TabPanels>
           <TabPanel px={0}>
-            <EditorCard title="基础设置" desc="管理倒计时目标和星期显示">
+            <EditorCard title="基础设置" desc="管理倒计时目标、单双周和星期显示">
               <SimpleGrid columns={[1, 2]} gap={4}>
                 <FormControl>
                   <FormLabel>倒计时目标</FormLabel>
                   <Input value={config.countdown_target} onChange={(event) => updateConfig((draft) => { draft.countdown_target = event.target.value; })} placeholder="YYYY-MM-DD 或 hidden" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>学期起始日期</FormLabel>
+                  <Input type="date" value={config.semester_start_date} onChange={(event) => updateConfig((draft) => { draft.semester_start_date = event.target.value; })} />
+                  <FormHelperText color={mutedTextColor}>从所选日期起每 7 天自动切换，第一周为单周；留空时使用手动周次。</FormHelperText>
                 </FormControl>
                 <FormControl display={sourceStructure.hasWeekDisplay ? 'block' : 'none'}>
                   <FormLabel>显示星期</FormLabel>
@@ -477,7 +485,10 @@ const ScheduleEditorView = ({ ipcRenderer }) => {
                 {Object.entries(config.css_style || {}).map(([key, value]) => (
                   <SimpleGrid key={key} columns={[1, 2]} gap={3}>
                     <Input value={key} isReadOnly />
-                    <Input value={value} onChange={(event) => updateConfig((draft) => { draft.css_style[key] = event.target.value; })} />
+                    <FormControl>
+                      <Input aria-label={`${key} 的值`} value={value} onChange={(event) => updateConfig((draft) => { draft.css_style[key] = event.target.value; })} />
+                      <FormHelperText color={mutedTextColor} fontSize="xs">{getStyleFieldComment(key)}</FormHelperText>
+                    </FormControl>
                   </SimpleGrid>
                 ))}
               </Flex>

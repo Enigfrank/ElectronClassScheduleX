@@ -1,4 +1,4 @@
-const { ipcMain, dialog, BrowserWindow, shell, app, screen } = require('electron');
+const { ipcMain, dialog, shell, app, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const prompt = require('electron-prompt');
@@ -80,9 +80,7 @@ class IpcManager {
             app,
             dialog,
             shell,
-            BrowserWindow,
             prompt,
-            path,
             log
         });
         registerScheduleConfigIpc({

@@ -43,6 +43,34 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         }
     }
 
+    /**
+     * 执行 GUI 自定义标题栏请求的窗口操作。
+     * @param {Electron.IpcMainEvent} event IPC 事件
+     * @param {string} action 窗口操作
+     */
+    function handleGuiWindowAction(event, action) {
+        const guiWindow = windowManager.getWindow('gui');
+        if (!guiWindow || (typeof guiWindow.isDestroyed === 'function' && guiWindow.isDestroyed())) return;
+
+        switch (action) {
+            case 'get-state':
+                event.reply('gui-window-maximized-changed', guiWindow.isMaximized());
+                break;
+            case 'minimize':
+                guiWindow.minimize();
+                break;
+            case 'toggle-maximize':
+                if (guiWindow.isMaximized()) guiWindow.unmaximize();
+                else guiWindow.maximize();
+                break;
+            case 'close':
+                guiWindow.close();
+                break;
+            default:
+                log('warn', `[IPC管理] 未知的 GUI 窗口操作: ${action}`);
+        }
+    }
+
     ipcMain.on('openSettingDialog', () => {
         log('info', '[IPC管理] 打开设置对话框');
         windowManager.getWindow('main')?.webContents.send('openSettingDialog');
@@ -52,6 +80,8 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         log('info', '[IPC管理] 打开React GUI窗口');
         windowManager.createReactGUIWindow();
     });
+
+    ipcMain.on('gui-window-action', handleGuiWindowAction);
 
     ipcMain.on('setDayOffset', () => {
         log('info', '[IPC管理] 设置日期偏移');

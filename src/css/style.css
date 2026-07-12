@@ -62,7 +62,11 @@
     --space-8: 32px;
     --space-12: 48px;
     --space-16: 64px;
-    transition: opacity .5s .2s;
+    --motion-duration-fast: 160ms;
+    --motion-duration-standard: 200ms;
+    --motion-duration-pulse: 2000ms;
+    --motion-easing-standard: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-easing-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 .background {
@@ -72,7 +76,7 @@
     font-size: var(--center-font-size);
     font-weight: 600;
     backdrop-filter: blur(5px); /* 添加背景模糊效果 */
-    transition: background-color 0.3s ease;
+    transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
 /* 触摸屏悬停状态 - 仅对鼠标设备生效 */
@@ -115,7 +119,6 @@
     top: var(--top-space);
     left: 50%;
     transform: translateX(-50%);
-    transition: opacity 0.5s ease, transform 0.5s ease; /* 添加过渡效果 */
 }
 
 .class {
@@ -133,8 +136,7 @@
 
 .upcoming {
     color: rgba(0, 255, 10, 1);
-    animation: highlightUpcoming 1.5s;
-    animation-iteration-count: infinite;
+    animation: highlightUpcoming var(--motion-duration-pulse) ease-in-out infinite;
 }
 
 @keyframes highlightUpcoming {
@@ -172,23 +174,11 @@
     font-family: Sou;
 }
 
-.triangle {
-    width: 0;
-    height: 0;
-    border-style: solid;
-    border-width: 0 var(--triangle-size) var(--triangle-size);
-    border-color: transparent transparent rgba(0, 0, 0, var(--global-bg-opacity));
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
 .countdowner {
     background-color: rgba(0, 0, 0, var(--global-bg-opacity));
     border-radius: var(--global-border-radius);
     padding: var(--countdown-bg-padding);
     font-size: var(--countdown-font-size);
-    transition: all 2s;
     backdrop-filter: blur(5px);
 }
 
@@ -196,7 +186,7 @@
     color: rgba(0, 255, 10, 1);
     display: inline;
     font-family: Sou;
-    transition: all 2s;
+    transition: color var(--motion-duration-standard) var(--motion-easing-standard);
     font-weight: bold;
 }
 
@@ -207,15 +197,21 @@
 }
 
 /* 切换动画类 */
+.fade-element,
+.fade-hidden {
+    transition-property: opacity;
+    transition-duration: var(--motion-duration-standard);
+}
+
 .fade-element {
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transition-timing-function: var(--motion-easing-standard);
     opacity: 1;
 }
 
 .fade-hidden {
+    transition-timing-function: var(--motion-easing-exit);
     opacity: 0;
     pointer-events: none;
-    transform: translateY(-20px); /* 向上移动并消失 */
 }
 
 .miniCountdown {
@@ -232,7 +228,6 @@
     display: none; 
     border: 2px solid #4CAF50; 
     backdrop-filter: blur(5px);
-    transition: opacity 0.5s ease, transform 0.5s ease; 
     touch-action: none; 
     cursor: grab;
 }
@@ -249,7 +244,7 @@
     pointer-events: none;
     opacity: 0;
     z-index: 999;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
 .dragBoundaryHint::before {
@@ -270,6 +265,7 @@
             #c442ff,
             #ff2d55) 0 0 / 320% 100%;
     animation: dragBoundaryRgbFlow 2.2s linear infinite;
+    animation-play-state: paused;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
@@ -293,6 +289,7 @@
             #c442ff,
             #ff2d55) 0 0 / 280% 100%;
     animation: dragBoundaryRgbFlow 2.2s linear infinite;
+    animation-play-state: paused;
     filter: blur(8px);
     opacity: 0.9;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -304,12 +301,16 @@
     opacity: 1;
 }
 
+.dragBoundaryHint.active::before,
+.dragBoundaryHint.active::after {
+    animation-play-state: running;
+}
+
 .countdownContainer {
     position: absolute;
     left: 100%;
     top: 50%;
     transform: translateY(-50%);
-    transition: all 0.5s ease; /* 优化过渡时间 */
     padding: var(--container-bg-padding);
 }
 
@@ -349,39 +350,34 @@
     font-size: var(--countdown-font-size);
     font-family: JETB;
     color: #FFF;
-    transition: opacity 0.5s;
     border: 2px solid #4CAF50;
     /* 绿色边框突出提示 */
     opacity: 0;
-    animation: fadeIn 0.5s ease-in-out forwards;
+    animation: fadeIn var(--motion-duration-standard) var(--motion-easing-standard) forwards;
 }
 
 .nextClassHint.fadeOut {
     opacity: 0;
-    animation: fadeOut 0.5s ease-in-out forwards;
+    animation: fadeOut var(--motion-duration-standard) var(--motion-easing-exit) forwards;
 }
 
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(-10px);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
 @keyframes fadeOut {
     from {
         opacity: 1;
-        transform: translateY(0);
     }
 
     to {
         opacity: 0;
-        transform: translateY(-10px);
     }
 }
 

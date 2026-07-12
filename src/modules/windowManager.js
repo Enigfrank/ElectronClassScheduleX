@@ -210,9 +210,9 @@ class WindowManager {
             minWidth: 900,
             minHeight: 650,
             title: '仪表盘',
-            backgroundColor: '#f5f5f5',
+            backgroundColor: '#f8f9fa',
             autoHideMenuBar: true,
-            titleBarStyle: 'hiddenInset',
+            frame: false,
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,
@@ -222,6 +222,18 @@ class WindowManager {
 
         const htmlPath = path.join(__dirname, '..', 'GUI.html');
         guiWindow.loadFile(htmlPath);
+
+        /**
+         * 把 GUI 窗口的最大化状态同步到自定义标题栏。
+         */
+        const sendGuiWindowMaximizedState = () => {
+            if (!guiWindow.isDestroyed()) {
+                guiWindow.webContents.send('gui-window-maximized-changed', guiWindow.isMaximized());
+            }
+        };
+
+        guiWindow.on('maximize', sendGuiWindowMaximizedState);
+        guiWindow.on('unmaximize', sendGuiWindowMaximizedState);
 
         const isDev = !app.isPackaged;
         let bundleWatcher = null;
@@ -267,6 +279,7 @@ class WindowManager {
                 isAutoLaunch: this.configManager.getAutoLaunch(),
                 scheduleShutdown: this.configManager.get('scheduleShutdown', false)
             });
+            sendGuiWindowMaximizedState();
         });
 
         this.windows.gui = guiWindow;
@@ -324,8 +337,8 @@ class WindowManager {
 
         const primaryDisplay = screen.getPrimaryDisplay();
         const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-        const windowWidth = 1080;
-        const windowHeight = 650;
+        const windowWidth = Math.min(1080, screenWidth);
+        const windowHeight = Math.min(650, screenHeight);
 
         const oobeWindow = new BrowserWindow({
             width: windowWidth,
@@ -338,7 +351,7 @@ class WindowManager {
             maximizable: false,
             minimizable: false,
             alwaysOnTop: false,
-            backgroundColor: '#f5f5f5',
+            backgroundColor: '#f8f9fa',
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false,

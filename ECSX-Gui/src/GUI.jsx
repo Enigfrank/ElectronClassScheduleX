@@ -3,6 +3,7 @@ import './GUI.css';
 import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
 import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
 import UpdateManagerView from './features/update/UpdateManagerView.jsx';
+import WindowControls from './WindowControls.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
   SimpleGrid, Divider, Tooltip, IconButton, Menu, MenuButton,
@@ -45,11 +46,6 @@ const QuickActions = () => {
       <Tooltip label="打开官方文档" placement="bottom">
         <Button colorScheme="blue" onClick={() => ipcRenderer.send('open-external-link', 'https://doc.cavendi.top/')} leftIcon={<Globe size={18} />}>
           官方文档
-        </Button>
-      </Tooltip>
-      <Tooltip label="打开课表配置文件夹进行编辑" placement="bottom">
-        <Button onClick={() => ipcRenderer.send('open-config-folder')} leftIcon={<Calendar size={18} />}>
-          编辑课表
         </Button>
       </Tooltip>
       <Tooltip label="NULL" placement="bottom">
@@ -122,16 +118,21 @@ const ExtensionPlaceholder = () => {
   );
 };
 
-const MainView = ({ handleButtonClick }) => {
+const MainView = ({ handleButtonClick, semesterStartDate }) => {
   const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
 
+  const weekActions = semesterStartDate
+    ? [{ action: 'automaticWeek', interactive: false, icon: <Calendar size={40} />, title: '自动单双周已启用', desc: `从 ${semesterStartDate} 起每 7 天自动切换` }]
+    : [
+      { action: 'week1', icon: <Calendar size={40} />, title: '手动单周', desc: '未设置学期起始日期时使用' },
+      { action: 'week2', icon: <Calendar size={40} />, title: '手动双周', desc: '未设置学期起始日期时使用' },
+    ];
   const actions = [
-    { action: 'week1', icon: <Calendar size={40} color="white" />, title: '单周', desc: '切换到单周课程表' },
-    { action: 'week2', icon: <Calendar size={40} color="white" />, title: '双周', desc: '切换到双周课程表' },
-    { action: 'openSetting', icon: <Settings size={40} color="white" />, title: '配置课表', desc: '临时调整课程信息' },
-    { action: 'correctTime', icon: <Clock size={40} color="white" />, title: '矫正计时', desc: '校准系统时间偏移' },
-    { action: 'toggleSchedule', icon: <RefreshCw size={40} color="white" />, title: '切换日程', desc: '调休适用.....' },
-    { action: 'manageShutdown', icon: <Power size={40} color="white" />, title: '管理定时关机', desc: '设置自动关机时间' },
+    ...weekActions,
+    { action: 'openSetting', icon: <Settings size={40} />, title: '配置课表', desc: '临时调整课程信息' },
+    { action: 'correctTime', icon: <Clock size={40} />, title: '矫正计时', desc: '校准系统时间偏移' },
+    { action: 'toggleSchedule', icon: <RefreshCw size={40} />, title: '切换日程', desc: '调休适用.....' },
+    { action: 'manageShutdown', icon: <Power size={40} />, title: '管理定时关机', desc: '设置自动关机时间' },
   ];
 
   return (
@@ -141,13 +142,14 @@ const MainView = ({ handleButtonClick }) => {
         {actions.map(act => (
           <Card
             key={act.action}
-            cursor="pointer"
-            onClick={() => handleButtonClick(act.action)}
+            cursor={act.interactive === false ? 'default' : 'pointer'}
+            onClick={act.interactive === false ? undefined : () => handleButtonClick(act.action)}
             minH="140px"
-            _hover={{ transform: 'translateY(-2px)', shadow: 'xl' }}
+            _hover={act.interactive === false ? undefined : { transform: 'translateY(-2px)', shadow: 'xl' }}
             transition="all 0.2s ease"
+            aria-disabled={act.interactive === false}
           >
-            <Box bg="blue.500" h="80px" display="flex" alignItems="center" justifyContent="center" borderTopRadius="md">
+            <Box bg="blue.500" color="white" h="80px" display="flex" alignItems="center" justifyContent="center" borderTopRadius="md">
               {act.icon}
             </Box>
             <CardBody>
@@ -256,6 +258,7 @@ const ReactGUI = () => {
   });
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [semesterStartDate, setSemesterStartDate] = useState('');
 
   const isDarkMode = colorMode === 'dark';
   const bgColor = useColorModeValue('gray.50', 'gray.900');
@@ -296,6 +299,28 @@ const ReactGUI = () => {
       ipcRenderer.removeListener('init', handleInit);
       ipcRenderer.removeListener('updateCheckbox', handleUpdate);
     };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    /**
+     * 读取当前课表的自动单双周配置。
+     * @returns {Promise<void>} 配置读取完成
+     */
+    async function loadSemesterStartDate() {
+      try {
+        const result = await ipcRenderer.invoke('load-schedule-config');
+        if (isMounted && result?.success) {
+          setSemesterStartDate(typeof result.config?.semester_start_date === 'string' ? result.config.semester_start_date : '');
+        }
+      } catch {
+        if (isMounted) setSemesterStartDate('');
+      }
+    }
+
+    loadSemesterStartDate();
+    return () => { isMounted = false; };
   }, []);
 
   const handleSettingChange = (settingName) => {
@@ -343,7 +368,7 @@ const ReactGUI = () => {
     <Box display="flex" h="100vh" bg={bgColor} color={textColor} fontFamily="Segoe UI, system-ui, sans-serif">
       {/* 侧边栏 */}
       <Box w="280px" bg={sidebarBg} display="flex" flexDirection="column" boxShadow="lg" zIndex={100}>
-        <Box display="flex" alignItems="center" gap={3} p={5} borderBottom="1px" borderColor={borderColor}>
+        <Box className="gui-drag-region" display="flex" alignItems="center" gap={3} p={5} borderBottom="1px" borderColor={borderColor}>
           <Calendar size={32} color="#3182ce" />
           <Box>
             <Text fontWeight="semibold" fontSize="lg">课表管理</Text>
@@ -375,22 +400,30 @@ const ReactGUI = () => {
 
       {/* 主内容区 */}
       <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
-        <Box display="flex" alignItems="center" justifyContent="space-between" px={8} py={5}
+        <Box className="gui-drag-region" display="flex" alignItems="center" justifyContent="space-between" px={8} py={5}
           bg={headerBg} borderBottom="1px" borderColor={borderColor}>
           <Box>
             <Heading size="md">{viewTitles[currentView]?.title || '仪表盘'}</Heading>
             <Text fontSize="sm" color={mutedTextColor}>{viewTitles[currentView]?.subtitle || 'Dashboard'}</Text>
           </Box>
-          <Tooltip label={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="bottom">
-            <IconButton onClick={toggleColorMode} variant="ghost" aria-label="切换主题"
-              icon={isDarkMode ? <Sun size={20} /> : <Moon size={20} />} />
-          </Tooltip>
+          <Flex align="center" gap={2} className="gui-no-drag">
+            <Tooltip label={isDarkMode ? '切换到浅色模式' : '切换到深色模式'} placement="bottom">
+              <IconButton onClick={toggleColorMode} variant="ghost" aria-label="切换主题"
+                icon={isDarkMode ? <Sun size={20} /> : <Moon size={20} />} />
+            </Tooltip>
+            <WindowControls ipcRenderer={ipcRenderer} />
+          </Flex>
         </Box>
 
         <Box flex={1} p={8} overflowY="auto" bg={bgColor}>
-          {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} />}
+          {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} semesterStartDate={semesterStartDate} />}
           {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} />}
-          {currentView === 'editor' && <ScheduleEditorView ipcRenderer={ipcRenderer} />}
+          {currentView === 'editor' && (
+            <ScheduleEditorView
+              ipcRenderer={ipcRenderer}
+              onConfigApplied={(nextConfig) => setSemesterStartDate(nextConfig.semester_start_date || '')}
+            />
+          )}
           {currentView === 'update' && <UpdateManagerView ipcRenderer={ipcRenderer} />}
           {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => setCurrentView('main')} />}
           {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}
