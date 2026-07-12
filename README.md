@@ -18,11 +18,11 @@
 
 ## 功能特性
 
-- **每日 / 每周课表** - 清晰展示当日课程与完整周视图
+- **当日课表** - 悬浮展示当天课程，并标记当前课程、下一节课程与倒计时
 - **多周轮换** - 支持学校常见单双周 / 多周轮换课表
 - **窗口置顶** - 课表始终悬浮在桌面上方，方便随时查看
-- **点击穿透** - 透传鼠标事件至下层窗口，不影响正常操作
-- **自动更新** - 内建更新检测，有新版本时自动提醒安装
+- **点击穿透与自动隐藏** - 透传鼠标事件至下层窗口，并按上课状态自动调整显示
+- **在线更新** - 支持启动后自动检查、手动检查、下载并重启安装更新
 - **本地优先** - 所有数据保存在本地，无需联网即可正常使用
 
 ## 安装
@@ -39,38 +39,66 @@
 - [Yarn](https://yarnpkg.com/) >= 4（通过 Corepack 启用）
 - Windows 10+ (x64)
 
-### 克隆并启动
+### 安装依赖
 
-```bash
+```powershell
 git clone https://github.com/Enigfrank/ElectronClassScheduleX.git
 cd ElectronClassScheduleX
 
 corepack enable
-corepack yarn install --frozen-lockfile
+corepack yarn install --immutable
+
+cd ECSX-Gui
+npm ci
+```
+
+根目录使用 Yarn 管理 Electron 运行时，`ECSX-Gui/` 使用 npm 管理 React/Vite 前端。
+
+### 本地开发
+
+在第一个终端中持续监听 React 前端，并将结果写入 `src/dist/`：
+
+```powershell
+cd ECSX-Gui
+npm run dev
+```
+
+在另一个位于仓库根目录的终端中启动 Electron：
+
+```powershell
 corepack yarn start
 ```
 
 ### 构建安装包
 
-```bash
+```powershell
+cd ECSX-Gui
+npm run build
+
+cd ..
 corepack yarn build
 ```
 
-构建产物位于 `out/` 目录。
+React GUI 构建产物位于 `src/dist/`，Electron 安装包位于 `out/`。根目录的 `corepack yarn build` 只执行 Electron 打包，不会自动运行 Vite 构建。
 
 ### 运行测试
 
-```bash
+在仓库根目录执行：
+
+```powershell
 corepack yarn test
 ```
+
+该命令运行 `tests/*.test.js` 中的 Node.js 测试。
 
 ## 技术栈
 
 | 层级 | 技术 |
 | :--- | :--- |
 | 桌面框架 | Electron 42 |
-| 前端 UI | React 19 + Vite 8 |
-| 样式 | CSS Variables（设计令牌驱动） |
+| 前端 UI | React 18 + Chakra UI 2 |
+| 前端构建 | Vite 8 |
+| 样式 | Chakra UI + CSS Variables（传统渲染页） |
 | 图标 | Lucide React |
 | 本地存储 | electron-store |
 | 自动更新 | electron-updater |
@@ -81,13 +109,18 @@ corepack yarn test
 ```
 .
 ├── .github/workflows/    # CI/CD 工作流
-├── docs/                  # 设计文档
 ├── ECSX-Gui/              # React 前端（独立 Vite 项目）
-│   └── src/
-├── src/                   # Electron 主进程
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.js
+├── src/                   # Electron 运行时代码与渲染资源
 │   ├── main.js            # 入口
 │   ├── modules/           # 功能模块
-│   └── image/             # 图标资源
+│   ├── js/                # 传统渲染页脚本
+│   ├── css/               # 传统渲染页样式
+│   ├── dist/              # ECSX-Gui 生成的渲染包
+│   ├── image/             # 图标资源
+│   └── *.html             # Electron 渲染页面
 ├── tests/                 # 测试文件
 ├── package.json           # 项目元数据与构建配置
 └── yarn.lock              # 依赖锁文件
@@ -96,10 +129,6 @@ corepack yarn test
 ## 隐私
 
 本应用为纯本地程序，**不收集、存储或传输任何用户数据**至远程服务器。所有课表配置仅保存在用户本地设备的 `%APPDATA%\electron-class-schedule-x` 目录下。
-
-## 代码签名
-
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
 ## 致谢
 

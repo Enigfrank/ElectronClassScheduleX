@@ -482,31 +482,59 @@
     })
   }
 
-  ipcRenderer.on('getSelectedClassIndex', (e, arg) => {
-    if (arg.index == -1) return
-    let text = arg.arg.options.buttons[arg.index]
-    let classes = Object.keys(scheduleConfig.subject_name).sort();
+  /**
+   * 请求主进程使用固定高度的下拉框选择替换课程。
+   * @param {{index: number}} arg 课程序号对话框结果
+   */
+  function requestChangingClass(arg) {
+    if (!Number.isInteger(arg?.index) || arg.index < 0) return
+
+    const classes = Object.keys(scheduleConfig?.subject_name || {}).sort()
+    if (classes.length === 0) {
+      ipcRenderer.send('log', '[临时调课] 没有可供选择的课程')
+      return
+    }
+
+    const currentClass = scheduleData?.scheduleArray?.[arg.index]
+    const currentClassName = scheduleConfig.subject_name[currentClass] ?? currentClass ?? '未知课程'
     ipcRenderer.send('dialog', {
       reply: 'getSelectedChangingClass',
       index: arg.index,
-      classes: classes,
+      classes,
+      kind: 'select',
+      items: classes.map((value) => String(scheduleConfig.subject_name[value] ?? value)),
+      defaultIndex: Math.max(0, classes.indexOf(currentClass)),
       options: {
         title: '更改课表',
-        message: `将 第 ${arg.index + 1} 节 ${scheduleConfig.subject_name[scheduleData.scheduleArray[arg.index]]} 更改为:`,
-        buttons: classes.map((value) => { return scheduleConfig.subject_name[value] }),
-        cancelId: -1,
+        message: `将 第 ${arg.index + 1} 节 ${currentClassName} 更改为:`,
       }
     })
-  })
+  }
 
-  ipcRenderer.on('getSelectedChangingClass', (e, arg) => {
-    if (arg.index == -1) return
-    let index = arg.arg.index;
-    let selectedClass = arg.arg.classes[arg.index];
-    const date = getCurrentEditedDate();
-    const dayOfWeek = getCurrentEditedDay(date);
-    scheduleConfig.daily_class[dayOfWeek].classList[index] = selectedClass;
-  })
+  /**
+   * 校验并应用课程选择结果到当天的内存课表。
+   * @param {{index: number, arg: {index: number, classes: string[]}}} arg 课程选择结果
+   */
+  function applyChangingClass(arg) {
+    if (!Number.isInteger(arg?.index) || arg.index < 0) return
+
+    const scheduleIndex = arg?.arg?.index
+    const classes = arg?.arg?.classes
+    if (!Number.isInteger(scheduleIndex) || scheduleIndex < 0 || !Array.isArray(classes)) return
+
+    const selectedClass = classes[arg.index]
+    if (typeof selectedClass !== 'string') return
+
+    const date = getCurrentEditedDate()
+    const dayOfWeek = getCurrentEditedDay(date)
+    const dailySchedule = scheduleConfig?.daily_class?.[dayOfWeek]
+    if (!dailySchedule || !Array.isArray(dailySchedule.classList) || scheduleIndex >= dailySchedule.classList.length) return
+
+    dailySchedule.classList[scheduleIndex] = selectedClass
+  }
+
+  ipcRenderer.on('getSelectedClassIndex', (event, arg) => requestChangingClass(arg))
+  ipcRenderer.on('getSelectedChangingClass', (event, arg) => applyChangingClass(arg))
 
   ipcRenderer.on('openSettingDialog', (e, arg) => {
     setScheduleDialog()

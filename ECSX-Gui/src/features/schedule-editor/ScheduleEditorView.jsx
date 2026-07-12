@@ -10,7 +10,6 @@ import {
   FormControl,
   FormLabel,
   HStack,
-  IconButton,
   Input,
   Select,
   SimpleGrid,
@@ -22,7 +21,6 @@ import {
   Tabs,
   Text,
   Textarea,
-  Tooltip,
   useColorModeValue,
 } from '@chakra-ui/react';
 import {
@@ -31,7 +29,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Trash2,
   Upload,
 } from 'lucide-react';
 import {
@@ -45,16 +42,19 @@ import {
   parseScheduleConfigSource,
   sanitizeTypeName,
 } from './configParser.mjs';
-
-const TAB_INDEX = {
-  basic: 0,
-  subjects: 1,
-  timetable: 2,
-  daily: 3,
-  divider: 4,
-  style: 5,
-  source: 6,
-};
+import {
+  DeleteButton,
+  EditorCard,
+  ScheduleTypeEditor,
+  SummaryCard,
+} from './ScheduleEditorControls.jsx';
+import {
+  nextTimeRangeKey,
+  parseClassItem,
+  parseTypedValue,
+  renameObjectKey,
+  TAB_INDEX,
+} from './scheduleEditorHelpers.mjs';
 
 /**
  * ECSX GUI 内嵌课表配置编辑器
@@ -495,118 +495,5 @@ const ScheduleEditorView = ({ ipcRenderer }) => {
     </Box>
   );
 };
-
-/**
- * 概览卡片组件
- * @param {{label: string, value: number|string, onClick: () => void}} props 组件属性
- * @returns {React.ReactElement} 概览卡片
- */
-const SummaryCard = ({ label, value, onClick }) => (
-  <Card as="button" textAlign="left" onClick={onClick}>
-    <CardBody>
-      <Text fontSize="sm" color="gray.500">{label}</Text>
-      <Text fontSize="2xl" fontWeight="semibold">{value}</Text>
-    </CardBody>
-  </Card>
-);
-
-/**
- * 编辑器分区卡片
- * @param {{title: string, desc: string, action?: React.ReactNode, children: React.ReactNode}} props 组件属性
- * @returns {React.ReactElement} 分区卡片
- */
-const EditorCard = ({ title, desc, action, children }) => (
-  <Card>
-    <CardBody>
-      <Flex justify="space-between" align="flex-start" gap={4} mb={4}>
-        <Box>
-          <Text fontSize="lg" fontWeight="semibold">{title}</Text>
-          <Text fontSize="sm" color="gray.500">{desc}</Text>
-        </Box>
-        {action}
-      </Flex>
-      {children}
-    </CardBody>
-  </Card>
-);
-
-/**
- * 删除图标按钮
- * @param {{label: string, onClick: () => void}} props 组件属性
- * @returns {React.ReactElement} 删除按钮
- */
-const DeleteButton = ({ label, onClick }) => (
-  <Tooltip label={label}>
-    <IconButton aria-label={label} icon={<Trash2 size={16} />} colorScheme="red" variant="ghost" onClick={onClick} />
-  </Tooltip>
-);
-
-/**
- * 类型选择、重命名和删除控件
- * @param {{selectedType: string, types: string[], onSelect: Function, onRename: Function, onDelete: Function}} props 组件属性
- * @returns {React.ReactElement} 类型编辑器
- */
-const ScheduleTypeEditor = ({ selectedType, types, onSelect, onRename, onDelete }) => (
-  <SimpleGrid columns={[1, 1, 3]} gap={3}>
-    <Select value={selectedType} onChange={(event) => onSelect(event.target.value)}>
-      <option value="">请选择类型</option>
-      {types.map((type) => <option key={type} value={type}>{type}</option>)}
-    </Select>
-    <Input value={selectedType} onChange={(event) => selectedType && onRename(selectedType, event.target.value)} placeholder="类型名称" />
-    <Button colorScheme="red" variant="outline" onClick={() => selectedType && onDelete(selectedType)} isDisabled={!selectedType}>
-      删除此类型
-    </Button>
-  </SimpleGrid>
-);
-
-/**
- * 重命名对象键并保持原值
- * @param {Object} target 目标对象
- * @param {string} oldKey 原键
- * @param {string} nextKey 新键
- * @param {Function|null} selectCallback 选择回调
- * @returns {void}
- */
-function renameObjectKey(target, oldKey, nextKey, selectCallback) {
-  if (!target || !oldKey || !nextKey || oldKey === nextKey || target[nextKey]) return;
-  target[nextKey] = target[oldKey];
-  delete target[oldKey];
-  selectCallback?.(nextKey);
-}
-
-/**
- * 解析输入值为数字或字符串
- * @param {string} value 输入文本
- * @returns {number|string} 解析结果
- */
-function parseTypedValue(value) {
-  const numeric = Number(value);
-  return Number.isInteger(numeric) && value.trim() !== '' ? numeric : value;
-}
-
-/**
- * 解析课程输入，逗号分隔时返回轮换课程数组
- * @param {string} value 输入文本
- * @returns {string|string[]} 课程项
- */
-function parseClassItem(value) {
-  const tokens = value.split(/[,，、]/).map((item) => item.trim()).filter(Boolean);
-  return tokens.length > 1 ? tokens : tokens[0] || '';
-}
-
-/**
- * 获取一个不冲突的新时间段键
- * @param {Object} table 当前时间表
- * @returns {string} 新时间段键
- */
-function nextTimeRangeKey(table) {
-  let minute = Object.keys(table || {}).length;
-  let key = `08:${String(minute).padStart(2, '0')}-08:${String(minute + 1).padStart(2, '0')}`;
-  while (table[key]) {
-    minute += 1;
-    key = `08:${String(minute).padStart(2, '0')}-08:${String(minute + 1).padStart(2, '0')}`;
-  }
-  return key;
-}
 
 export default ScheduleEditorView;
