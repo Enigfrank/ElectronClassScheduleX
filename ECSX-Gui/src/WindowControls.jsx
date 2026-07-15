@@ -20,9 +20,9 @@ export default function WindowControls({ ipcRenderer }) {
       setIsMaximized(Boolean(nextIsMaximized));
     }
 
-    ipcRenderer.on('gui-window-maximized-changed', handleMaximizedChange);
+    const unsubscribe = ipcRenderer.on('gui-window-maximized-changed', handleMaximizedChange);
     ipcRenderer.send('gui-window-action', 'get-state');
-    return () => ipcRenderer.removeListener('gui-window-maximized-changed', handleMaximizedChange);
+    return unsubscribe;
   }, [ipcRenderer]);
 
   return (

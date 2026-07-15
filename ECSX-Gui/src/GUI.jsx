@@ -3,6 +3,7 @@ import './GUI.css';
 import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
 import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
 import UpdateManagerView from './features/update/UpdateManagerView.jsx';
+import ExamModeView from './features/exam-mode/ExamModeView.jsx';
 import WindowControls from './WindowControls.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
@@ -13,10 +14,10 @@ import {
 import {
   Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
   EyeOff, Rocket, Power, RotateCcw, Info, X, Plus, MoreHorizontal,
-  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud
+  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck
 } from 'lucide-react';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = window.dashboardApi;
 
 // 恢复原有的主题定义
 const theme = extendTheme({
@@ -272,6 +273,7 @@ const ReactGUI = () => {
     main: { title: '仪表盘', subtitle: 'Dashboard' },
     settings: { title: '设置选项', subtitle: 'Settings' },
     editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
+    exam: { title: '考试模式', subtitle: 'Exam Mode' },
     update: { title: '在线更新', subtitle: '在线更新' },
     tools: { title: '其他工具', subtitle: 'Tools' },
     shutdown: { title: '定时关机管理', subtitle: 'Shutdown Manager' },
@@ -292,12 +294,12 @@ const ReactGUI = () => {
       setSettings(prev => ({ ...prev, [data.id]: data.checked }));
     };
 
-    ipcRenderer.on('init', handleInit);
-    ipcRenderer.on('updateCheckbox', handleUpdate);
+    const unsubscribeInit = ipcRenderer.on('init', handleInit);
+    const unsubscribeUpdate = ipcRenderer.on('updateCheckbox', handleUpdate);
 
     return () => {
-      ipcRenderer.removeListener('init', handleInit);
-      ipcRenderer.removeListener('updateCheckbox', handleUpdate);
+      unsubscribeInit();
+      unsubscribeUpdate();
     };
   }, []);
 
@@ -381,6 +383,7 @@ const ReactGUI = () => {
             { view: 'main', icon: <Calendar size={20} />, text: '功能选项' },
             { view: 'settings', icon: <Settings size={20} />, text: '设置选项' },
             { view: 'editor', icon: <FilePenLine size={20} />, text: '课表编辑器' },
+            { view: 'exam', icon: <ClipboardCheck size={20} />, text: '考试模式' },
             { view: 'update', icon: <DownloadCloud size={20} />, text: '在线更新' },
             { view: 'tools', icon: <Wrench size={20} />, text: '其他工具' },
           ].map(nav => (
@@ -424,6 +427,7 @@ const ReactGUI = () => {
               onConfigApplied={(nextConfig) => setSemesterStartDate(nextConfig.semester_start_date || '')}
             />
           )}
+          {currentView === 'exam' && <ExamModeView ipcRenderer={ipcRenderer} />}
           {currentView === 'update' && <UpdateManagerView ipcRenderer={ipcRenderer} />}
           {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => setCurrentView('main')} />}
           {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}

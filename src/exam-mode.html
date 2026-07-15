@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:">
+    <title>考试模式</title>
+    <link rel="stylesheet" href="./css/exam-mode.css">
+</head>
+<body>
+    <main class="exam-screen">
+        <aside class="exam-slogan-column" aria-label="诚信考试">
+            <p class="exam-slogan" aria-label="诚信考试">
+                <span aria-hidden="true">诚</span>
+                <span aria-hidden="true">信</span>
+                <span aria-hidden="true">考</span>
+                <span aria-hidden="true">试</span>
+            </p>
+        </aside>
+
+        <section class="exam-center">
+            <div id="exam-info" class="exam-info" aria-live="polite">正在加载考试安排</div>
+            <time id="exam-clock" class="exam-clock" datetime="">--:--:--</time>
+        </section>
+
+        <aside class="exam-slogan-column" aria-label="作弊可耻">
+            <p class="exam-slogan" aria-label="作弊可耻">
+                <span aria-hidden="true">作</span>
+                <span aria-hidden="true">弊</span>
+                <span aria-hidden="true">可</span>
+                <span aria-hidden="true">耻</span>
+            </p>
+        </aside>
+
+        <button id="exam-exit-trigger" class="exam-exit-trigger" type="button" aria-label="退出考试模式" title="退出考试模式">
+            <span aria-hidden="true">&times;</span>
+        </button>
+
+        <div id="exam-exit-layer" class="exam-exit-layer" role="dialog" aria-modal="true" aria-labelledby="exam-exit-title" hidden>
+            <section class="exam-exit-dialog">
+                <h1 id="exam-exit-title">退出考试模式？</h1>
+                <p>退出后将恢复顶部课表和考试配置窗口。</p>
+                <div class="exam-exit-actions">
+                    <button id="exam-exit-cancel" class="exam-dialog-button exam-dialog-button-secondary" type="button">继续考试</button>
+                    <button id="exam-exit-confirm" class="exam-dialog-button exam-dialog-button-primary" type="button">退出考试模式</button>
+                </div>
+                <p id="exam-exit-error" class="exam-exit-error" role="alert" hidden></p>
+            </section>
+        </div>
+    </main>
+
+    <script src="./shared/examMode.js"></script>
+    <script src="./js/exam-mode.js"></script>
+</body>
+</html>

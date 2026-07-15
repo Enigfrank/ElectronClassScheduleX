@@ -43,7 +43,7 @@
 
 
 <script>
-  const { ipcRenderer } = require('electron');
+  const ipcRenderer = window.mainWindowApi;
   let _scheduleConfig = null
   let scheduleConfig = null
   let scheduleData = null
@@ -257,7 +257,7 @@
     if (!highlightElement) {
       if (
         !isCountdownerPositionRetryPending &&
-        scheduleData.currentHighlight &&
+        scheduleData?.currentHighlight &&
         scheduleData.currentHighlight.index !== null &&
         scheduleData.currentHighlight.type
       ) {

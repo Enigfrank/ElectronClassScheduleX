@@ -15,6 +15,7 @@ const registerApplicationIpc = require('./ipc/registerApplicationIpc');
 const registerScheduleConfigIpc = require('./ipc/registerScheduleConfigIpc');
 const registerDiagnosticsIpc = require('./ipc/registerDiagnosticsIpc');
 const registerOobeIpc = require('./ipc/registerOobeIpc');
+const registerExamModeIpc = require('./ipc/registerExamModeIpc');
 
 /**
  * IPC 通信管理模块，负责装配各业务域注册器。
@@ -100,6 +101,12 @@ class IpcManager {
         });
         registerDiagnosticsIpc({ ipcMain, app, shell, dialog, fs, path, log });
         registerUpdateIpc({ ipcMain, updateManager: this.updateManager });
+        registerExamModeIpc({
+            ipcMain,
+            configManager: this.configManager,
+            windowManager: this.windowManager,
+            log
+        });
     }
 
     /**

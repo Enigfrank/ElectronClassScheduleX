@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { BrowserWindow, screen, app } = require('electron');
 const path = require('path');
+const ExamModeWindowController = require('./examModeWindowController');
 
 /**
  * 窗口管理模块
@@ -21,6 +22,11 @@ class WindowManager {
             devTools: null
         };
         this.mainAlwaysOnTopRestoreTimer = null;
+        this.examModeController = new ExamModeWindowController({
+            windowManager: this,
+            configManager: this.configManager,
+            logger: this.logger
+        });
     }
 
     /**
@@ -148,9 +154,10 @@ class WindowManager {
             resizable: false,
             type: 'toolbar',
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                enableRemoteModule: true
+                preload: path.join(__dirname, '..', 'preload', 'mainWindowPreload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
             },
         });
 
@@ -199,6 +206,13 @@ class WindowManager {
      * @returns {BrowserWindow} GUI 窗口实例
      */
     createReactGUIWindow() {
+        if (this.examModeController.isActive()) {
+            const examWindow = this.examModeController.getWindow();
+            examWindow?.show();
+            examWindow?.focus();
+            return this.windows.gui;
+        }
+
         if (this.windows.gui && !this.windows.gui.isDestroyed()) {
             this.windows.gui.show();
             return this.windows.gui;
@@ -214,9 +228,10 @@ class WindowManager {
             autoHideMenuBar: true,
             frame: false,
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                enableRemoteModule: true
+                preload: path.join(__dirname, '..', 'preload', 'dashboardPreload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
             }
         });
 
@@ -313,6 +328,7 @@ class WindowManager {
      * @returns {BrowserWindow|null}
      */
     getWindow(type) {
+        if (type === 'exam') return this.examModeController.getWindow();
         return this.windows[type];
     }
 
@@ -322,7 +338,24 @@ class WindowManager {
      * @returns {boolean}
      */
     windowExists(type) {
-        return this.windows[type] && !this.windows[type].isDestroyed();
+        const win = this.getWindow(type);
+        return Boolean(win && !win.isDestroyed());
+    }
+
+    /**
+     * 加载考试页面并切换到全屏考试模式。
+     * @param {Array<Object>} entries 已规范化考试条目
+     * @returns {Promise<BrowserWindow>} 考试窗口
+     */
+    enterExamMode(entries) {
+        return this.examModeController.enter(entries);
+    }
+
+    /**
+     * 退出考试模式并恢复顶部课表与 GUI。
+     */
+    exitExamMode() {
+        return this.examModeController.exit();
     }
 
     /**
@@ -353,9 +386,10 @@ class WindowManager {
             alwaysOnTop: false,
             backgroundColor: '#f8f9fa',
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false,
-                enableRemoteModule: true
+                preload: path.join(__dirname, '..', 'preload', 'oobePreload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
             }
         });
 

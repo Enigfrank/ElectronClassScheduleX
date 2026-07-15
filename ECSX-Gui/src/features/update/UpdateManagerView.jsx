@@ -187,11 +187,11 @@ function UpdateManagerView({ ipcRenderer }) {
       });
     });
 
-    ipcRenderer.on('update-status-changed', handleStatusChanged);
+    const unsubscribe = ipcRenderer.on('update-status-changed', handleStatusChanged);
 
     return () => {
       mounted = false;
-      ipcRenderer.removeListener('update-status-changed', handleStatusChanged);
+      unsubscribe();
     };
   }, [applySettings, ipcRenderer]);
 

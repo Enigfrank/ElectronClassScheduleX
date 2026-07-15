@@ -2,6 +2,7 @@ const { dialog, BrowserWindow } = require('electron');
 const { exec } = require('child_process');
 const path = require('path');
 const iconv = require('iconv-lite');
+const { WARNING_DURATION_MS } = require('../shared/shutdownWarning');
 
 /**
  * 自动关机任务调度模块
@@ -104,7 +105,7 @@ class ShutdownScheduler {
             return;
         }
 
-        const warningDelay = remainingDelay - 15 * 1000;
+        const warningDelay = remainingDelay - WARNING_DURATION_MS;
 
         if (warningDelay > 0) {
             const warningTimerId = setTimeout(() => {
@@ -120,13 +121,13 @@ class ShutdownScheduler {
                 this.currentFinalTimer = setTimeout(() => {
                     if (this.shutdownCancelled) return;
                     this.executeShutdown(timeStr, targetDate);
-                }, 15 * 1000);
+                }, WARNING_DURATION_MS);
                 
             }, warningDelay);
 
             this.shutdownTimers.push(warningTimerId);
         } else {
-            // 如果剩余时间不足 15 秒，直接设置 finalTimer
+            // 如果剩余时间不足预警时长，直接设置 finalTimer
             this.currentFinalTimer = setTimeout(() => {
                 if (this.shutdownCancelled) return;
                 this.executeShutdown(timeStr, targetDate);
@@ -145,7 +146,7 @@ class ShutdownScheduler {
 
         this.closeWarningWindow();
 
-        // 清除原本最后 15 秒的关机定时器
+        // 清除原本预警阶段的最终关机定时器
         if (this.currentFinalTimer) {
             clearTimeout(this.currentFinalTimer);
             this.currentFinalTimer = null;
@@ -192,7 +193,12 @@ class ShutdownScheduler {
         const shutdownWarningWin = new BrowserWindow({
             width: 380, height: 240, alwaysOnTop: true, frame: false, resizable: false,
             movable: true, skipTaskbar: false, focusable: true, type: 'notification',
-            webPreferences: { nodeIntegration: true, contextIsolation: false }
+            webPreferences: {
+                preload: path.join(__dirname, '..', 'preload', 'shutdownWarningPreload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
+            }
         });
 
         shutdownWarningWin.setAlwaysOnTop(true, 'screen-saver');
@@ -203,15 +209,15 @@ class ShutdownScheduler {
         this.currentCallbacks = { onDelay30, onDelay60, onClose };
 
         const htmlPath = path.join(__dirname, '../shutdown-warning.html');
-        shutdownWarningWin.loadFile(htmlPath);
-
-        shutdownWarningWin.webContents.on('did-finish-load', () => {
-            const targetTimeStr = targetDate.toLocaleString();
-            shutdownWarningWin.webContents.executeJavaScript(`
-                window.shutdownTargetTime = "${targetTimeStr}";
-                const targetTimeEl = document.getElementById('targetTime');
-                if (targetTimeEl) targetTimeEl.textContent = window.shutdownTargetTime;
-            `).catch(err => this.log('warn', `[关机调度] 设置目标时间失败: ${err.message}`));
+        shutdownWarningWin.webContents.once('did-finish-load', () => {
+            if (!shutdownWarningWin.isDestroyed()) {
+                shutdownWarningWin.webContents.send('shutdown-warning-init', {
+                    targetTime: targetDate.toLocaleString()
+                });
+            }
+        });
+        shutdownWarningWin.loadFile(htmlPath).catch((error) => {
+            this.log('warn', `[关机调度] 加载关机预警页面失败: ${error.message}`);
         });
 
         shutdownWarningWin.on('closed', () => {

@@ -121,8 +121,7 @@ function goToNextStep() {
  * 请求主进程打开本地课表配置文件夹。
  */
 function openConfigFolder() {
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.send('oobe-open-config-folder');
+    window.oobeApi.openConfigFolder();
 }
 
 /**
@@ -134,8 +133,7 @@ function completeOobe() {
     Elements.btnNext.disabled = true;
     Elements.btnNext.textContent = '正在重启...';
 
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.send('oobe-complete');
+    window.oobeApi.complete();
 }
 
 document.addEventListener('DOMContentLoaded', init);

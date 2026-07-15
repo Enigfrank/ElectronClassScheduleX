@@ -19,6 +19,7 @@ class ConfigManager {
             isAutoLaunch: true,
             scheduleShutdown: false,
             shutdownTimes: [],
+            examModeEntries: [],
             isFirstRun: true,
             isOobeCompleted: false,
             autoCheckUpdates: true,
