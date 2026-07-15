@@ -1,149 +1,139 @@
 <p align="center">
-  <img src="src/image/icon.png" width="128" alt="电子课表" />
+  <img src="src/image/icon.png" width="128" alt="Electron Class Schedule X 图标" />
 </p>
 
 <h1 align="center">Electron Class Schedule X</h1>
+
 <p align="center">
-  一个基于 Electron 的桌面课程表应用，支持单双周轮换、窗口置顶与穿透，专为 Windows 平台打造。
+  面向 Windows 的开源桌面课程表，在屏幕顶部展示当天课程，并通过图形化仪表盘管理课表、考试安排和常用工具。
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/Enigfrank/ElectronClassScheduleX?color=%23238b00&label=release" alt="release" />
-  <img src="https://img.shields.io/github/license/Enigfrank/ElectronClassScheduleX?color=%234c1" alt="license" />
-  <img src="https://img.shields.io/badge/platform-Windows%20x64-blue" alt="platform" />
-  <img src="https://img.shields.io/github/actions/workflow/status/Enigfrank/ElectronClassScheduleX/main.yml?branch=main" alt="build" />
+  <a href="https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Enigfrank/ElectronClassScheduleX?label=release" alt="最新版本" />
+  </a>
+  <a href="https://github.com/Enigfrank/ElectronClassScheduleX/actions/workflows/main.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Enigfrank/ElectronClassScheduleX/main.yml?label=release" alt="发布构建状态" />
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/github/license/Enigfrank/ElectronClassScheduleX" alt="许可证" />
+  </a>
+  <img src="https://img.shields.io/badge/platform-Windows%20x64-0078D4" alt="Windows x64" />
 </p>
 
----
+<p align="center">
+  <a href="https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest">下载安装</a>
+  ·
+  <a href="https://github.com/Enigfrank/ElectronClassScheduleX/issues">问题反馈</a>
+  ·
+  <a href="#参与贡献">参与贡献</a>
+</p>
 
-## 功能特性
+## 项目简介
 
-- **当日课表** - 悬浮展示当天课程，并标记当前课程、下一节课程与倒计时
-- **图形化课表编辑器** - 在仪表盘中编辑科目、时间表、每日课表和样式，保存后立即应用
-- **单双周轮换** - 可按学期起始日期自动判断单双周，也可留空后手动选择
-- **临时调课与调休** - 支持仅对当前运行生效的临时换课，以及当天切换其他星期日程
-- **可选窗口置顶** - 默认保持在桌面上方，也可在设置中关闭
-- **点击穿透与自动隐藏** - 工具条不拦截下层窗口操作，指针碰到主体时会暂时隐藏
-- **上课倒计时** - 上课隐藏主体时可显示并拖动迷你倒计时
-- **定时关机** - 支持添加、启停和删除多个关机时间，并在执行前提醒
-- **在线更新** - 支持启动后自动检查、手动检查、下载并重启安装更新
-- **本地优先** - 无需账号或云服务，课表显示与编辑均可离线使用
+Electron Class Schedule X 是一个本地优先的 Windows 桌面课程表。应用使用置顶、透明且可穿透的顶部窗口展示当天课程，同时提供独立仪表盘完成课表编辑、单双周设置、临时调课、考试模式、定时关机和在线更新等操作。
+
+课表与应用设置保存在本机，无需账号或云服务。除检查更新外，日常显示和编辑均可离线完成。
+
+## 功能概览
+
+| 功能 | 说明 |
+| :--- | :--- |
+| 顶部课表 | 展示当天课程、当前课程、下一节课程与倒计时 |
+| 图形化编辑器 | 编辑科目、时间表、每日课表、分隔线和显示样式，支持配置导入与导出 |
+| 单双周轮换 | 可按学期起始日期自动切换，也可手动选择单周或双周 |
+| 临时调整 | 支持临时换课、调休切换日程和计时偏移校准，不覆盖长期课表 |
+| 考试模式 | 配置考试科目与时间段，全屏显示当前或下一场考试及本机时钟 |
+| 桌面集成 | 支持系统托盘、窗口置顶、点击穿透、自动隐藏、开机启动和迷你倒计时 |
+| 定时关机 | 管理多个关机时间，并在执行前提供提醒、延迟或取消操作 |
+| 在线更新 | 从 GitHub Releases 检查、下载并安装新版本，可配置更新代理 |
 
 ## 安装
 
-从 [Releases](https://github.com/Enigfrank/ElectronClassScheduleX/releases) 页面下载最新 `Setup.<版本号>.exe` 安装包，双击运行即可。
+1. 前往 [Releases](https://github.com/Enigfrank/ElectronClassScheduleX/releases/latest) 下载最新的 `Setup.<版本号>.exe`。
+2. 运行安装程序并选择安装目录。
+3. 首次启动后按照引导完成初始化，应用会自动创建默认课表配置。
 
-> 首次运行时 Windows SmartScreen 可能会弹出警告，请点击 **"更多信息" → "仍要运行"**。这是未签名应用在 Windows 上的正常行为。
+当前发布目标为 Windows x64。应用尚未进行代码签名，Windows SmartScreen 可能显示安全提示；确认安装包来自本仓库 Releases 后，可选择“更多信息”并继续运行。
 
 ## 快速开始
 
-1. 首次运行会显示“首次使用引导”。默认课表配置此时已经自动创建，无需手动准备文件。
-2. 阅读引导后点击 **“完成并重启”**，程序会保存状态并自动重新启动。
-3. 在 Windows 通知区域中单击课表托盘图标，或右键图标选择 **“打开配置界面”**。
-4. 在仪表盘左侧进入 **“课表编辑器”**，配置课表后点击 **“保存配置并应用”**。
-5. 顶部工具条会立即重新加载新课表。以后需要管理课表时仍从系统托盘进入仪表盘。
+1. 完成首次使用引导并等待应用重新启动。
+2. 单击系统托盘中的课表图标，或在右键菜单中选择“打开配置界面”。
+3. 在仪表盘中进入“课表编辑器”，配置课表后选择“保存配置并应用”。
+4. 在“设置选项”中按需调整窗口置顶、上课隐藏、课上计时和开机启动。
 
-## 使用指南
+关闭仪表盘不会退出应用，顶部课表和系统托盘仍会继续运行。需要完全退出时，请使用仪表盘或托盘菜单中的“退出程序”。
 
-### 编辑长期课表
+## 使用说明
 
-“课表编辑器”会自动读取当前正在使用的配置。建议按以下顺序填写：
+### 长期课表与临时调整
 
-1. **基础设置**：设置倒计时目标；填写学期起始日期可启用自动单双周。
-2. **科目名称**：维护课程简称与完整名称，例如简称 `语` 对应完整名称 `语文`。
-3. **时间表**：为普通上课日、周末等日程类型设置时间段和课程序号。课程序号从 `0` 开始，`0` 表示每日课表中的第 1 节，`1` 表示第 2 节；结束时刻按包含端点计算，例如 40 分钟课程填写 `08:00-08:39`。
-4. **每日课表**：必须保留 7 项，并按 **星期日 → 星期六** 的固定顺序排列；星期名称只用于显示。为每一天绑定时间表类型，并按节次填写科目简称。
-5. **分隔线与样式配置**：按需调整，普通使用可以保留默认值。
-6. 点击 **“保存配置并应用”**。配置校验通过后才会覆盖本地文件并重新加载顶部工具条。
-
-编辑器顶部还提供导入和导出：导入只会把外部配置载入编辑器，需要再次保存才会覆盖当前课表；导出会把当前编辑内容保存为一个外部 `scheduleConfig.js` 备份。
-
-### 单双周课程
-
-- 在 **“基础设置 → 学期起始日期”** 中选择日期后，该日期开始的第一个 7 天按单周计算，之后每 7 天自动切换一次。
-- 学期起始日期留空时，仪表盘“功能选项”会显示 **“手动单周”** 和 **“手动双周”**。
-- 在“每日课表”的课程输入框中使用逗号分隔两个科目简称，例如 `语,数`，会生成单双周轮换课程。中文逗号 `，` 和顿号 `、` 也可以使用。
-
-### 临时调整与常用操作
-
-| 入口 | 用途 | 生效范围 |
+| 操作 | 入口 | 生效范围 |
 | :--- | :--- | :--- |
-| 功能选项 → 配置课表 | 临时替换某一节课程，不修改课表文件 | 内存临时状态，重启、重新应用配置或手动切换周次后清除 |
-| 功能选项 → 切换日程 | 调休时让今天临时使用其他星期的课表 | 保存在本机；星期变化时自动重置，也可在选项中手动重置 |
-| 功能选项 → 矫正计时 | 调整课表计时偏移 | 持续生效，直到再次修改 |
-| 功能选项 → 管理定时关机 | 添加、启停或删除关机时间 | 当前已调度计划 |
-| 设置选项 | 控制课上计时、窗口置顶、上课隐藏和开机启动 | 保存到本机设置 |
-| 在线更新 | 检查、下载并重启安装新版本，也可测试更新代理 | 仅更新流程 |
+| 编辑长期课表 | 课表编辑器 | 保存到本机配置，重新启动后仍然有效 |
+| 临时换课 | 功能选项 → 配置课表 | 仅当前运行期间有效，不修改课表文件 |
+| 调休切换日程 | 功能选项 → 切换日程 | 临时让当天使用其他星期的日程 |
+| 手动切换单双周 | 功能选项 → 手动单周 / 手动双周 | 未设置学期起始日期时可用 |
+| 校准计时 | 功能选项 → 矫正计时 | 调整课表计时偏移 |
 
-持久修改必须使用左侧 **“课表编辑器”**。临时调课只保存在运行内存中，重新应用长期配置、重建工具条、重新启动程序或手动切换单双周后会消失。“切换日程”当前按星期变化判断自动重置，使用完毕后主动选择“重置”最稳妥。
+课表编辑器中的课程序号从 `0` 开始。需要配置单双周课程时，可在同一课程项中填写两个科目简称；编辑器支持英文逗号、中文逗号和顿号作为分隔符。
 
-### 顶部工具条与系统托盘
+### 考试模式
 
-- 顶部工具条用于被动显示课程，不提供点击打开设置的交互；鼠标操作会穿透到下面的窗口。
-- 指针碰到工具条主体时，工具条会立即隐藏，并在停止触发约 2.5 秒后恢复。
-- 开启“上课隐藏”和“课上计时”时，上课期间会显示可拖动的迷你倒计时。
-- 关闭仪表盘窗口不会退出程序，顶部课表和托盘仍会运行。需要完全退出时，请使用仪表盘“退出程序”或托盘右键菜单中的“退出程序”。
-- 可在 **“设置选项 → 高级设置 → 重新运行引导”** 再次打开首次使用引导。
+在仪表盘中进入“考试模式”，添加考试科目、开始时间和结束时间后选择“应用”。应用会隐藏顶部课表和仪表盘，并在全屏页面中显示当前考试、下一场考试或“今日考试已结束”。退出考试模式后，原有窗口会自动恢复。
 
-### 本地数据与备份
+### 配置与备份
 
-课表配置文件位于：
+用户课表配置位于：
 
 ```text
 %APPDATA%\electron-class-schedule-x\config\scheduleConfig.js
 ```
 
-普通用户应优先使用课表编辑器。直接编辑配置文件适合高级修改或故障排查；备份和迁移建议使用编辑器的导出、导入功能。
+普通使用建议通过课表编辑器修改配置。迁移或备份课表时，可使用编辑器提供的导入、导出功能；导入后仍需保存并应用，才会覆盖当前配置。
 
 ## 开发
 
 ### 环境要求
 
-- [Node.js](https://nodejs.org/) >= 24
-- [Yarn](https://yarnpkg.com/) >= 4（通过 Corepack 启用）
-- Windows 10+ (x64)
+- Windows x64
+- Node.js 24.x，与当前 CI 环境一致
+- Corepack 与 Yarn 4.14.1
+- npm，用于管理 `ECSX-Gui/` 前端依赖
 
-### 安装依赖
+### 获取源码与安装依赖
 
 ```powershell
 git clone https://github.com/Enigfrank/ElectronClassScheduleX.git
-cd ElectronClassScheduleX
+Set-Location .\ElectronClassScheduleX
 
 corepack enable
 corepack yarn install --immutable
 
-cd ECSX-Gui
+Set-Location .\ECSX-Gui
 npm ci
+Set-Location ..
 ```
 
-根目录使用 Yarn 管理 Electron 运行时，`ECSX-Gui/` 使用 npm 管理 React/Vite 前端。
+仓库根目录使用 Yarn 管理 Electron 应用，`ECSX-Gui/` 是独立的 React/Vite 项目并使用 npm 管理依赖。
 
 ### 本地开发
 
-在第一个终端中持续监听 React 前端，并将结果写入 `src/dist/`：
+在第一个 PowerShell 终端中持续构建 React 仪表盘：
 
 ```powershell
-cd ECSX-Gui
+Set-Location .\ECSX-Gui
 npm run dev
 ```
 
-在另一个位于仓库根目录的终端中启动 Electron：
+该命令以监听模式把前端产物写入 `src/dist/`。随后在第二个、位于仓库根目录的 PowerShell 终端中启动 Electron：
 
 ```powershell
 corepack yarn start
 ```
 
-### 构建安装包
-
-```powershell
-cd ECSX-Gui
-npm run build
-
-cd ..
-corepack yarn build
-```
-
-React GUI 构建产物位于 `src/dist/`，Electron 安装包位于 `out/`。根目录的 `corepack yarn build` 只执行 Electron 打包，不会自动运行 Vite 构建。
+开发环境会监听仪表盘构建产物，并在文件更新后重新加载窗口。
 
 ### 运行测试
 
@@ -153,59 +143,77 @@ React GUI 构建产物位于 `src/dist/`，Electron 安装包位于 `out/`。根
 corepack yarn test
 ```
 
-该命令运行 `tests/*.test.js` 中的 Node.js 测试。
+该命令使用 Node.js 内置测试运行器执行 `tests/*.test.js`。
 
-## 技术栈
+### 构建安装包
 
-| 层级 | 技术 |
-| :--- | :--- |
-| 桌面框架 | Electron 42 |
-| 前端 UI | React 18 + Chakra UI 2 |
-| 前端构建 | Vite 8 |
-| 样式 | Chakra UI + CSS Variables（传统渲染页） |
-| 图标 | Lucide React |
-| 本地存储 | electron-store |
-| 自动更新 | electron-updater |
-| 构建 | electron-builder (NSIS) |
+```powershell
+Set-Location .\ECSX-Gui
+npm run build
+
+Set-Location ..
+corepack yarn build
+```
+
+`npm run build` 将 React 仪表盘写入 `src/dist/`，`corepack yarn build` 使用当前 `src/` 内容生成 Windows 安装包并输出到 `out/`。
+
+根目录的 `build` 脚本不会自动构建 `ECSX-Gui/`。修改 React 源码后，必须先运行前端构建，再执行 Electron 打包。
 
 ## 项目结构
 
-```
-.
-├── .github/workflows/    # CI/CD 工作流
-├── ECSX-Gui/              # React 前端（独立 Vite 项目）
-│   ├── src/
-│   ├── package.json
-│   └── vite.config.js
-├── src/                   # Electron 运行时代码与渲染资源
-│   ├── main.js            # 入口
-│   ├── modules/           # 功能模块
-│   ├── js/                # 传统渲染页脚本
-│   ├── css/               # 传统渲染页样式
-│   ├── dist/              # ECSX-Gui 生成的渲染包
-│   ├── image/             # 图标资源
+```text
+ElectronClassScheduleX/
+├── .github/workflows/     # GitHub Actions 发布工作流
+├── ECSX-Gui/              # React 18 + Chakra UI 管理仪表盘
+│   ├── src/               # 仪表盘源码
+│   ├── package.json       # 前端依赖与脚本
+│   └── vite.config.js     # 构建到 src/dist 的 Vite 配置
+├── src/                   # Electron 应用源码与资源
+│   ├── main.js            # 主进程入口
+│   ├── modules/           # 窗口、配置、更新和系统功能模块
+│   ├── preload/           # 各渲染窗口的安全桥接脚本
+│   ├── shared/            # 主进程与渲染进程共享逻辑
+│   ├── js/                # 传统渲染页面脚本
+│   ├── css/               # 传统渲染页面样式
+│   ├── dist/              # ECSX-Gui 生成的仪表盘构建产物
 │   └── *.html             # Electron 渲染页面
-├── tests/                 # 测试文件
-├── package.json           # 项目元数据与构建配置
-└── yarn.lock              # 依赖锁文件
+├── tests/                 # Node.js 测试与 Electron 冒烟脚本
+├── package.json           # Electron 依赖、脚本与打包配置
+└── yarn.lock              # Yarn 锁文件
 ```
+
+## 技术栈
+
+| 用途 | 技术 |
+| :--- | :--- |
+| 桌面运行时 | Electron 42 |
+| 管理仪表盘 | React 18、Chakra UI 2 |
+| 前端构建 | Vite 8 |
+| 图标 | Lucide React |
+| 本地设置 | electron-store |
+| 日志 | electron-log |
+| 自动更新 | electron-updater |
+| Windows 打包 | electron-builder、NSIS |
+
+## 参与贡献
+
+欢迎通过 Issue 和 Pull Request 改进项目。提交修改前请遵循以下流程：
+
+1. 在 [Issues](https://github.com/Enigfrank/ElectronClassScheduleX/issues) 中检索已有问题；新功能或较大改动建议先创建 Issue 说明使用场景。
+2. Fork 仓库并从最新的 `main` 分支创建工作分支。
+3. 保持改动范围聚焦；修改 `ECSX-Gui/` 后重新构建前端，并在提交前运行 `corepack yarn test`。
+4. 创建 Pull Request，说明修改目的、验证方式和可能影响；界面变更请附前后截图。
+
+报告缺陷时，建议提供应用版本、Windows 版本、复现步骤、预期结果、实际结果，以及与问题相关的日志或截图。请勿在 Issue 中提交包含个人课表或其他敏感信息的文件。
 
 ## 隐私
 
-本应用无需账号或云端服务，课表、设置和日志保存在用户本地设备中，课表显示与编辑可离线使用。启用更新检查时，应用会访问 GitHub Releases 或用户选择的更新代理，但不会上传课表内容。
+应用无需账号或云端服务，课表、设置和日志保存在本地设备。启用更新检查时，应用会访问 GitHub Releases 或用户选择的更新代理，但不会上传课表内容。
 
 ## 致谢
 
-本项目基于 [ElectronClassSchedule](https://github.com/EnderWolf006/ElectronClassSchedule)（ECS V1）重构开发，感谢原作者的贡献。
+本项目基于 [ElectronClassSchedule](https://github.com/EnderWolf006/ElectronClassSchedule)（ECS V1）重构开发，感谢原作者及所有贡献者。
 
 ## 许可证
 
-本项目采用 [GNU General Public License v3.0](LICENSE) 开源协议。
-
----
-
-<p align="center">
-  <a href="https://www.star-history.com/#Enigfrank/ElectronClassScheduleX&Date">
-    <img src="https://api.star-history.com/svg?repos=Enigfrank/ElectronClassScheduleX&type=Date" alt="Star History" width="600" />
-  </a>
-</p>
+本项目基于 [GNU General Public License v3.0](./LICENSE) 发布。使用、修改或分发本项目时，请遵守许可证条款。
