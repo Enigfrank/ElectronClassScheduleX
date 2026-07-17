@@ -1,5 +1,12 @@
 /* Fluent Design System 样式 */
 
+:root {
+  --motion-duration-fast: 160ms;
+  --motion-duration-standard: 200ms;
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-offset-subtle: 4px;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -66,6 +73,23 @@ body {
 .no-select {
   user-select: none;
   -webkit-user-select: none;
+}
+
+.dashboard-action-card {
+  transition: transform var(--motion-duration-standard) var(--motion-ease-out);
+}
+
+.update-probe-results {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+@starting-style {
+  .update-probe-results {
+    opacity: 0;
+    transform: translateY(var(--motion-offset-subtle));
+  }
 }
 
 /* 动画 */
@@ -308,12 +332,13 @@ body {
 
 /* 减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
+  .dashboard-action-card {
+    transform: none !important;
+    transition: none;
+  }
 
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .update-probe-results {
+    transform: none;
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-out);
   }
 }

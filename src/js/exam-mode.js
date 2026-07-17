@@ -13,6 +13,7 @@
     let initialized = false;
     let initializationFailed = false;
     let tickTimer = null;
+    let exitLayerHideTimer = null;
     let unsubscribeInit = () => {};
     let resizeObserver = null;
 
@@ -113,18 +114,32 @@
      * 打开触控退出确认层。
      */
     function openExitLayer() {
+        if (exitLayerHideTimer !== null) {
+            window.clearTimeout(exitLayerHideTimer);
+            exitLayerHideTimer = null;
+        }
         exitError.hidden = true;
         exitError.textContent = '';
         exitLayer.hidden = false;
-        exitCancel.focus();
+        window.requestAnimationFrame(() => {
+            exitLayer.classList.add('is-visible');
+            exitCancel.focus();
+        });
     }
 
     /**
      * 关闭退出确认层并回到考试展示。
      */
     function closeExitLayer() {
-        exitLayer.hidden = true;
-        exitTrigger.focus();
+        if (exitLayerHideTimer !== null) {
+            window.clearTimeout(exitLayerHideTimer);
+        }
+        exitLayer.classList.remove('is-visible');
+        exitLayerHideTimer = window.setTimeout(() => {
+            exitLayer.hidden = true;
+            exitLayerHideTimer = null;
+            exitTrigger.focus();
+        }, 160);
     }
 
     /**
@@ -154,6 +169,7 @@
      */
     function cleanup() {
         if (tickTimer !== null) window.clearTimeout(tickTimer);
+        if (exitLayerHideTimer !== null) window.clearTimeout(exitLayerHideTimer);
         unsubscribeInit();
         resizeObserver?.disconnect();
         window.removeEventListener('resize', fitInfoText);

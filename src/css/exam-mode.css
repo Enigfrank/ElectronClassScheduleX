@@ -39,6 +39,8 @@
     --dialog-width: 560px;
     --touch-target: 64px;
     --clock-width: 8ch;
+    --motion-duration-fast: 160ms;
+    --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 * {
@@ -195,6 +197,8 @@ button {
     justify-content: center;
     padding: var(--space-8);
     background: var(--color-neutral-0);
+    opacity: 0;
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .exam-exit-dialog {
@@ -204,6 +208,18 @@ button {
     border-radius: var(--radius-md);
     background: var(--color-neutral-0);
     text-align: center;
+    opacity: 0;
+    transform: translateY(var(--space-1));
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.exam-exit-layer.is-visible {
+    opacity: 1;
+}
+
+.exam-exit-layer.is-visible .exam-exit-dialog {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .exam-exit-dialog h1 {
@@ -267,6 +283,13 @@ button {
 .exam-exit-error {
     color: var(--color-error) !important;
     font-size: var(--text-sm) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .exam-exit-dialog {
+        transform: none;
+        transition: opacity var(--motion-duration-fast) var(--motion-ease-out);
+    }
 }
 
 @media (min-width: 3000px) and (min-height: 1800px) {

@@ -498,41 +498,43 @@ function UpdateManagerView({ ipcRenderer }) {
           </Flex>
 
           {probeResults.length > 0 ? (
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>源</Th>
-                  <Th>状态</Th>
-                  <Th>首字节</Th>
-                  <Th>总耗时</Th>
-                  <Th>操作</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {probeResults.map((result) => (
-                  <Tr key={result.id}>
-                    <Td>{result.name}</Td>
-                    <Td>
-                      <Badge colorScheme={result.available ? 'green' : 'red'}>
-                        {result.available ? '可用' : '不可用'}
-                      </Badge>
-                    </Td>
-                    <Td>{result.firstByteMs == null ? '-' : `${result.firstByteMs} ms`}</Td>
-                    <Td>{result.totalMs == null ? '-' : `${result.totalMs} ms`}</Td>
-                    <Td>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        isDisabled={!result.available}
-                        onClick={() => handleUseProbeSource(result.id)}
-                      >
-                        使用此源
-                      </Button>
-                    </Td>
+            <Box className="update-probe-results">
+              <Table size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>源</Th>
+                    <Th>状态</Th>
+                    <Th>首字节</Th>
+                    <Th>总耗时</Th>
+                    <Th>操作</Th>
                   </Tr>
-                ))}
-              </Tbody>
-            </Table>
+                </Thead>
+                <Tbody>
+                  {probeResults.map((result) => (
+                    <Tr key={result.id}>
+                      <Td>{result.name}</Td>
+                      <Td>
+                        <Badge colorScheme={result.available ? 'green' : 'red'}>
+                          {result.available ? '可用' : '不可用'}
+                        </Badge>
+                      </Td>
+                      <Td>{result.firstByteMs == null ? '-' : `${result.firstByteMs} ms`}</Td>
+                      <Td>{result.totalMs == null ? '-' : `${result.totalMs} ms`}</Td>
+                      <Td>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          isDisabled={!result.available}
+                          onClick={() => handleUseProbeSource(result.id)}
+                        >
+                          使用此源
+                        </Button>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
           ) : (
             <Text fontSize="sm" color={mutedTextColor}>点击“代理测速”后在这里查看各更新源的延迟结果。</Text>
           )}

@@ -85,11 +85,11 @@ const ToolsBar = ({ handleButtonClick }) => {
         <Card
           key={tool.action}
           cursor="pointer"
+          className="dashboard-action-card"
           onClick={() => handleButtonClick(tool.action)}
           bg={tool.bg}
           color={tool.color}
           _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
-          transition="all 0.2s ease"
         >
           <CardBody>
             <Flex align="center" gap={2} fontWeight="semibold">
@@ -144,10 +144,10 @@ const MainView = ({ handleButtonClick, semesterStartDate }) => {
           <Card
             key={act.action}
             cursor={act.interactive === false ? 'default' : 'pointer'}
+            className={act.interactive === false ? undefined : 'dashboard-action-card'}
             onClick={act.interactive === false ? undefined : () => handleButtonClick(act.action)}
             minH="140px"
             _hover={act.interactive === false ? undefined : { transform: 'translateY(-2px)', shadow: 'xl' }}
-            transition="all 0.2s ease"
             aria-disabled={act.interactive === false}
           >
             <Box bg="blue.500" color="white" h="80px" display="flex" alignItems="center" justifyContent="center" borderTopRadius="md">

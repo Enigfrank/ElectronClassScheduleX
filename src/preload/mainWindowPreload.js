@@ -26,7 +26,8 @@ const RECEIVE_CHANNELS = new Set([
     'openSettingDialog',
     'setDayOffset',
     'setTimeOffset',
-    'setWeekIndex'
+    'setWeekIndex',
+    'mini-countdown-overlay-pointer'
 ]);
 
 /**

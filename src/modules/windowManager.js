@@ -19,8 +19,10 @@ class WindowManager {
             main: null,
             gui: null,
             oobe: null,
-            devTools: null
+            devTools: null,
+            touchDragOverlay: null
         };
+        this.touchDragOverlayRect = null;
         this.mainAlwaysOnTopRestoreTimer = null;
         this.examModeController = new ExamModeWindowController({
             windowManager: this,
@@ -166,8 +168,10 @@ class WindowManager {
         });
 
         this.windows.main = win;
+        this.createTouchDragOverlay(win);
         win.on('closed', () => {
             this.stopMainWindowAlwaysOnTopGuard();
+            this.destroyTouchDragOverlay();
             if (this.windows.main === win) {
                 this.windows.main = null;
             }
@@ -180,6 +184,106 @@ class WindowManager {
 
         this.setWindowAlwaysOnTop(win, this.configManager.getWindowAlwaysOnTop());
         return win;
+    }
+
+    /**
+     * 创建仅用于接收迷你倒计时触摸输入的透明覆盖窗口。
+     * @param {BrowserWindow} mainWindow 主课表窗口
+     * @returns {BrowserWindow} 覆盖窗口实例
+     */
+    createTouchDragOverlay(mainWindow) {
+        this.destroyTouchDragOverlay();
+
+        const overlay = new BrowserWindow({
+            parent: mainWindow,
+            x: mainWindow.getBounds().x,
+            y: mainWindow.getBounds().y,
+            width: 1,
+            height: 1,
+            frame: false,
+            transparent: true,
+            show: false,
+            focusable: false,
+            skipTaskbar: true,
+            resizable: false,
+            movable: false,
+            minimizable: false,
+            maximizable: false,
+            alwaysOnTop: mainWindow.isAlwaysOnTop(),
+            type: 'toolbar',
+            webPreferences: {
+                preload: path.join(__dirname, '..', 'preload', 'touchDragOverlayPreload.js'),
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
+            }
+        });
+
+        overlay.loadFile(path.join(__dirname, '..', 'touch-drag-overlay.html')).catch(err => {
+            this.log('error', `[窗口管理] 加载触摸拖动覆盖窗口失败: ${err.message}`);
+        });
+        overlay.webContents.once('did-finish-load', () => {
+            if (this.windows.touchDragOverlay === overlay) {
+                this.updateTouchDragOverlay(this.touchDragOverlayRect);
+            }
+        });
+        overlay.on('closed', () => {
+            if (this.windows.touchDragOverlay === overlay) {
+                this.windows.touchDragOverlay = null;
+            }
+        });
+
+        this.windows.touchDragOverlay = overlay;
+        return overlay;
+    }
+
+    /**
+     * 用主课表 renderer 的 CSS/DIP 矩形更新触摸覆盖窗口，仅覆盖扩展命中区。
+     * @param {{x: number, y: number, width: number, height: number}|null} rect 迷你倒计时矩形
+     */
+    updateTouchDragOverlay(rect) {
+        this.touchDragOverlayRect = rect;
+        const overlay = this.windows.touchDragOverlay;
+        const mainWindow = this.windows.main;
+        if (!overlay || overlay.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return;
+
+        const mainBounds = mainWindow.getBounds();
+        const isValidRect = rect &&
+            [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+            rect.x >= 0 &&
+            rect.y >= 0 &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.x + rect.width <= mainBounds.width &&
+            rect.y + rect.height <= mainBounds.height;
+        if (!isValidRect) {
+            overlay.hide();
+            return;
+        }
+
+        if (overlay.webContents.isLoading()) return;
+
+        const touchHitPadding = 10;
+        const minimumTouchTargetSize = 44;
+        const width = Math.max(minimumTouchTargetSize, Math.ceil(rect.width + touchHitPadding * 2));
+        const height = Math.max(minimumTouchTargetSize, Math.ceil(rect.height + touchHitPadding * 2));
+        const desiredX = Math.round(mainBounds.x + rect.x - (width - rect.width) / 2);
+        const desiredY = Math.round(mainBounds.y + rect.y - (height - rect.height) / 2);
+        const x = Math.max(mainBounds.x, Math.min(desiredX, mainBounds.x + mainBounds.width - width));
+        const y = Math.max(mainBounds.y, Math.min(desiredY, mainBounds.y + mainBounds.height - height));
+
+        overlay.setBounds({ x, y, width, height });
+        if (!overlay.isVisible()) overlay.showInactive();
+    }
+
+    /**
+     * 销毁触摸输入覆盖窗口，避免主课表重建后留下无视觉输入区。
+     */
+    destroyTouchDragOverlay() {
+        const overlay = this.windows.touchDragOverlay;
+        if (overlay && !overlay.isDestroyed()) overlay.destroy();
+        this.windows.touchDragOverlay = null;
+        this.touchDragOverlayRect = null;
     }
 
     /**
@@ -319,6 +423,25 @@ class WindowManager {
                 this.stopMainWindowAlwaysOnTopGuard();
             }
             win.setAlwaysOnTop(false);
+        }
+
+        if (win === this.windows.main) {
+            this.setTouchDragOverlayAlwaysOnTop(alwaysOnTop);
+        }
+    }
+
+    /**
+     * 让透明触摸覆盖窗口跟随主课表的置顶策略，避免它独立悬在其他应用之上。
+     * @param {boolean} alwaysOnTop 是否置顶
+     */
+    setTouchDragOverlayAlwaysOnTop(alwaysOnTop) {
+        const overlay = this.windows.touchDragOverlay;
+        if (!overlay || overlay.isDestroyed()) return;
+
+        if (alwaysOnTop) {
+            this.refreshWindowAlwaysOnTop(overlay);
+        } else {
+            overlay.setAlwaysOnTop(false);
         }
     }
 

@@ -71,6 +71,43 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         }
     }
 
+    /**
+     * 验证透明输入窗口转发的指针事件，防止其他 renderer 注入坐标。
+     * @param {unknown} payload 待验证的 IPC 数据
+     * @returns {payload is {type: 'down'|'move'|'up'|'cancel', pointerId: number, clientX: number, clientY: number}} 是否为有效事件
+     */
+    function isValidTouchDragPointerEvent(payload) {
+        return Boolean(
+            payload &&
+            typeof payload === 'object' &&
+            ['down', 'move', 'up', 'cancel'].includes(payload.type) &&
+            Number.isInteger(payload.pointerId) &&
+            Number.isFinite(payload.clientX) &&
+            Number.isFinite(payload.clientY)
+        );
+    }
+
+    /**
+     * 将覆盖窗口局部 CSS/DIP 坐标换算成主课表 renderer 坐标并转发。
+     * @param {Electron.IpcMainEvent} event IPC 事件
+     * @param {unknown} payload 覆盖窗口指针数据
+     */
+    function forwardTouchDragPointerEvent(event, payload) {
+        const overlay = windowManager.getWindow('touchDragOverlay');
+        const mainWindow = windowManager.getWindow('main');
+        if (!overlay || overlay.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return;
+        if (event.sender !== overlay.webContents || !isValidTouchDragPointerEvent(payload)) return;
+
+        const overlayBounds = overlay.getBounds();
+        const mainBounds = mainWindow.getBounds();
+        mainWindow.webContents.send('mini-countdown-overlay-pointer', {
+            type: payload.type,
+            pointerId: payload.pointerId,
+            clientX: overlayBounds.x + payload.clientX - mainBounds.x,
+            clientY: overlayBounds.y + payload.clientY - mainBounds.y
+        });
+    }
+
     ipcMain.on('openSettingDialog', () => {
         log('info', '[IPC管理] 打开设置对话框');
         windowManager.getWindow('main')?.webContents.send('openSettingDialog');
@@ -101,7 +138,11 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
     });
 
     ipcMain.on('updateInteractiveRect', (event, rect) => {
+        const mainWindow = windowManager.getWindow('main');
+        if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+
         interactiveRect = rect;
+        windowManager.updateTouchDragOverlay?.(rect);
         if (rect) {
             if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);
         } else {
@@ -109,8 +150,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
                 clearInterval(checkTimer);
                 checkTimer = null;
             }
-            const mainWindow = windowManager.getWindow('main');
-            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIgnoreMouseEvents(true, { forward: true });
+            mainWindow.setIgnoreMouseEvents(true, { forward: true });
         }
     });
 
@@ -122,6 +162,8 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
             else checkMousePosition();
         }
     });
+
+    ipcMain.on('touch-drag-overlay-pointer', forwardTouchDragPointerEvent);
 }
 
 module.exports = registerWindowIpc;

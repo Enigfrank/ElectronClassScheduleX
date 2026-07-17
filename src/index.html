@@ -68,7 +68,11 @@
   let dragStartY = 0;
   let miniCountdownInitialX = 0;
   let miniCountdownInitialY = 0;
-  let miniCountdownHasMoved = false;
+   let miniCountdownHasMoved = false;
+   let dragFrameId = null;
+   let pendingDragPosition = null;
+   let dragPointerId = null;
+   let dragCaptureTarget = null;
 
   let lastScheduleData = {
     currentHighlight: {
@@ -298,13 +302,22 @@
 
   // Pointer Events 拖动逻辑
 
+  /**
+   * 初始化迷你倒计时的本地与透明覆盖窗口拖动入口。
+   */
   function initMiniCountdownDrag() {
     const miniCountdown = document.getElementById('miniCountdown');
     miniCountdown.addEventListener('pointerdown', handlePointerDown);
+    ipcRenderer.on('mini-countdown-overlay-pointer', (event, pointerEvent) => {
+      handleOverlayPointerEvent(pointerEvent);
+    });
     updateInteractiveRect();
     window.addEventListener('resize', updateInteractiveRect);
   }
 
+  /**
+   * 将当前视觉矩形同步给主进程的鼠标穿透逻辑与触摸输入覆盖窗口。
+   */
   function updateInteractiveRect() {
     const miniCountdown = document.getElementById('miniCountdown');
     if (miniCountdown.style.display === 'block') {
@@ -320,54 +333,135 @@
     }
   }
 
-  function setDragBoundaryHintVisible(visible) {
+  /**
+   * 显示或隐藏已触及真实边界时的静态提示。
+   * @param {boolean} visible 是否显示
+   * @param {{x: number, y: number}|null} boundaryOrigin 实际触边的 renderer 坐标
+   */
+  function setDragBoundaryHintVisible(visible, boundaryOrigin = null) {
     const dragBoundaryHint = document.getElementById('dragBoundaryHint');
     if (!dragBoundaryHint) return;
+
+    if (visible && boundaryOrigin) {
+      const gradientOriginX = 25 + (boundaryOrigin.x / window.innerWidth) * 50;
+      const gradientOriginY = 25 + (boundaryOrigin.y / window.innerHeight) * 50;
+      dragBoundaryHint.style.setProperty('--drag-boundary-gradient-origin-x', `${gradientOriginX}%`);
+      dragBoundaryHint.style.setProperty('--drag-boundary-gradient-origin-y', `${gradientOriginY}%`);
+    }
     dragBoundaryHint.classList.toggle('active', visible);
   }
 
+  /**
+   * 同步迷你倒计时的拖动视觉状态。
+   * @param {boolean} dragging 是否正在拖动
+   */
   function setMiniCountdownDraggingState(dragging) {
     const miniCountdown = document.getElementById('miniCountdown');
     if (!miniCountdown) return;
     miniCountdown.classList.toggle('dragging', dragging);
   }
 
-  function handlePointerDown(event) {
+  /**
+   * 开始一次迷你倒计时拖动，可选择为本地事件设置 Pointer Capture。
+   * @param {number} pointerId 指针标识
+   * @param {number} clientX 主课表 renderer 内的 X 坐标
+   * @param {number} clientY 主课表 renderer 内的 Y 坐标
+   * @param {Element|null} captureTarget 需要捕获指针的本地元素
+   * @returns {boolean} 是否成功开始拖动
+   */
+  function startMiniCountdownDrag(pointerId, clientX, clientY, captureTarget = null) {
     const miniCountdown = document.getElementById('miniCountdown');
-    if (miniCountdown.style.display !== 'block' || !event.isPrimary) return;
+    if (miniCountdown.style.display !== 'block' || isDragging) return false;
 
     isDragging = true;
+    dragPointerId = pointerId;
+    dragCaptureTarget = captureTarget;
     ipcRenderer.send('setDragState', true);
-    setDragBoundaryHintVisible(true);
+    setDragBoundaryHintVisible(false);
     setMiniCountdownDraggingState(true);
-    
-    dragStartX = event.clientX;
-    dragStartY = event.clientY;
+
+    dragStartX = clientX;
+    dragStartY = clientY;
 
     const rect = miniCountdown.getBoundingClientRect();
     miniCountdownInitialX = rect.left;
     miniCountdownInitialY = rect.top;
+    miniCountdown.style.left = '0px';
+    miniCountdown.style.top = '0px';
+    miniCountdown.style.transform = `translate3d(${miniCountdownInitialX}px, ${miniCountdownInitialY}px, 0)`;
 
-    miniCountdown.setPointerCapture(event.pointerId);
-
-    miniCountdown.addEventListener('pointermove', handlePointerMoveDrag);
-    miniCountdown.addEventListener('pointerup', handlePointerUp);
-    miniCountdown.addEventListener('pointercancel', handlePointerUp); 
-
-    event.preventDefault();
+    if (captureTarget) {
+      captureTarget.setPointerCapture(pointerId);
+      captureTarget.addEventListener('pointermove', handlePointerMoveDrag);
+      captureTarget.addEventListener('pointerup', handlePointerUp);
+      captureTarget.addEventListener('pointercancel', handlePointerUp);
+    }
+    return true;
   }
 
-  function handlePointerMoveDrag(event) {
-    if (!isDragging || !event.isPrimary) return;
+  /**
+   * 处理主课表内直接命中的指针按下。
+   * @param {PointerEvent} event 原生指针事件
+   */
+  function handlePointerDown(event) {
+    if (!event.isPrimary) return;
+    if (startMiniCountdownDrag(event.pointerId, event.clientX, event.clientY, event.currentTarget)) {
+      event.preventDefault();
+    }
+  }
 
-    const deltaX = event.clientX - dragStartX;
-    const deltaY = event.clientY - dragStartY;
+  /**
+   * 将最新拖动坐标合并到下一帧，仅更新合成层 transform。
+   * @param {number} x 元素左侧的视口坐标
+   * @param {number} y 元素顶部的视口坐标
+   */
+  function scheduleMiniCountdownPosition(x, y) {
+    pendingDragPosition = { x, y };
+    if (dragFrameId !== null) return;
 
+    dragFrameId = requestAnimationFrame(() => {
+      if (pendingDragPosition) {
+        miniCountdown.style.transform = `translate3d(${pendingDragPosition.x}px, ${pendingDragPosition.y}px, 0)`;
+      }
+      dragFrameId = null;
+    });
+  }
+
+  /**
+   * 计算迷你倒计时在窗口边界上的实际接触点。
+   * @param {number} x 夹取后的元素左侧坐标
+   * @param {number} y 夹取后的元素顶部坐标
+   * @param {number} width 元素宽度
+   * @param {number} height 元素高度
+   * @param {number} windowWidth 主课表宽度
+   * @param {number} windowHeight 主课表高度
+   * @returns {{x: number, y: number}} 边界接触点坐标
+   */
+  function getDragBoundaryOrigin(x, y, width, height, windowWidth, windowHeight) {
+    const isAtLeft = x === 0;
+    const isAtRight = x === windowWidth - width;
+    const isAtTop = y === 0;
+    const isAtBottom = y === windowHeight - height;
+
+    return {
+      x: isAtLeft ? 0 : isAtRight ? windowWidth : x + width / 2,
+      y: isAtTop ? 0 : isAtBottom ? windowHeight : y + height / 2
+    };
+  }
+
+  /**
+   * 依据主课表 renderer 坐标更新拖动位置。
+   * @param {number} clientX 主课表 renderer 内的 X 坐标
+   * @param {number} clientY 主课表 renderer 内的 Y 坐标
+   */
+  function updateMiniCountdownDragPosition(clientX, clientY) {
+    if (!isDragging) return;
+
+    const deltaX = clientX - dragStartX;
+    const deltaY = clientY - dragStartY;
     const miniCountdown = document.getElementById('miniCountdown');
-
     let newX = miniCountdownInitialX + deltaX;
     let newY = miniCountdownInitialY + deltaY;
-
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const miniWidth = miniCountdown.offsetWidth;
@@ -376,32 +470,88 @@
     newX = Math.max(0, Math.min(newX, windowWidth - miniWidth));
     newY = Math.max(0, Math.min(newY, windowHeight - miniHeight));
 
-    requestAnimationFrame(() => {
-      miniCountdown.style.left = newX + 'px';
-      miniCountdown.style.top = newY + 'px';
-      miniCountdown.style.transform = 'none'; 
-    });
-
+    const isAtBoundary = newX === 0 || newY === 0 || newX === windowWidth - miniWidth || newY === windowHeight - miniHeight;
+    const boundaryOrigin = isAtBoundary
+      ? getDragBoundaryOrigin(newX, newY, miniWidth, miniHeight, windowWidth, windowHeight)
+      : null;
+    setDragBoundaryHintVisible(isAtBoundary, boundaryOrigin);
+    scheduleMiniCountdownPosition(newX, newY);
     miniCountdownHasMoved = true;
+  }
+
+  /**
+   * 处理主课表内直接命中的拖动移动事件。
+   * @param {PointerEvent} event 原生指针事件
+   */
+  function handlePointerMoveDrag(event) {
+    if (!event.isPrimary || event.pointerId !== dragPointerId) return;
+    updateMiniCountdownDragPosition(event.clientX, event.clientY);
     event.preventDefault();
   }
 
-  function handlePointerUp(event) {
-    if (!isDragging) return;
-    
-    const miniCountdown = document.getElementById('miniCountdown');
+  /**
+   * 结束一次迷你倒计时拖动，并只在结束时同步触摸覆盖窗口位置。
+   * @param {number} pointerId 指针标识
+   */
+  function finishMiniCountdownDrag(pointerId) {
+    if (!isDragging || pointerId !== dragPointerId) return;
 
+    const miniCountdown = document.getElementById('miniCountdown');
+    const captureTarget = dragCaptureTarget;
     isDragging = false;
+    dragPointerId = null;
+    dragCaptureTarget = null;
     ipcRenderer.send('setDragState', false);
     setDragBoundaryHintVisible(false);
     setMiniCountdownDraggingState(false);
+    if (dragFrameId !== null) {
+      cancelAnimationFrame(dragFrameId);
+      dragFrameId = null;
+      if (pendingDragPosition) {
+        miniCountdown.style.transform = `translate3d(${pendingDragPosition.x}px, ${pendingDragPosition.y}px, 0)`;
+      }
+    }
+    pendingDragPosition = null;
     updateInteractiveRect();
 
-    miniCountdown.releasePointerCapture(event.pointerId);
+    if (captureTarget) {
+      if (captureTarget.hasPointerCapture(pointerId)) {
+        captureTarget.releasePointerCapture(pointerId);
+      }
+      captureTarget.removeEventListener('pointermove', handlePointerMoveDrag);
+      captureTarget.removeEventListener('pointerup', handlePointerUp);
+      captureTarget.removeEventListener('pointercancel', handlePointerUp);
+    }
+  }
 
-    miniCountdown.removeEventListener('pointermove', handlePointerMoveDrag);
-    miniCountdown.removeEventListener('pointerup', handlePointerUp);
-    miniCountdown.removeEventListener('pointercancel', handlePointerUp);
+  /**
+   * 处理主课表内直接命中的拖动结束或取消事件。
+   * @param {PointerEvent} event 原生指针事件
+   */
+  function handlePointerUp(event) {
+    if (event.pointerId !== dragPointerId) return;
+    finishMiniCountdownDrag(event.pointerId);
+    event.preventDefault();
+  }
+
+  /**
+   * 消费透明触摸覆盖窗口换算后的指针事件。
+   * @param {unknown} pointerEvent 由主进程转发的可序列化指针事件
+   */
+  function handleOverlayPointerEvent(pointerEvent) {
+    if (!pointerEvent || typeof pointerEvent !== 'object' ||
+      !Number.isInteger(pointerEvent.pointerId) ||
+      !Number.isFinite(pointerEvent.clientX) || !Number.isFinite(pointerEvent.clientY)) return;
+
+    if (pointerEvent.type === 'down') {
+      startMiniCountdownDrag(pointerEvent.pointerId, pointerEvent.clientX, pointerEvent.clientY);
+    } else if (pointerEvent.type === 'move') {
+      if (pointerEvent.pointerId === dragPointerId) {
+        updateMiniCountdownDragPosition(pointerEvent.clientX, pointerEvent.clientY);
+      }
+    } else if (pointerEvent.type === 'up' || pointerEvent.type === 'cancel') {
+      finishMiniCountdownDrag(pointerEvent.pointerId);
+    }
   }
 
 
