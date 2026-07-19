@@ -348,6 +348,45 @@ export function normalizeScheduleConfigForEditor(rawConfig) {
 }
 
 /**
+ * 列出导入时会被规范化或丢弃的时间表与分隔线字段。
+ * @param {Object} rawConfig 导入前配置
+ * @returns {string[]} 用户可读的问题说明
+ */
+export function getScheduleConfigNormalizationIssues(rawConfig) {
+  const issues = [];
+  const timetable = rawConfig?.timetable;
+  if (timetable && typeof timetable === 'object' && !Array.isArray(timetable)) {
+    Object.entries(timetable).forEach(([type, entries]) => {
+      if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+        issues.push(`时间表类型“${type}”不是对象，已忽略`);
+        return;
+      }
+      Object.keys(entries).forEach((range) => {
+        if (!normalizeTimeRange(range)) {
+          issues.push(`时间段“${type}.${range}”格式无效，已忽略`);
+        }
+      });
+    });
+  }
+
+  const divider = rawConfig?.divider;
+  if (divider && typeof divider === 'object' && !Array.isArray(divider)) {
+    Object.entries(divider).forEach(([type, indexes]) => {
+      if (!Array.isArray(indexes)) {
+        issues.push(`分隔线“${type}”不是数组，已忽略`);
+        return;
+      }
+      indexes.forEach((value, index) => {
+        if (!Number.isInteger(Number(value)) || Number(value) < 0) {
+          issues.push(`分隔线“${type}[${index}]”不是非负整数，已忽略`);
+        }
+      });
+    });
+  }
+  return issues;
+}
+
+/**
  * 检测源配置是否包含可选字段。
  * @param {Object} config 配置对象
  * @returns {{hasWeekDisplay: boolean, hasSemesterStartDate: boolean}} 源结构信息

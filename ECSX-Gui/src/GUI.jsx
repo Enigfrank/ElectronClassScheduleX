@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './GUI.css';
 import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
 import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
 import UpdateManagerView from './features/update/UpdateManagerView.jsx';
@@ -7,13 +6,12 @@ import ExamModeView from './features/exam-mode/ExamModeView.jsx';
 import WindowControls from './WindowControls.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
-  SimpleGrid, Divider, Tooltip, IconButton, Menu, MenuButton,
-  MenuList, MenuItem, useColorMode, useColorModeValue, ChakraProvider,
+  SimpleGrid, Tooltip, IconButton, useColorMode, useColorModeValue, ChakraProvider,
   extendTheme // <-- 修复点：加回 extendTheme
 } from '@chakra-ui/react';
 import {
   Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
-  EyeOff, Rocket, Power, RotateCcw, Info, X, Plus, MoreHorizontal,
+  EyeOff, Rocket, Power, RotateCcw, Info, X,
   Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck
 } from 'lucide-react';
 
@@ -44,23 +42,9 @@ const theme = extendTheme({
 const QuickActions = () => {
   return (
     <Flex gap={3} mt={6} flexWrap="wrap">
-      <Tooltip label="打开官方文档" placement="bottom">
-        <Button colorScheme="blue" onClick={() => ipcRenderer.send('open-external-link', 'https://doc.cavendi.top/')} leftIcon={<Globe size={18} />}>
-          官方文档
-        </Button>
-      </Tooltip>
-      <Tooltip label="NULL" placement="bottom">
-        <Button isDisabled leftIcon={<RefreshCw size={18} />}>NULL</Button>
-      </Tooltip>
-      <Menu>
-        <MenuButton as={Button} variant="outline" leftIcon={<MoreHorizontal size={18} />}>更多</MenuButton>
-        <MenuList>
-          <MenuItem isDisabled>NULL</MenuItem>
-          <MenuItem isDisabled>NULL</MenuItem>
-          <Divider />
-          <MenuItem isDisabled>NULL</MenuItem>
-        </MenuList>
-      </Menu>
+      <Button colorScheme="blue" onClick={() => ipcRenderer.send('open-external-link', 'https://doc.cavendi.top/')} leftIcon={<Globe size={18} />}>
+        官方文档
+      </Button>
     </Flex>
   );
 };
@@ -82,40 +66,30 @@ const ToolsBar = ({ handleButtonClick }) => {
   return (
     <SimpleGrid columns={[1, 2, 4]} gap={4} mt={4}>
       {tools.map(tool => (
-        <Card
+        <Button
           key={tool.action}
-          cursor="pointer"
           className="dashboard-action-card"
           onClick={() => handleButtonClick(tool.action)}
           bg={tool.bg}
           color={tool.color}
+          minH="104px"
+          h="auto"
+          p={4}
+          justifyContent="flex-start"
+          alignItems="stretch"
+          textAlign="left"
+          whiteSpace="normal"
           _hover={{ transform: 'translateY(-2px)', shadow: 'lg' }}
         >
-          <CardBody>
-            <Flex align="center" gap={2} fontWeight="semibold">
+          <Box as="span" display="block" w="100%">
+            <Flex as="span" align="center" gap={2} fontWeight="semibold">
               {tool.icon} {tool.title}
             </Flex>
-            <Text fontSize="sm" color={tool.descColor || subTextColor} mt={1}>{tool.desc}</Text>
-          </CardBody>
-        </Card>
+            <Text as="span" display="block" fontSize="sm" color={tool.descColor || subTextColor} mt={1}>{tool.desc}</Text>
+          </Box>
+        </Button>
       ))}
     </SimpleGrid>
-  );
-};
-
-const ExtensionPlaceholder = () => {
-  const cardBg = useColorModeValue('white', 'gray.800');
-  const borderColor = useColorModeValue('gray.200', 'gray.600');
-  const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
-
-  return (
-    <Box mt={8} p={6} bg={cardBg} borderRadius="xl" border="2px dashed" borderColor={borderColor} textAlign="center">
-      <Text fontWeight="semibold" fontSize="lg" color={mutedTextColor}>扩展功能区域(TODO)</Text>
-      <Text fontSize="sm" color={mutedTextColor} mt={2} display="block">插件、小组件和其他扩展将在这里显示</Text>
-      <Box mt={4}>
-        <Button variant="outline" size="sm" leftIcon={<Plus size={16} />} isDisabled>添加扩展(TODO)</Button>
-      </Box>
-    </Box>
   );
 };
 
@@ -140,29 +114,43 @@ const MainView = ({ handleButtonClick, semesterStartDate }) => {
     <>
       <Text fontSize="xl" fontWeight="semibold" mb={4}>功能选项</Text>
       <SimpleGrid columns={[1, 2, 3]} gap={5} maxW="1200px">
-        {actions.map(act => (
-          <Card
-            key={act.action}
-            cursor={act.interactive === false ? 'default' : 'pointer'}
-            className={act.interactive === false ? undefined : 'dashboard-action-card'}
-            onClick={act.interactive === false ? undefined : () => handleButtonClick(act.action)}
-            minH="140px"
-            _hover={act.interactive === false ? undefined : { transform: 'translateY(-2px)', shadow: 'xl' }}
-            aria-disabled={act.interactive === false}
-          >
-            <Box bg="blue.500" color="white" h="80px" display="flex" alignItems="center" justifyContent="center" borderTopRadius="md">
+        {actions.map((act) => {
+          const content = <>
+            <Box as="span" bg="blue.500" color="white" h="80px" display="flex" alignItems="center" justifyContent="center">
               {act.icon}
             </Box>
-            <CardBody>
-              <Text fontWeight="semibold">{act.title}</Text>
-              <Text fontSize="sm" color={mutedTextColor}>{act.desc}</Text>
-            </CardBody>
-          </Card>
-        ))}
+            <Box as="span" display="block" p={4}>
+              <Text as="span" display="block" fontWeight="semibold">{act.title}</Text>
+              <Text as="span" display="block" fontSize="sm" color={mutedTextColor}>{act.desc}</Text>
+            </Box>
+          </>;
+
+          if (act.interactive === false) {
+            return <Card key={act.action} minH="140px">{content}</Card>;
+          }
+
+          return (
+            <Button
+              key={act.action}
+              variant="unstyled"
+              className="dashboard-action-card"
+              onClick={() => handleButtonClick(act.action)}
+              minH="140px"
+              h="auto"
+              overflow="hidden"
+              borderWidth="1px"
+              borderRadius="md"
+              textAlign="left"
+              whiteSpace="normal"
+              _hover={{ transform: 'translateY(-2px)', shadow: 'xl' }}
+            >
+              {content}
+            </Button>
+          );
+        })}
       </SimpleGrid>
       <QuickActions />
       <ToolsBar handleButtonClick={handleButtonClick} />
-      <ExtensionPlaceholder />
     </>
   );
 };
@@ -212,7 +200,6 @@ const SettingsView = ({ settings, handleSettingChange }) => {
             </Flex>
             <Button size="sm" variant="outline" onClick={() => ipcRenderer.send('open-oobe')}>运行</Button>
           </Flex>
-          {/* 其余的 TODO 设置可以保留，但建议未来也用数组 map 渲染 */}
         </CardBody>
       </Card>
     </>

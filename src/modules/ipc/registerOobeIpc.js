@@ -1,6 +1,6 @@
 /**
  * 注册首次运行引导相关 IPC 事件。
- * @param {{ipcMain: Electron.IpcMain, configManager: Object, windowManager: Object, logger: Object, app: Electron.App, shell: Electron.Shell, ScheduleConfigExtractor: Function, log: Function}} dependencies 注册依赖
+ * @param {{ipcMain: Electron.IpcMain, configManager: Object, windowManager: Object, logger: Object, app: Electron.App, shell: Electron.Shell, dialog: Electron.Dialog, ScheduleConfigExtractor: Function, log: Function}} dependencies 注册依赖
  */
 function registerOobeIpc({
     ipcMain,
@@ -9,6 +9,7 @@ function registerOobeIpc({
     logger,
     app,
     shell,
+    dialog,
     ScheduleConfigExtractor,
     log
 }) {
@@ -25,11 +26,17 @@ function registerOobeIpc({
         }
     });
 
-    ipcMain.on('oobe-open-config-folder', () => {
+    ipcMain.on('oobe-open-config-folder', async () => {
         const configDir = new ScheduleConfigExtractor(logger).getConfigDir();
-        shell.openPath(configDir).catch((error) => {
+        try {
+            const errorMessage = await shell.openPath(configDir);
+            if (!errorMessage) return;
+            log('error', `[IPC管理] 打开配置文件夹失败: ${errorMessage}`);
+            dialog?.showErrorBox?.('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${errorMessage}`);
+        } catch (error) {
             log('error', `[IPC管理] 打开配置文件夹失败: ${error.message}`);
-        });
+            dialog?.showErrorBox?.('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${error.message}`);
+        }
     });
 
     ipcMain.on('open-oobe', () => windowManager.createOobeWindow());

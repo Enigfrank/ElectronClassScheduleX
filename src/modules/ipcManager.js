@@ -120,6 +120,7 @@ class IpcManager {
             logger: this.logger,
             app,
             shell,
+            dialog,
             ScheduleConfigExtractor,
             log: (level, message) => this.log(level, message)
         });

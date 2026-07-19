@@ -59,11 +59,19 @@ function saveScheduleConfigSource({ filePath, source, logger = null }) {
         return validation;
     }
 
+    const directory = path.dirname(filePath);
+    const temporaryFilePath = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
     try {
-        fs.writeFileSync(filePath, source, 'utf8');
+        fs.writeFileSync(temporaryFilePath, source, 'utf8');
+        fs.renameSync(temporaryFilePath, filePath);
         logger?.info?.(`[课表配置] 保存成功: ${filePath}`);
         return { success: true, filePath };
     } catch (error) {
+        try {
+            fs.rmSync(temporaryFilePath, { force: true });
+        } catch (cleanupError) {
+            logger?.warn?.(`[课表配置] 清理临时保存文件失败: ${cleanupError.message}`);
+        }
         logger?.error?.(`[课表配置] 保存失败: ${error.message}`);
         return {
             success: false,

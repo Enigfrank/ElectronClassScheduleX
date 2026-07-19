@@ -21,12 +21,17 @@ function registerDiagnosticsIpc({ ipcMain, app, shell, dialog, fs, path, log }) 
         }
     });
 
-    ipcMain.on('open-logs-folder', () => {
+    ipcMain.on('open-logs-folder', async () => {
         const logsDir = app.getPath('logs');
-        shell.openPath(logsDir).catch((error) => {
+        try {
+            const errorMessage = await shell.openPath(logsDir);
+            if (!errorMessage) return;
+            log('error', `[IPC管理] 打开日志文件夹失败: ${errorMessage}`);
+            dialog.showErrorBox('打开文件夹失败', `无法打开日志文件夹: ${logsDir}\n错误: ${errorMessage}`);
+        } catch (error) {
             log('error', `[IPC管理] 打开日志文件夹失败: ${error.message}`);
             dialog.showErrorBox('打开文件夹失败', `无法打开日志文件夹: ${logsDir}\n错误: ${error.message}`);
-        });
+        }
     });
 }
 

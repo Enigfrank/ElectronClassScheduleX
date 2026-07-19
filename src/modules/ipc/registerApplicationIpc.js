@@ -150,7 +150,8 @@ function registerApplicationIpc({
         }).then((data) => {
             if (data.response !== 1) return;
             log('info', '[IPC管理] 用户选择恢复初始设置');
-            configManager.set('isFirstRun', true);
+            configManager.reset();
+            configManager.setOobeCompleted(false);
             app.relaunch();
             app.exit(0);
         }).catch((error) => log('error', `[IPC管理] 重置设置时出错: ${error.message}`));

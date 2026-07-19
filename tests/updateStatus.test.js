@@ -14,7 +14,8 @@ test('creates default idle update status', () => {
         latestVersion: '',
         sourceId: '',
         error: '',
-        progress: null
+        progress: null,
+        busy: false
     });
 });
 
@@ -26,7 +27,8 @@ test('allows explicit status overrides', () => {
         latestVersion: '',
         sourceId: '',
         error: '',
-        progress: null
+        progress: null,
+        busy: false
     });
 });
 

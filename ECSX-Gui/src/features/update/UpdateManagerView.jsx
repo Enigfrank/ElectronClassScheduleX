@@ -125,6 +125,7 @@ function UpdateManagerView({ ipcRenderer }) {
     () => getCurrentSourceLabel(settings, status, sourceOptions),
     [settings, status, sourceOptions]
   );
+  const isUpdateBusy = Boolean(status.busy || isChecking || isDownloading || isInstalling);
 
   /**
    * 将后端返回的设置合并到本地状态。
@@ -340,6 +341,7 @@ function UpdateManagerView({ ipcRenderer }) {
                 leftIcon={<RefreshCw size={16} />}
                 isLoading={isChecking}
                 loadingText="检查中"
+                isDisabled={isUpdateBusy}
                 onClick={handleCheckForUpdates}
               >
                 检查更新
@@ -349,7 +351,7 @@ function UpdateManagerView({ ipcRenderer }) {
               leftIcon={<Download size={16} />}
               isLoading={isDownloading}
               loadingText="下载中"
-              isDisabled={status.state !== 'available' && status.state !== 'downloading'}
+              isDisabled={status.state !== 'available'}
               onClick={handleDownloadUpdate}
             >
               下载更新
@@ -426,6 +428,7 @@ function UpdateManagerView({ ipcRenderer }) {
               <Switch
                 colorScheme="blue"
                 isChecked={settings.autoCheckUpdates}
+                isDisabled={isUpdateBusy}
                 onChange={(event) => saveSettings({ autoCheckUpdates: event.target.checked })}
               />
             </Flex>
@@ -445,11 +448,12 @@ function UpdateManagerView({ ipcRenderer }) {
               <Switch
                 colorScheme="blue"
                 isChecked={settings.useUpdateProxy}
+                isDisabled={isUpdateBusy}
                 onChange={(event) => saveSettings({ useUpdateProxy: event.target.checked })}
               />
             </Flex>
 
-            <FormControl isDisabled={!settings.useUpdateProxy}>
+            <FormControl isDisabled={!settings.useUpdateProxy || isUpdateBusy}>
               <FormLabel>代理源选择</FormLabel>
               <Select
                 value={settings.updateProxyId}
@@ -464,7 +468,7 @@ function UpdateManagerView({ ipcRenderer }) {
               <FormHelperText color={mutedTextColor}>推荐先测速，再选择延迟更低的代理源。</FormHelperText>
             </FormControl>
 
-            <FormControl isDisabled={!settings.useUpdateProxy}>
+            <FormControl isDisabled={!settings.useUpdateProxy || isUpdateBusy}>
               <FormLabel>自定义代理输入</FormLabel>
               <Input
                 value={settings.customUpdateProxyPrefix || ''}
@@ -524,7 +528,7 @@ function UpdateManagerView({ ipcRenderer }) {
                         <Button
                           size="xs"
                           variant="outline"
-                          isDisabled={!result.available}
+                          isDisabled={!result.available || isUpdateBusy}
                           onClick={() => handleUseProbeSource(result.id)}
                         >
                           使用此源

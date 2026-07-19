@@ -10,9 +10,9 @@ var dayOffset = localStorage.getItem('dayOffset')
 if (dayOffset === null) localStorage.setItem('dayOffset', '-1')
 dayOffset = Number(localStorage.getItem('dayOffset'))
 
-var setDayOffsetLastDay = localStorage.getItem('setDayOffsetLastDay')
-if (setDayOffsetLastDay === null) localStorage.setItem('setDayOffsetLastDay', '-1')
-setDayOffsetLastDay = Number(localStorage.getItem('setDayOffsetLastDay'))
+var setDayOffsetDate = localStorage.getItem('setDayOffsetDate')
+if (setDayOffsetDate === null) localStorage.setItem('setDayOffsetDate', '')
+setDayOffsetDate = localStorage.getItem('setDayOffsetDate')
 
 
 
@@ -27,6 +27,18 @@ function getCurrentEditedDate() {
 }
 
 /**
+ * 返回本地日期的稳定存储键。
+ * @param {Date} date 本地日期
+ * @returns {string} YYYY-MM-DD 日期键
+ */
+function getLocalDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+/**
  * 获取矫正后的当前星期索引（0-6）
  * 处理日期偏移逻辑，如果不是当天设置的偏移则重置
  * @param {Date} date - 当前日期对象
@@ -35,13 +47,13 @@ function getCurrentEditedDate() {
 function getCurrentEditedDay(date) {
     if (dayOffset === -1)
         return date.getDay();
-    if (setDayOffsetLastDay == new Date().getDay()) {
+    if (setDayOffsetDate === getLocalDateKey(date)) {
         return dayOffset;
     }
     localStorage.setItem('dayOffset', '-1')
-    localStorage.setItem('setDayOffsetLastDay', '-1')
+    localStorage.setItem('setDayOffsetDate', '')
     dayOffset = -1
-    setDayOffsetLastDay = -1
+    setDayOffsetDate = ''
     return date.getDay();
 }
 
@@ -243,45 +255,4 @@ function formatCountdown(countdownSeconds) {
     const seconds = countdownSeconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
-
-/**
- * 动态计算并设置countdownContainer的位置
- * 确保countdownContainer在globalContainer右边且水平居中对齐
- */
-function setCountdownerPosition() {
-    const globalContainer = document.getElementById('globalContainer');
-    const countdownContainer = document.getElementById('countdownContainer');
-    const countdowner = document.getElementById('countdowner');
-
-    if (globalContainer && countdownContainer && countdowner) {
-        // 获取globalContainer的宽度
-        const globalWidth = globalContainer.offsetWidth;
-
-        // 获取countdowner的宽度
-        const countdownerWidth = countdowner.offsetWidth;
-
-        // 计算countdownContainer应该距离globalContainer右边的距离
-        // 使用margin-left而不是left定位，确保水平对齐
-        const marginLeft = globalWidth + 20; // 20px的间距
-
-        // 设置countdownContainer的位置
-        countdownContainer.style.marginLeft = marginLeft + 'px';
-
-        // 确保countdownContainer垂直居中
-        countdownContainer.style.top = '50%';
-        countdownContainer.style.transform = 'translateY(-50%)';
-    }
-}
-
-// 页面加载完成后初始化位置
-window.addEventListener('load', function () {
-    setCountdownerPosition();
-
-    // 监听窗口大小变化，动态调整位置
-    window.addEventListener('resize', setCountdownerPosition);
-
-    // 监听课程内容变化，动态调整位置
-    // 这里可以添加对课程内容变化的监听
-});
-
 

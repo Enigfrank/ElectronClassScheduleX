@@ -108,17 +108,18 @@ typings/
 
 # Electron-Forge
 out/
-
 .electron-cache/
 .electron-builder-cache/
 
+/.trae
 /ECSX-Gui/dist
 /.claude
 agent.md
-tests
+/tests
 /docs
 /.agents
 /.codex
 /.trellis
 AGENTS.md
+/.codegraph
 /plans

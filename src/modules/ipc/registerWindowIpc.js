@@ -6,6 +6,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
     let interactiveRect = null;
     let checkTimer = null;
     let isDragging = false;
+    let lastIgnoreMouseEvents = null;
 
     /**
      * 根据当前鼠标位置更新主窗口的穿透状态。
@@ -36,7 +37,11 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
                 const inArea = point.x >= absoluteRect.x - padding && point.x <= absoluteRect.x + absoluteRect.width + padding &&
                                point.y >= absoluteRect.y - padding && point.y <= absoluteRect.y + absoluteRect.height + padding;
 
-                mainWindow.setIgnoreMouseEvents(!inArea, inArea ? undefined : { forward: true });
+                const ignoreMouseEvents = !inArea;
+                if (lastIgnoreMouseEvents !== ignoreMouseEvents) {
+                    mainWindow.setIgnoreMouseEvents(ignoreMouseEvents, inArea ? undefined : { forward: true });
+                    lastIgnoreMouseEvents = ignoreMouseEvents;
+                }
             }
         } catch (error) {
             log('warn', `[IPC管理] 鼠标位置检测异常: ${error.message}`);
@@ -134,7 +139,11 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
 
     ipcMain.on('setIgnore', (event, arg) => {
         const mainWindow = windowManager.getWindow('main');
-        if (mainWindow) mainWindow.setIgnoreMouseEvents(arg, arg ? { forward: true } : undefined);
+        if (!mainWindow) return;
+
+        const ignoreMouseEvents = Boolean(arg);
+        mainWindow.setIgnoreMouseEvents(ignoreMouseEvents, ignoreMouseEvents ? { forward: true } : undefined);
+        lastIgnoreMouseEvents = ignoreMouseEvents;
     });
 
     ipcMain.on('updateInteractiveRect', (event, rect) => {
@@ -151,6 +160,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
                 checkTimer = null;
             }
             mainWindow.setIgnoreMouseEvents(true, { forward: true });
+            lastIgnoreMouseEvents = true;
         }
     });
 
@@ -158,7 +168,10 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         isDragging = state;
         const mainWindow = windowManager.getWindow('main');
         if (mainWindow && !mainWindow.isDestroyed()) {
-            if (isDragging) mainWindow.setIgnoreMouseEvents(false);
+            if (isDragging) {
+                mainWindow.setIgnoreMouseEvents(false);
+                lastIgnoreMouseEvents = false;
+            }
             else checkMousePosition();
         }
     });

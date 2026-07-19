@@ -31,6 +31,7 @@ function createUpdateStatus(overrides = {}) {
         sourceId: '',
         error: '',
         progress: null,
+        busy: false,
         ...overrides
     };
 }

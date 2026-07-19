@@ -38,11 +38,20 @@ jobs:
             exit 1
           }
 
-      - name: 安装依赖
-        run: corepack yarn install --frozen-lockfile
+      - name: 安装 Electron 依赖
+        run: corepack yarn install --immutable
+
+      - name: 安装 Dashboard 依赖
+        run: npm ci --prefix ECSX-Gui
+
+      - name: 构建并验证 Dashboard
+        run: corepack yarn verify:dashboard
+
+      - name: 运行测试
+        run: corepack yarn test
 
       - name: 构建 Electron 应用
-        run: corepack yarn build
+        run: corepack yarn package
 
       - name: 提取发布元数据
         id: meta

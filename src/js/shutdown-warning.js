@@ -13,6 +13,7 @@
     let seconds = domain.WARNING_COUNTDOWN_SECONDS;
     let interval = null;
     let unsubscribeInit = () => {};
+    let planId = '';
 
     /**
      * 刷新页面中的剩余秒数。
@@ -41,6 +42,7 @@
      * @param {{targetTime?: string}} payload 初始化数据
      */
     function handleInit(payload) {
+        planId = typeof payload?.planId === 'string' ? payload.planId : '';
         targetTimeElement.textContent = typeof payload?.targetTime === 'string'
             ? payload.targetTime
             : '';
@@ -72,9 +74,9 @@
     function initialize() {
         unsubscribeInit = api.onInit(handleInit);
 
-        delay30Button.addEventListener('click', () => runAction(api.delay30));
-        delay60Button.addEventListener('click', () => runAction(api.delay60));
-        cancelButton.addEventListener('click', () => runAction(api.cancel));
+        delay30Button.addEventListener('click', () => runAction(() => api.delay30(planId)));
+        delay60Button.addEventListener('click', () => runAction(() => api.delay60(planId)));
+        cancelButton.addEventListener('click', () => runAction(() => api.cancel(planId)));
         window.addEventListener('beforeunload', cleanup, { once: true });
         startCountdown();
     }

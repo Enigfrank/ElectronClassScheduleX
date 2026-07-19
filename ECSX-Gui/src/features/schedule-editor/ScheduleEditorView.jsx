@@ -37,6 +37,7 @@ import {
   detectSourceStructure,
   formatScheduleConfigError,
   generateScheduleConfigSource,
+  getScheduleConfigNormalizationIssues,
   getStyleFieldComment,
   normalizeScheduleConfig,
   normalizeScheduleConfigForEditor,
@@ -52,9 +53,11 @@ import {
 } from './ScheduleEditorControls.jsx';
 import {
   nextTimeRangeKey,
+  findSubjectReferences,
+  findTimetableReferences,
   parseClassItem,
   parseTypedValue,
-  renameObjectKey,
+  renameScheduleTypeReferences,
   TAB_INDEX,
 } from './scheduleEditorHelpers.mjs';
 
@@ -147,6 +150,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
    * @returns {Promise<void>} 保存和应用完成后更新状态
    */
   const saveCurrentConfig = async () => {
+    if (isBusy) return;
     setIsBusy(true);
     try {
       const normalized = normalizeScheduleConfig(config);
@@ -180,12 +184,20 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
    * @returns {Promise<void>} 导入完成后刷新编辑器
    */
   const importConfig = async () => {
+    if (isBusy) return;
     setIsBusy(true);
     try {
       const result = await ipcRenderer.invoke('import-schedule-config-source');
       if (result.canceled) return;
       if (!result.success) {
         setStatus({ type: 'error', message: formatScheduleConfigError(result.error, '导入失败') });
+        return;
+      }
+
+      const parsed = parseScheduleConfigSource(result.source);
+      const issues = getScheduleConfigNormalizationIssues(parsed);
+      if (issues.length > 0 && !window.confirm(`导入内容中有 ${issues.length} 项会被忽略：\n\n${issues.join('\n')}\n\n是否继续导入其余内容？`)) {
+        setStatus({ type: 'info', message: '已取消导入，当前编辑内容没有变化' });
         return;
       }
 
@@ -203,6 +215,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
    * @returns {Promise<void>} 导出完成后更新状态
    */
   const exportConfig = async () => {
+    if (isBusy) return;
     setIsBusy(true);
     try {
       const source = generateScheduleConfigSource(normalizeScheduleConfig(config), sourceStructure);
@@ -254,13 +267,86 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
    * @returns {void}
    */
   const renameSubject = (oldKey, nextKey) => {
+    const key = nextKey.trim();
+    if (!key || key === oldKey) return;
+    if (Object.prototype.hasOwnProperty.call(config.subject_name, key)) {
+      setStatus({ type: 'error', message: `科目简称“${key}”已存在，未覆盖原数据` });
+      return;
+    }
+
     updateConfig((draft) => {
-      const key = nextKey.trim();
-      if (!key || key === oldKey) return;
       const value = draft.subject_name[oldKey];
       delete draft.subject_name[oldKey];
       draft.subject_name[key] = value;
+      (draft.daily_class || []).forEach((day) => {
+        day.classList = (day.classList || []).map((item) => {
+          if (Array.isArray(item)) return item.map((value) => value === oldKey ? key : value);
+          return item === oldKey ? key : item;
+        });
+      });
     });
+  };
+
+  /**
+   * 删除未被每日课表使用的科目。
+   * @param {string} key 科目简称
+   */
+  const deleteSubject = (key) => {
+    const references = findSubjectReferences(config, key);
+    if (references.length > 0) {
+      setStatus({ type: 'error', message: `科目“${key}”仍被${references.join('、')}引用，不能删除` });
+      return;
+    }
+    updateConfig((draft) => { delete draft.subject_name[key]; });
+  };
+
+  /**
+   * 重命名时间表类型及其关联分隔线和每日课表引用。
+   * @param {string} oldType 原类型
+   * @param {string} nextType 新类型
+   */
+  const renameScheduleType = (oldType, nextType) => {
+    const type = sanitizeTypeName(nextType);
+    if (!type || type === oldType) return;
+    if (config.timetable[type] || config.divider[type]) {
+      setStatus({ type: 'error', message: `类型“${type}”已存在，未覆盖原数据` });
+      return;
+    }
+    updateConfig((draft) => {
+      if (renameScheduleTypeReferences(draft, oldType, type)) {
+        setSelectedTimetableType(type);
+        setSelectedDividerType(type);
+      }
+    });
+  };
+
+  /**
+   * 删除未被每日课表或关联分隔线使用的时间表类型。
+   * @param {string} type 时间表类型
+   */
+  const deleteTimetableType = (type) => {
+    const references = findTimetableReferences(config, type);
+    if (references.length > 0) {
+      setStatus({ type: 'error', message: `时间表“${type}”仍被${references.join('、')}引用，不能删除` });
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(config.divider, type)) {
+      setStatus({ type: 'error', message: `时间表“${type}”仍有关联分隔线，请先处理关联配置` });
+      return;
+    }
+    updateConfig((draft) => { delete draft.timetable[type]; setSelectedTimetableType(Object.keys(draft.timetable)[0] || ''); });
+  };
+
+  /**
+   * 删除未关联时间表的分隔线类型。
+   * @param {string} type 分隔线类型
+   */
+  const deleteDividerType = (type) => {
+    if (Object.prototype.hasOwnProperty.call(config.timetable, type)) {
+      setStatus({ type: 'error', message: `分隔线“${type}”与时间表同名，请通过时间表类型一并迁移或删除` });
+      return;
+    }
+    updateConfig((draft) => { delete draft.divider[type]; setSelectedDividerType(Object.keys(draft.divider)[0] || ''); });
   };
 
   /**
@@ -318,16 +404,16 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           {filePath && <Text fontSize="xs" color={mutedTextColor} mt={1}>{filePath}</Text>}
         </Box>
         <HStack spacing={2} flexWrap="wrap">
-          <Button leftIcon={<RefreshCw size={16} />} onClick={loadCurrentConfig} isLoading={isBusy} variant="outline">
+          <Button leftIcon={<RefreshCw size={16} />} onClick={loadCurrentConfig} isLoading={isBusy} isDisabled={isBusy} variant="outline">
             重新加载文件
           </Button>
-          <Button leftIcon={<Upload size={16} />} onClick={importConfig} variant="outline">
+          <Button leftIcon={<Upload size={16} />} onClick={importConfig} isDisabled={isBusy} variant="outline">
             导入
           </Button>
-          <Button leftIcon={<Download size={16} />} onClick={exportConfig} variant="outline">
+          <Button leftIcon={<Download size={16} />} onClick={exportConfig} isDisabled={isBusy} variant="outline">
             导出
           </Button>
-          <Button leftIcon={<Save size={16} />} onClick={saveCurrentConfig} colorScheme="blue" isLoading={isBusy}>
+          <Button leftIcon={<Save size={16} />} onClick={saveCurrentConfig} colorScheme="blue" isLoading={isBusy} isDisabled={isBusy}>
             保存配置并应用
           </Button>
         </HStack>
@@ -385,7 +471,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
                   <SimpleGrid key={key} columns={[1, 1, 3]} gap={3} alignItems="center">
                     <Input defaultValue={key} onBlur={(event) => renameSubject(key, event.target.value)} placeholder="科目简写" />
                     <Input value={value} onChange={(event) => updateConfig((draft) => { draft.subject_name[key] = event.target.value; })} placeholder="科目全称" />
-                    <DeleteButton label="删除科目" onClick={() => updateConfig((draft) => { delete draft.subject_name[key]; })} />
+                    <DeleteButton label="删除科目" onClick={() => deleteSubject(key)} />
                   </SimpleGrid>
                 ))}
               </Flex>
@@ -398,8 +484,8 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
                 selectedType={selectedTimetableType}
                 types={timetableTypes}
                 onSelect={setSelectedTimetableType}
-                onRename={(oldType, nextType) => updateConfig((draft) => renameObjectKey(draft.timetable, oldType, sanitizeTypeName(nextType), setSelectedTimetableType))}
-                onDelete={(type) => updateConfig((draft) => { delete draft.timetable[type]; setSelectedTimetableType(Object.keys(draft.timetable)[0] || ''); })}
+                onRename={renameScheduleType}
+                onDelete={deleteTimetableType}
               />
               {selectedTimetableType && (
                 <Flex direction="column" gap={3} mt={4}>
@@ -460,8 +546,8 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
                 selectedType={selectedDividerType}
                 types={dividerTypes}
                 onSelect={setSelectedDividerType}
-                onRename={(oldType, nextType) => updateConfig((draft) => renameObjectKey(draft.divider, oldType, sanitizeTypeName(nextType), setSelectedDividerType))}
-                onDelete={(type) => updateConfig((draft) => { delete draft.divider[type]; setSelectedDividerType(Object.keys(draft.divider)[0] || ''); })}
+                onRename={renameScheduleType}
+                onDelete={deleteDividerType}
               />
               {selectedDividerType && (
                 <HStack mt={4} align="flex-start" flexWrap="wrap">
@@ -498,7 +584,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           <TabPanel px={0}>
             <EditorCard title="源码" desc="查看或粘贴 scheduleConfig.js 源码">
               <Textarea minH="460px" fontFamily="monospace" value={sourceText} onChange={(event) => setSourceText(event.target.value)} />
-              <Button mt={3} leftIcon={<FileInput size={16} />} onClick={applySourceText}>从源码重新解析到表单</Button>
+              <Button mt={3} leftIcon={<FileInput size={16} />} onClick={applySourceText} isDisabled={isBusy}>从源码重新解析到表单</Button>
             </EditorCard>
           </TabPanel>
         </TabPanels>

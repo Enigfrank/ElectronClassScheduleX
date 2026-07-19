@@ -48,12 +48,17 @@ function registerScheduleConfigIpc({
         app.quit();
     }
 
-    ipcMain.on('open-config-folder', () => {
+    ipcMain.on('open-config-folder', async () => {
         const configDir = new ScheduleConfigExtractor(logger).getConfigDir();
-        shell.openPath(configDir).catch((error) => {
+        try {
+            const errorMessage = await shell.openPath(configDir);
+            if (!errorMessage) return;
+            log('error', `[IPC管理] 打开配置文件夹失败: ${errorMessage}`);
+            dialog.showErrorBox('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${errorMessage}`);
+        } catch (error) {
             log('error', `[IPC管理] 打开配置文件夹失败: ${error.message}`);
             dialog.showErrorBox('打开文件夹失败', `无法打开配置文件夹: ${configDir}\n错误: ${error.message}`);
-        });
+        }
     });
 
     ipcMain.handle('load-schedule-config', () => {

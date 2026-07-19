@@ -99,11 +99,29 @@ function validateTimetableRanges(timetable, errors) {
             return;
         }
 
+        const parsedRanges = [];
         Object.keys(ranges).forEach((timeRange) => {
             if (!timeRangePattern.test(timeRange)) {
                 errors.push(createError(`timetable.${timetableName}["${timeRange}"]`, `${timetableName} 时间安排里的“${timeRange}”格式不对请写成类似 08:00-08:39 这样的两位数字时间`));
+                return;
             }
+            const [start, end] = timeRange.split('-').map((value) => {
+                const [hour, minute] = value.split(':').map(Number);
+                return hour * 60 + minute;
+            });
+            if (start >= end) {
+                errors.push(createError(`timetable.${timetableName}["${timeRange}"]`, `${timetableName} 时间安排里的“${timeRange}”结束时间必须晚于开始时间`));
+                return;
+            }
+            parsedRanges.push({ timeRange, start, end });
         });
+
+        parsedRanges.sort((left, right) => left.start - right.start);
+        for (let index = 1; index < parsedRanges.length; index += 1) {
+            if (parsedRanges[index].start <= parsedRanges[index - 1].end) {
+                errors.push(createError(`timetable.${timetableName}["${parsedRanges[index].timeRange}"]`, `${timetableName} 时间安排里的“${parsedRanges[index].timeRange}”与“${parsedRanges[index - 1].timeRange}”重叠`));
+            }
+        }
     });
 }
 
@@ -128,6 +146,9 @@ function validateSemesterStartDate(config, errors) {
  */
 function validateSubjectReference(subject, path, subjectNameMap, errors, context) {
     if (Array.isArray(subject)) {
+        if (subject.length !== 2) {
+            errors.push(createError(path, `${context.dayLabel}的第 ${context.classNumber} 节轮换课程必须恰好填写两门课程`));
+        }
         subject.forEach((item, index) => validateSubjectReference(item, `${path}[${index}]`, subjectNameMap, errors, context));
         return;
     }
@@ -140,6 +161,32 @@ function validateSubjectReference(subject, path, subjectNameMap, errors, context
     if (!Object.prototype.hasOwnProperty.call(subjectNameMap, subject)) {
         errors.push(createError(path, `${context.dayLabel}的第 ${context.classNumber} 节课写了“${subject}”，但上面的“科目名称”里没有登记这个简称请在“科目名称”这一段补上 ${subject}，或把这里改成已经登记过的课程简称`));
     }
+}
+
+/**
+ * 校验分隔线是否与对应时间表及其课程位置匹配。
+ * @param {Object} config 课表配置
+ * @param {Array} errors 错误收集数组
+ */
+function validateDividerReferences(config, errors) {
+    if (!isPlainObject(config.divider) || !isPlainObject(config.timetable)) return;
+
+    Object.entries(config.divider).forEach(([type, indexes]) => {
+        const timetable = config.timetable[type];
+        if (!isPlainObject(timetable)) {
+            errors.push(createError(`divider.${type}`, `分隔线“${type}”没有对应的时间安排，请补上 timetable.${type}`));
+            return;
+        }
+        if (!Array.isArray(indexes)) {
+            errors.push(createError(`divider.${type}`, `分隔线“${type}”必须写成课程位置数组`));
+            return;
+        }
+        indexes.forEach((value, index) => {
+            if (!Number.isInteger(value) || value < 0 || value >= Object.keys(timetable).length) {
+                errors.push(createError(`divider.${type}[${index}]`, `分隔线“${type}”的位置 ${value} 超出了该时间安排的课程范围`));
+            }
+        });
+    });
 }
 
 /**
@@ -214,6 +261,7 @@ function validateScheduleConfig(config) {
 
     validateSemesterStartDate(config, errors);
     validateTimetableRanges(config?.timetable, errors);
+    validateDividerReferences(config, errors);
     validateDailyClassReferences(config, errors);
 
     return errors;
