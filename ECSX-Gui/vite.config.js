@@ -5,6 +5,9 @@ import path from 'path';
 export default defineConfig({
     plugins: [react()],
     base: './',
+    define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+    },
     build: {
         lib: {
             entry: path.resolve(__dirname, 'src/index.jsx'),
@@ -14,16 +17,6 @@ export default defineConfig({
         },
         outDir: '../src/dist',
         emptyOutDir: true,
-        rollupOptions: {
-            // 保留 electron 外部依赖
-            external: ['electron'],
-            output: {
-                // 确保全局变量名称与 webpack 配置一致
-                globals: {
-                    electron: 'electron',
-                },
-            },
-        },
     },
     resolve: {
         alias: {

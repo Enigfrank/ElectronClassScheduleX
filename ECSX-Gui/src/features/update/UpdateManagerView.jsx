@@ -125,6 +125,7 @@ function UpdateManagerView({ ipcRenderer }) {
     () => getCurrentSourceLabel(settings, status, sourceOptions),
     [settings, status, sourceOptions]
   );
+  const isUpdateBusy = Boolean(status.busy || isChecking || isDownloading || isInstalling);
 
   /**
    * 将后端返回的设置合并到本地状态。
@@ -187,11 +188,11 @@ function UpdateManagerView({ ipcRenderer }) {
       });
     });
 
-    ipcRenderer.on('update-status-changed', handleStatusChanged);
+    const unsubscribe = ipcRenderer.on('update-status-changed', handleStatusChanged);
 
     return () => {
       mounted = false;
-      ipcRenderer.removeListener('update-status-changed', handleStatusChanged);
+      unsubscribe();
     };
   }, [applySettings, ipcRenderer]);
 
@@ -305,8 +306,6 @@ function UpdateManagerView({ ipcRenderer }) {
 
   return (
     <>
-      <Text fontSize="xl" fontWeight="semibold" mb={4}>在线更新</Text>
-
       <SimpleGrid columns={[1, 2, 4]} gap={4} mb={6}>
         <Card bg={cardBg}>
           <CardBody>
@@ -342,6 +341,7 @@ function UpdateManagerView({ ipcRenderer }) {
                 leftIcon={<RefreshCw size={16} />}
                 isLoading={isChecking}
                 loadingText="检查中"
+                isDisabled={isUpdateBusy}
                 onClick={handleCheckForUpdates}
               >
                 检查更新
@@ -351,7 +351,7 @@ function UpdateManagerView({ ipcRenderer }) {
               leftIcon={<Download size={16} />}
               isLoading={isDownloading}
               loadingText="下载中"
-              isDisabled={status.state !== 'available' && status.state !== 'downloading'}
+              isDisabled={status.state !== 'available'}
               onClick={handleDownloadUpdate}
             >
               下载更新
@@ -378,14 +378,23 @@ function UpdateManagerView({ ipcRenderer }) {
 
           {status.progress ? (
             <Box mt={4}>
-              <Progress
-                value={status.progress.percent}
-                size="sm"
-                borderRadius="md"
-                bg={progressTrackColor}
-              />
+              <Flex align="center" gap={3}>
+                <Progress
+                  value={status.progress.percent}
+                  size="sm"
+                  borderRadius="md"
+                  bg={progressTrackColor}
+                  flex={1}
+                />
+                <Text fontSize="sm" fontWeight="medium" color={mutedTextColor} minW="48px" textAlign="right">
+                  {status.progress.percent}%
+                </Text>
+              </Flex>
               <Text mt={2} fontSize="sm" color={mutedTextColor}>
-                {status.progress.percent}% · {status.progress.transferredText}/{status.progress.totalText} · {status.progress.speedText}
+                {status.progress.transferredText} / {status.progress.totalText} · {status.progress.speedText}
+              </Text>
+              <Text mt={1} fontSize="xs" color="gray.400">
+                全量安装包，非差分更新
               </Text>
             </Box>
           ) : null}
@@ -419,6 +428,7 @@ function UpdateManagerView({ ipcRenderer }) {
               <Switch
                 colorScheme="blue"
                 isChecked={settings.autoCheckUpdates}
+                isDisabled={isUpdateBusy}
                 onChange={(event) => saveSettings({ autoCheckUpdates: event.target.checked })}
               />
             </Flex>
@@ -438,11 +448,12 @@ function UpdateManagerView({ ipcRenderer }) {
               <Switch
                 colorScheme="blue"
                 isChecked={settings.useUpdateProxy}
+                isDisabled={isUpdateBusy}
                 onChange={(event) => saveSettings({ useUpdateProxy: event.target.checked })}
               />
             </Flex>
 
-            <FormControl isDisabled={!settings.useUpdateProxy}>
+            <FormControl isDisabled={!settings.useUpdateProxy || isUpdateBusy}>
               <FormLabel>代理源选择</FormLabel>
               <Select
                 value={settings.updateProxyId}
@@ -457,7 +468,7 @@ function UpdateManagerView({ ipcRenderer }) {
               <FormHelperText color={mutedTextColor}>推荐先测速，再选择延迟更低的代理源。</FormHelperText>
             </FormControl>
 
-            <FormControl isDisabled={!settings.useUpdateProxy}>
+            <FormControl isDisabled={!settings.useUpdateProxy || isUpdateBusy}>
               <FormLabel>自定义代理输入</FormLabel>
               <Input
                 value={settings.customUpdateProxyPrefix || ''}
@@ -491,41 +502,43 @@ function UpdateManagerView({ ipcRenderer }) {
           </Flex>
 
           {probeResults.length > 0 ? (
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>源</Th>
-                  <Th>状态</Th>
-                  <Th>首字节</Th>
-                  <Th>总耗时</Th>
-                  <Th>操作</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {probeResults.map((result) => (
-                  <Tr key={result.id}>
-                    <Td>{result.name}</Td>
-                    <Td>
-                      <Badge colorScheme={result.available ? 'green' : 'red'}>
-                        {result.available ? '可用' : '不可用'}
-                      </Badge>
-                    </Td>
-                    <Td>{result.firstByteMs == null ? '-' : `${result.firstByteMs} ms`}</Td>
-                    <Td>{result.totalMs == null ? '-' : `${result.totalMs} ms`}</Td>
-                    <Td>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        isDisabled={!result.available}
-                        onClick={() => handleUseProbeSource(result.id)}
-                      >
-                        使用此源
-                      </Button>
-                    </Td>
+            <Box className="update-probe-results">
+              <Table size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>源</Th>
+                    <Th>状态</Th>
+                    <Th>首字节</Th>
+                    <Th>总耗时</Th>
+                    <Th>操作</Th>
                   </Tr>
-                ))}
-              </Tbody>
-            </Table>
+                </Thead>
+                <Tbody>
+                  {probeResults.map((result) => (
+                    <Tr key={result.id}>
+                      <Td>{result.name}</Td>
+                      <Td>
+                        <Badge colorScheme={result.available ? 'green' : 'red'}>
+                          {result.available ? '可用' : '不可用'}
+                        </Badge>
+                      </Td>
+                      <Td>{result.firstByteMs == null ? '-' : `${result.firstByteMs} ms`}</Td>
+                      <Td>{result.totalMs == null ? '-' : `${result.totalMs} ms`}</Td>
+                      <Td>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          isDisabled={!result.available || isUpdateBusy}
+                          onClick={() => handleUseProbeSource(result.id)}
+                        >
+                          使用此源
+                        </Button>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
           ) : (
             <Text fontSize="sm" color={mutedTextColor}>点击“代理测速”后在这里查看各更新源的延迟结果。</Text>
           )}

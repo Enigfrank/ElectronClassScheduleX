@@ -4,144 +4,231 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>欢迎使用 - 初始设置</title>
+    <title>开始使用 - 电子课表</title>
     <link rel="stylesheet" href="./css/oobe.css">
 </head>
 
 <body>
     <div class="oobe-shell">
-        <aside class="oobe-sidebar" aria-label="初始设置步骤">
+        <aside class="oobe-sidebar" aria-label="首次使用步骤">
             <div class="brand-block">
-                <span class="brand-icon icon icon-calendar" aria-hidden="true"></span>
+                <img class="brand-icon" src="./image/icon.png" alt="">
                 <div>
-                    <p class="brand-title">课表管理</p>
-                    <p class="brand-subtitle">Initial setup</p>
+                    <p class="brand-title">电子课表</p>
+                    <p class="brand-subtitle">首次使用设置</p>
                 </div>
             </div>
 
-            <div class="step-indicator">
-                <div class="step active" data-step="1">
+            <nav class="step-indicator" aria-label="设置进度">
+                <div class="step active" aria-current="step">
                     <div class="step-number">1</div>
                     <div class="step-meta">
-                        <div class="step-label">课表配置</div>
-                        <div class="step-note">准备 scheduleConfig.js</div>
+                        <div class="step-label">认识工作方式</div>
+                        <div class="step-note">顶部课表与系统托盘</div>
                     </div>
                 </div>
-                <div class="step-line"></div>
-                <div class="step" data-step="2">
+                <div class="step-line" aria-hidden="true"></div>
+                <div class="step">
                     <div class="step-number">2</div>
                     <div class="step-meta">
-                        <div class="step-label">完成</div>
-                        <div class="step-note">保存并重新启动</div>
+                        <div class="step-label">完成基础配置</div>
+                        <div class="step-note">编辑课表与常用设置</div>
                     </div>
                 </div>
+            </nav>
+
+            <div class="sidebar-summary">
+                <p class="summary-label">本次引导</p>
+                <p>不会修改你的课表。完成后可在配置界面中按需设置。</p>
             </div>
 
             <div class="sidebar-footer">
-                <p>© 2026 Enigfrank 版权所有</p>
+                <span class="status-dot" aria-hidden="true"></span>
+                <span>Windows 桌面端</span>
             </div>
         </aside>
 
         <main class="oobe-main">
             <header class="oobe-header">
                 <div>
-                    <h1>初始设置</h1>
-                    <p>配置应用运行所需的课表文件</p>
+                    <p class="product-name">Electron Class Schedule X</p>
+                    <h1>开始使用电子课表</h1>
                 </div>
+                <p class="header-status">步骤 <span id="currentStepText">1</span> / 2</p>
             </header>
 
-            <section class="content-area" aria-live="polite">
-                <div class="step-content active" id="step1">
-                    <div class="step-header">
-                        <p class="section-kicker">Schedule Config</p>
-                        <h2 class="step-title">配置您的课表</h2>
-                        <p class="step-description">请先准备课程表信息，这是应用显示课程、时间安排和倒计时的基础</p>
+            <div class="content-area" aria-live="polite">
+                <section class="step-content" id="step1">
+                    <div class="step-heading">
+                        <p class="section-kicker">工作方式</p>
+                        <h2 class="step-title" tabindex="-1">课表负责显示，配置界面负责管理</h2>
+                        <p class="step-description">应用启动后，顶部课表会持续展示当天课程；需要修改内容时，从 Windows 系统托盘进入配置界面。</p>
                     </div>
 
-                    <div class="content-grid">
-                        <div class="panel">
-                            <div class="panel-heading">
-                                <span class="panel-icon icon icon-list" aria-hidden="true"></span>
-                                <h3>配置步骤</h3>
+                    <div class="experience-layout">
+                        <div class="product-preview" role="img" aria-label="顶部课表和系统托盘入口示意">
+                            <div class="preview-caption">
+                                <span>屏幕顶部</span>
+                                <span>课表工具条</span>
                             </div>
-                            <ol class="config-steps">
-                                <li>请直接点击下一步,将会生成默认课表</li>
-                                <li>请前往仪表盘配置</li>
-                            </ol>
-                        </div>
-
-                        <div class="panel">
-                            <div class="panel-heading">
-                                <span class="panel-icon icon icon-code" aria-hidden="true"></span>
-                                <h3>配置文件示例</h3>
+                            <div class="toolbar-preview" aria-hidden="true">
+                                <div class="toolbar-day">
+                                    <span>周一</span>
+                                    <strong>12</strong>
+                                </div>
+                                <div class="course-list">
+                                    <span class="course-item is-finished">语文</span>
+                                    <span class="course-item is-current">数学</span>
+                                    <span class="course-item">英语</span>
+                                    <span class="course-item">物理</span>
+                                </div>
+                                <div class="toolbar-countdown">
+                                    <span>距离下课</span>
+                                    <strong>28:14</strong>
+                                </div>
                             </div>
-                            <pre class="code-block"><code>// 科目名称映射
-subject_name: {
-    "YW": "语文",
-    "SX": "数学",
-    "YY": "英语"
-}
 
-// 每日课程安排
-daily_class: {
-    1: {
-        classList: ["YW", "SX", "YY"],
-        timetable: "default"
-    }
-}</code></pre>
-                        </div>
-                    </div>
-
-                    <button class="btn btn-primary btn-open-folder" id="btnOpenConfigFolder">
-                        <span class="btn-icon icon icon-folder" aria-hidden="true"></span>
-                        打开配置文件夹
-                    </button>
-                </div>
-
-                <div class="step-content" id="step2">
-                    <div class="completion-content">
-                        <span class="success-icon icon icon-check" aria-hidden="true"></span>
-                        <p class="section-kicker">Ready</p>
-                        <h2 class="step-title">设置完成</h2>
-                        <p class="step-description">请点击开始使用保存状态，然后重新打开课表程序</p>
-                    </div>
-
-                    <div class="summary-grid">
-                        <div class="panel author-card">
-                            <div class="author-avatar">E</div>
-                            <div class="author-info">
-                                <h3>Enigfrank</h3>
-                                <p>开发者 & 设计者</p>
+                            <div class="tray-preview" aria-hidden="true">
+                                <div class="desktop-strip">
+                                    <span class="desktop-line"></span>
+                                    <span class="desktop-line is-short"></span>
+                                </div>
+                                <div class="tray-entry">
+                                    <img src="./image/icon.png" alt="">
+                                    <div>
+                                        <strong>单击托盘图标</strong>
+                                        <span>打开配置界面</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="panel license-section">
-                            <h3>许可证声明</h3>
-                            <p>本软件基于开源协议发布，仅供学习和个人使用</p>
-                            <p class="license-text">GPL-3.0 License - Copyright (c) 2026 Enigfrank</p>
+                        <div class="behavior-list">
+                            <article class="behavior-item">
+                                <span class="behavior-index">01</span>
+                                <div>
+                                    <h3>顶部课表专注于展示</h3>
+                                    <p>显示当天课程、当前节次和倒计时，并可按设置保持置顶。</p>
+                                </div>
+                            </article>
+                            <article class="behavior-item">
+                                <span class="behavior-index">02</span>
+                                <div>
+                                    <h3>系统托盘是管理入口</h3>
+                                    <p>单击通知区域中的课表图标，或右键选择“打开配置界面”。</p>
+                                </div>
+                            </article>
+                            <article class="behavior-item">
+                                <span class="behavior-index">03</span>
+                                <div>
+                                    <h3>鼠标操作不会被遮挡</h3>
+                                    <p>顶部课表支持点击穿透，并会在指针靠近时主动避让。</p>
+                                </div>
+                            </article>
                         </div>
                     </div>
 
-                    <div class="panel features-preview">
-                        <h3>现在可以使用以下功能</h3>
-                        <ul class="feature-list">
-                            <li><span class="icon icon-calendar" aria-hidden="true"></span>实时课程表显示</li>
-                            <li><span class="icon icon-clock" aria-hidden="true"></span>课程倒计时提醒</li>
-                            <li><span class="icon icon-refresh" aria-hidden="true"></span>单双周自动切换</li>
-                            <li><span class="icon icon-power" aria-hidden="true"></span>定时关机管理</li>
-                        </ul>
+                    <div class="notice" role="note">
+                        <strong>找不到配置入口？</strong>
+                        <span>展开 Windows 任务栏右侧的隐藏图标，即可找到电子课表。</span>
                     </div>
-                </div>
-            </section>
+                </section>
+
+                <section class="step-content" id="step2" hidden>
+                    <div class="step-heading is-compact">
+                        <p class="section-kicker">基础配置</p>
+                        <h2 class="step-title" tabindex="-1">重启后，先在配置界面完成这三项设置</h2>
+                        <p class="step-description">配置界面集中管理长期课表、显示偏好和在线更新。保存课表后，顶部工具条会自动重新加载。</p>
+                    </div>
+
+                    <div class="setup-layout">
+                        <div class="dashboard-preview" role="img" aria-label="课表编辑器界面示意">
+                            <div class="dashboard-sidebar" aria-hidden="true">
+                                <div class="dashboard-brand">
+                                    <span class="dashboard-brand-mark"></span>
+                                    <span>课表管理</span>
+                                </div>
+                                <span>功能选项</span>
+                                <span>设置选项</span>
+                                <span class="is-active">课表编辑器</span>
+                                <span>在线更新</span>
+                                <span>其他工具</span>
+                            </div>
+                            <div class="dashboard-main" aria-hidden="true">
+                                <div class="dashboard-title-row">
+                                    <div>
+                                        <strong>课表编辑器</strong>
+                                        <span>Schedule Editor</span>
+                                    </div>
+                                    <span class="window-action"></span>
+                                </div>
+                                <div class="editor-toolbar">
+                                    <span class="editor-tab is-active">基础设置</span>
+                                    <span class="editor-tab">课程时间</span>
+                                    <span class="editor-tab">每日课表</span>
+                                </div>
+                                <div class="editor-fields">
+                                    <div class="editor-field is-wide">
+                                        <span>学期起始日期</span>
+                                        <strong>选择日期</strong>
+                                    </div>
+                                    <div class="editor-field">
+                                        <span>课表类型</span>
+                                        <strong>默认课表</strong>
+                                    </div>
+                                    <div class="editor-field">
+                                        <span>配置状态</span>
+                                        <strong>等待保存</strong>
+                                    </div>
+                                </div>
+                                <div class="editor-footer">
+                                    <span>修改长期课表后统一保存</span>
+                                    <strong>保存配置并应用</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <ol class="setup-checklist">
+                            <li>
+                                <span class="check-number">1</span>
+                                <div>
+                                    <h3>编辑长期课表</h3>
+                                    <p>在“课表编辑器”中维护科目、课程时间和每日课表。</p>
+                                </div>
+                            </li>
+                            <li>
+                                <span class="check-number">2</span>
+                                <div>
+                                    <h3>设置学期起始日期</h3>
+                                    <p>填写后会按每 7 天自动判断单周和双周，无需日常切换。</p>
+                                </div>
+                            </li>
+                            <li>
+                                <span class="check-number">3</span>
+                                <div>
+                                    <h3>检查常用偏好</h3>
+                                    <p>在“设置选项”中调整课上计时、窗口置顶、上课隐藏和开机启动。</p>
+                                </div>
+                            </li>
+                        </ol>
+                    </div>
+
+                    <div class="support-row">
+                        <div>
+                            <p class="support-label">本地配置文件</p>
+                            <p>仅在备份、手动编辑或故障排查时使用，日常修改请优先使用课表编辑器。</p>
+                        </div>
+                        <button class="btn btn-secondary" id="btnOpenConfigFolder" type="button">打开配置文件夹</button>
+                    </div>
+
+                    <p class="completion-note">以后可从“设置选项 → 高级设置 → 重新运行引导”再次打开此页面。</p>
+                </section>
+            </div>
 
             <footer class="navigation">
-                <button class="btn btn-secondary is-hidden" id="btnPrev">
-                    上一步
-                </button>
+                <button class="btn btn-secondary is-hidden" id="btnPrev" type="button">上一步</button>
                 <div class="nav-spacer"></div>
-                <button class="btn btn-primary" id="btnNext">
-                    下一步
-                </button>
+                <button class="btn btn-primary" id="btnNext" type="button">下一步</button>
             </footer>
         </main>
     </div>

@@ -1,183 +1,139 @@
 /**
- * OOBE交互逻辑脚本
- * 处理步骤切换、配置保存和IPC通信
+ * OOBE 交互逻辑。
+ * 负责步骤切换以及首次运行相关 IPC 通信。
  */
 
-// OOBE状态管理
 const OobeState = {
     currentStep: 1,
     totalSteps: 2
 };
 
-// DOM元素引用
 const Elements = {
     steps: document.querySelectorAll('.step'),
     stepLines: document.querySelectorAll('.step-line'),
     stepContents: document.querySelectorAll('.step-content'),
+    currentStepText: document.getElementById('currentStepText'),
     btnPrev: document.getElementById('btnPrev'),
     btnNext: document.getElementById('btnNext'),
     btnOpenConfigFolder: document.getElementById('btnOpenConfigFolder')
 };
 
 /**
- * 初始化OOBE
+ * 初始化首次使用引导。
  */
 function init() {
     bindEvents();
-    updateUI();
+    updateUI(false);
 }
 
 /**
- * 绑定事件监听器
+ * 绑定引导页按钮事件。
  */
 function bindEvents() {
-    // 导航按钮
     Elements.btnPrev.addEventListener('click', goToPrevStep);
     Elements.btnNext.addEventListener('click', goToNextStep);
-
-    // 打开配置文件夹
-    if (Elements.btnOpenConfigFolder) {
-        Elements.btnOpenConfigFolder.addEventListener('click', openConfigFolder);
-    }
-
+    Elements.btnOpenConfigFolder.addEventListener('click', openConfigFolder);
 }
 
 /**
- * 更新UI状态
+ * 同步步骤、内容和导航按钮状态。
+ * @param {boolean} focusHeading 是否将焦点移动到当前步骤标题
  */
-function updateUI() {
+function updateUI(focusHeading) {
     updateStepIndicator();
-    updateStepContent();
+    updateStepContent(focusHeading);
     updateNavigationButtons();
+    Elements.currentStepText.textContent = String(OobeState.currentStep);
 }
 
 /**
- * 更新步骤指示器
+ * 更新侧栏步骤状态和无障碍标记。
  */
 function updateStepIndicator() {
     Elements.steps.forEach((step, index) => {
-        const stepNum = index + 1;
-        step.classList.remove('active', 'completed');
+        const stepNumber = index + 1;
+        const isCurrent = stepNumber === OobeState.currentStep;
 
-        if (stepNum === OobeState.currentStep) {
-            step.classList.add('active');
-        } else if (stepNum < OobeState.currentStep) {
-            step.classList.add('completed');
+        step.classList.toggle('active', isCurrent);
+        step.classList.toggle('completed', stepNumber < OobeState.currentStep);
+
+        if (isCurrent) {
+            step.setAttribute('aria-current', 'step');
+        } else {
+            step.removeAttribute('aria-current');
         }
     });
 
-    // 更新步骤线
     Elements.stepLines.forEach((line, index) => {
-        line.classList.remove('active');
-        if (index < OobeState.currentStep - 1) {
-            line.classList.add('active');
-        }
+        line.classList.toggle('active', index < OobeState.currentStep - 1);
     });
 }
 
 /**
- * 更新步骤内容显示
+ * 显示当前步骤内容并隐藏其他步骤。
+ * @param {boolean} focusHeading 是否聚焦当前步骤标题
  */
-function updateStepContent() {
+function updateStepContent(focusHeading) {
     Elements.stepContents.forEach((content, index) => {
-        content.classList.remove('active');
-        if (index + 1 === OobeState.currentStep) {
-            content.classList.add('active');
+        const isCurrent = index + 1 === OobeState.currentStep;
+        content.hidden = !isCurrent;
+
+        if (isCurrent && focusHeading) {
+            content.querySelector('.step-title')?.focus({ preventScroll: true });
         }
     });
 }
 
 /**
- * 更新导航按钮
+ * 更新上一步和下一步按钮。
  */
 function updateNavigationButtons() {
-    // 上一步按钮
-    if (OobeState.currentStep === 1) {
-        Elements.btnPrev.classList.add('is-hidden');
-    } else {
-        Elements.btnPrev.classList.remove('is-hidden');
-    }
-
-    // 下一步/完成按钮
-    if (OobeState.currentStep === OobeState.totalSteps) {
-        Elements.btnNext.textContent = '开始使用';
-        Elements.btnNext.classList.add('btn-finish');
-    } else {
-        Elements.btnNext.textContent = '下一步';
-        Elements.btnNext.classList.remove('btn-finish');
-    }
+    Elements.btnPrev.classList.toggle('is-hidden', OobeState.currentStep === 1);
+    Elements.btnNext.textContent = OobeState.currentStep === OobeState.totalSteps
+        ? '完成并重启'
+        : '下一步';
 }
 
 /**
- * 跳转到上一步
+ * 返回上一个引导步骤。
  */
 function goToPrevStep() {
-    if (OobeState.currentStep > 1) {
-        OobeState.currentStep--;
-        updateUI();
-    }
+    if (OobeState.currentStep <= 1) return;
+
+    OobeState.currentStep -= 1;
+    updateUI(true);
 }
 
 /**
- * 跳转到下一步
+ * 进入下一个步骤或完成首次使用引导。
  */
-async function goToNextStep() {
+function goToNextStep() {
     if (OobeState.currentStep < OobeState.totalSteps) {
-        OobeState.currentStep++;
-        updateUI();
-    } else {
-        // 完成OOBE
-        await completeOobe();
+        OobeState.currentStep += 1;
+        updateUI(true);
+        return;
     }
+
+    completeOobe();
 }
 
 /**
- * 打开配置文件夹
+ * 请求主进程打开本地课表配置文件夹。
  */
 function openConfigFolder() {
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.send('oobe-open-config-folder');
+    window.oobeApi.openConfigFolder();
 }
 
 /**
- * 完成OOBE
+ * 保存首次运行完成状态并请求应用自动重启。
  */
-async function completeOobe() {
-    const { ipcRenderer } = require('electron');
+function completeOobe() {
+    if (Elements.btnNext.disabled) return;
 
-    // 发送完成事件
-    ipcRenderer.send('oobe-complete');
+    Elements.btnNext.disabled = true;
+    Elements.btnNext.textContent = '正在重启...';
+
+    window.oobeApi.complete();
 }
 
-/**
- * 验证当前步骤
- * @returns {boolean} 验证是否通过
- */
-function validateCurrentStep() {
-    return true;
-}
-
-/**
- * 显示错误信息
- * @param {string} message - 错误信息
- */
-function showError(message) {
-    // 创建错误提示元素
-    let errorEl = document.querySelector('.error-message');
-    if (!errorEl) {
-        errorEl = document.createElement('div');
-        errorEl.className = 'error-message';
-        document.querySelector('.content-area').prepend(errorEl);
-    }
-
-    errorEl.textContent = message;
-    errorEl.classList.add('is-visible');
-
-    // 3秒后自动隐藏
-    setTimeout(() => {
-        errorEl.classList.remove('is-visible');
-    }, 3000);
-}
-
-// 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', init);

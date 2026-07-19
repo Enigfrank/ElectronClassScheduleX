@@ -1,5 +1,6 @@
 const ROOT_FIELD_ORDER = [
   'countdown_target',
+  'semester_start_date',
   'week_display',
   'subject_name',
   'timetable',
@@ -21,7 +22,6 @@ const STYLE_FIELD_ORDER = [
   '--main-horizontal-space',
   '--divider-width',
   '--divider-margin',
-  '--triangle-size',
   '--sub-font-size',
 ];
 
@@ -29,6 +29,10 @@ const ROOT_FIELD_COMMENTS = {
   countdown_target: [
     '// 倒计时目标：位于右侧框中的倒计时，输入日期即可，可以是中考高考期末等等，格式YYYY-MM-DD',
     "// 若想隐藏右侧的倒计时，请在下方冒号后填入'hidden', (包括引号)",
+  ],
+  semester_start_date: [
+    '// 学期起始日期：用于自动切换单双周，从该日期起每 7 天切换一次，第一周为单周',
+    "// 留空时使用仪表盘中的手动单周/双周设置，格式为 'YYYY-MM-DD'",
   ],
   subject_name: [
     '// 科目名称：所有课程科目的简写及其对应全称，冒号前面(key)为简写，后面(value)为全称，不限字数，',
@@ -45,7 +49,7 @@ const ROOT_FIELD_COMMENTS = {
   ],
   daily_class: [
     '// 从classList后最外的中括号看起，里面的第几个元素的序号-1就是该元素的下标，这个下标对应你在上面timetable中配置的数字，课程用单引号包含，写入在subject_name中配置的简写',
-    "// 如果该节课可能存在每周轮换，你可以用一个中括号把他们全部写进去如: ['(第一周课)物', '(第二周)化', '(第三周)地', '(第四周)数'](小括号及其内容无需填写, 最多支持四周轮换)",
+    "// 如果该节课按单双周轮换，可写成 ['物', '化']：第一个为单周课程，第二个为双周课程",
     "// 下面的timetable中配置该日属于在上面的timetable中的哪一类，如周日属于weekend就这样写 timetable: 'weekend'，用单引号包含",
   ],
   css_style: [
@@ -68,9 +72,10 @@ const STYLE_FIELD_COMMENTS = {
   '--main-horizontal-space': '中间课表中的课程简写单字之间的间隔长度',
   '--divider-width': '分隔线宽度',
   '--divider-margin': '分隔线外边距',
-  '--triangle-size': '倒计时框上方小三角箭头的大小',
   '--sub-font-size': '中间课表中的课程下角标(X@X)的字体大小',
 };
+
+const UNKNOWN_STYLE_FIELD_COMMENT = '自定义 CSS 变量，请填写有效的 CSS 值并保留必要单位';
 
 const DEFAULT_CSS_STYLE = {
   '--center-font-size': '35px',
@@ -85,7 +90,6 @@ const DEFAULT_CSS_STYLE = {
   '--main-horizontal-space': '6px',
   '--divider-width': '2px',
   '--divider-margin': '4px',
-  '--triangle-size': '10px',
   '--sub-font-size': '15px',
 };
 
@@ -299,6 +303,7 @@ export function deepClone(value) {
 export function createDefaultConfig() {
   return {
     countdown_target: 'hidden',
+    semester_start_date: '',
     week_display: false,
     subject_name: {},
     timetable: {},
@@ -320,12 +325,15 @@ export function normalizeScheduleConfig(rawConfig) {
   base.countdown_target = typeof source.countdown_target === 'string'
     ? source.countdown_target.trim() || 'hidden'
     : 'hidden';
+  base.semester_start_date = typeof source.semester_start_date === 'string'
+    ? source.semester_start_date.trim()
+    : '';
   base.week_display = Boolean(source.week_display);
   base.subject_name = normalizeStringMap(source.subject_name);
   base.timetable = normalizeTimetable(source.timetable);
   base.divider = normalizeDivider(source.divider);
   base.daily_class = normalizeDailyClass(source.daily_class);
-  base.css_style = { ...DEFAULT_CSS_STYLE, ...normalizeStringMap(source.css_style) };
+  base.css_style = { ...DEFAULT_CSS_STYLE, ...normalizeStyleConfig(source.css_style) };
 
   return base;
 }
@@ -340,14 +348,63 @@ export function normalizeScheduleConfigForEditor(rawConfig) {
 }
 
 /**
+ * 列出导入时会被规范化或丢弃的时间表与分隔线字段。
+ * @param {Object} rawConfig 导入前配置
+ * @returns {string[]} 用户可读的问题说明
+ */
+export function getScheduleConfigNormalizationIssues(rawConfig) {
+  const issues = [];
+  const timetable = rawConfig?.timetable;
+  if (timetable && typeof timetable === 'object' && !Array.isArray(timetable)) {
+    Object.entries(timetable).forEach(([type, entries]) => {
+      if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+        issues.push(`时间表类型“${type}”不是对象，已忽略`);
+        return;
+      }
+      Object.keys(entries).forEach((range) => {
+        if (!normalizeTimeRange(range)) {
+          issues.push(`时间段“${type}.${range}”格式无效，已忽略`);
+        }
+      });
+    });
+  }
+
+  const divider = rawConfig?.divider;
+  if (divider && typeof divider === 'object' && !Array.isArray(divider)) {
+    Object.entries(divider).forEach(([type, indexes]) => {
+      if (!Array.isArray(indexes)) {
+        issues.push(`分隔线“${type}”不是数组，已忽略`);
+        return;
+      }
+      indexes.forEach((value, index) => {
+        if (!Number.isInteger(Number(value)) || Number(value) < 0) {
+          issues.push(`分隔线“${type}[${index}]”不是非负整数，已忽略`);
+        }
+      });
+    });
+  }
+  return issues;
+}
+
+/**
  * 检测源配置是否包含可选字段。
  * @param {Object} config 配置对象
- * @returns {{hasWeekDisplay: boolean}} 源结构信息
+ * @returns {{hasWeekDisplay: boolean, hasSemesterStartDate: boolean}} 源结构信息
  */
 export function detectSourceStructure(config) {
   return {
     hasWeekDisplay: Boolean(config && Object.prototype.hasOwnProperty.call(config, 'week_display')),
+    hasSemesterStartDate: Boolean(config && Object.prototype.hasOwnProperty.call(config, 'semester_start_date')),
   };
+}
+
+/**
+ * 获取样式变量的用户可读说明。
+ * @param {string} key CSS 变量名
+ * @returns {string} 样式变量说明
+ */
+export function getStyleFieldComment(key) {
+  return STYLE_FIELD_COMMENTS[key] || UNKNOWN_STYLE_FIELD_COMMENT;
 }
 
 /**
@@ -365,6 +422,17 @@ export function normalizeStringMap(source) {
     if (normalizedKey) result[normalizedKey] = normalizedValue;
   });
 
+  return result;
+}
+
+/**
+ * 规整样式配置并移除已废弃的 CSS 变量。
+ * @param {*} source 样式配置对象
+ * @returns {Object} 可由工具条使用的样式配置
+ */
+function normalizeStyleConfig(source) {
+  const result = normalizeStringMap(source);
+  delete result['--triangle-size'];
   return result;
 }
 
@@ -496,12 +564,15 @@ export function formatValue(value, indentLevel = 0) {
 /**
  * 生成标准 scheduleConfig.js 源码。
  * @param {Object} config 配置对象
- * @param {{hasWeekDisplay?: boolean}} sourceStructure 源结构信息
+ * @param {{hasWeekDisplay?: boolean, hasSemesterStartDate?: boolean}} sourceStructure 源结构信息
  * @returns {string} JS 配置源码
  */
 export function generateScheduleConfigSource(config, sourceStructure = {}) {
   const exportConfig = {
     countdown_target: config.countdown_target,
+    ...(sourceStructure.hasSemesterStartDate || config.semester_start_date
+      ? { semester_start_date: config.semester_start_date || '' }
+      : {}),
     ...(sourceStructure.hasWeekDisplay ? { week_display: Boolean(config.week_display) } : {}),
     subject_name: config.subject_name || {},
     timetable: config.timetable || {},

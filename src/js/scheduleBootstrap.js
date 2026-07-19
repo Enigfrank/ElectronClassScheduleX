@@ -1,6 +1,5 @@
 (function bootstrapSchedulePage() {
-    const { ipcRenderer } = require('electron');
-    window.scheduleBootstrapIpcRenderer = ipcRenderer;
+    const ipcRenderer = window.mainWindowApi;
 
     /**
      * 从主进程加载并校验课表配置，然后启动课表页面。

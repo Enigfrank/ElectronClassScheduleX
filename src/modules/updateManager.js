@@ -34,6 +34,8 @@ class UpdateManager {
         this.updater = null;
         this.initialized = false;
         this.autoCheckTimer = null;
+        this.updaterGeneration = 0;
+        this.activeOperation = null;
     }
 
     /**
@@ -68,16 +70,46 @@ class UpdateManager {
             this.updater.removeAllListeners();
         }
 
+        this.updaterGeneration += 1;
+        const generation = this.updaterGeneration;
         this.currentSource = source;
         this.updater = this.updaterFactory(source);
         this.updater.autoDownload = false;
         this.updater.autoInstallOnAppQuit = false;
-        this.bindUpdaterEvents(this.updater, source);
+        this.bindUpdaterEvents(this.updater, source, generation);
         this.status = createUpdateStatus({
-            ...this.status,
             currentVersion: app.getVersion(),
             sourceId: source.id
         });
+    }
+
+    /**
+     * 标记一项会占用当前 updater 的更新操作。
+     * @param {'checking'|'downloading'} operation 操作名称
+     */
+    beginOperation(operation) {
+        if (this.activeOperation) {
+            throw new Error(`更新操作正在进行（${this.activeOperation}），请等待完成后再试`);
+        }
+        this.activeOperation = operation;
+    }
+
+    /**
+     * 结束当前 updater 操作。
+     * @param {'checking'|'downloading'} operation 操作名称
+     */
+    endOperation(operation) {
+        if (this.activeOperation === operation) {
+            this.activeOperation = null;
+        }
+    }
+
+    /**
+     * 判断更新器当前是否正在检查或下载。
+     * @returns {boolean} 是否忙碌
+     */
+    isUpdateBusy() {
+        return this.activeOperation !== null;
     }
 
     /**
@@ -85,18 +117,19 @@ class UpdateManager {
      * @param {Object} updater electron-updater 实例
      * @param {Object} source 当前更新源
      */
-    bindUpdaterEvents(updater, source) {
+    bindUpdaterEvents(updater, source, generation) {
         updater.on('checking-for-update', () => {
-            this.broadcastStatus(createUpdateStatus({
+            this.broadcastStatusForGeneration(generation, createUpdateStatus({
                 currentVersion: app.getVersion(),
                 sourceId: source.id,
                 state: 'checking',
-                message: '正在检查更新'
+                message: '正在检查更新',
+                busy: true
             }));
         });
 
         updater.on('update-available', (info) => {
-            this.broadcastStatus(createUpdateStatus({
+            this.broadcastStatusForGeneration(generation, createUpdateStatus({
                 currentVersion: app.getVersion(),
                 latestVersion: info?.version || '',
                 sourceId: source.id,
@@ -106,7 +139,7 @@ class UpdateManager {
         });
 
         updater.on('update-not-available', () => {
-            this.broadcastStatus(createUpdateStatus({
+            this.broadcastStatusForGeneration(generation, createUpdateStatus({
                 currentVersion: app.getVersion(),
                 sourceId: source.id,
                 state: 'not-available',
@@ -115,16 +148,17 @@ class UpdateManager {
         });
 
         updater.on('download-progress', (progress) => {
-            this.broadcastStatus(createUpdateStatus({
+            this.broadcastStatusForGeneration(generation, createUpdateStatus({
                 ...this.status,
                 state: 'downloading',
                 message: '正在下载更新',
-                progress: formatDownloadProgress(progress)
+                progress: formatDownloadProgress(progress),
+                busy: true
             }));
         });
 
         updater.on('update-downloaded', (info) => {
-            this.broadcastStatus(createUpdateStatus({
+            this.broadcastStatusForGeneration(generation, createUpdateStatus({
                 ...this.status,
                 latestVersion: info?.version || this.status.latestVersion,
                 state: 'downloaded',
@@ -133,7 +167,7 @@ class UpdateManager {
         });
 
         updater.on('error', (error) => {
-            this.handleError(error, source);
+            this.handleError(error, source, generation);
         });
     }
 
@@ -167,6 +201,10 @@ class UpdateManager {
      * @returns {Object} 保存后的设置
      */
     setUpdateSettings(settings = {}) {
+        if (this.isUpdateBusy()) {
+            throw new Error('正在检查或下载更新，暂时不能切换更新源');
+        }
+
         const savePatch = { ...settings };
         const nextSettings = {
             ...this.configManager.getUpdateSettings(),
@@ -184,6 +222,7 @@ class UpdateManager {
 
         const saved = this.configManager.setUpdateSettings(savePatch);
         this.prepareUpdater();
+        this.broadcastStatus(this.status);
         return {
             ...saved,
             sources: getUpdateSources(saved.customUpdateProxyPrefix)
@@ -237,15 +276,24 @@ class UpdateManager {
             return status;
         }
 
+        this.beginOperation('checking');
         try {
             this.prepareUpdater();
+            this.broadcastStatus(createUpdateStatus({
+                currentVersion: app.getVersion(),
+                sourceId: this.currentSource?.id || '',
+                state: 'checking',
+                message: '正在检查更新',
+                busy: true
+            }));
             return await this.updater.checkForUpdates();
         } catch (error) {
             if (this.shouldRetryWithOfficialSource()) {
                 return this.retryCheckWithOfficialSource(error, options);
             }
-
             return this.finalizeCheckFailure(error, options);
+        } finally {
+            this.endOperation('checking');
         }
     }
 
@@ -309,10 +357,24 @@ class UpdateManager {
             throw error;
         }
 
-        if (!this.updater) {
-            this.prepareUpdater();
+        this.beginOperation('downloading');
+        try {
+            if (!this.updater) {
+                this.prepareUpdater();
+            }
+            this.broadcastStatus(createUpdateStatus({
+                ...this.status,
+                state: 'downloading',
+                message: '正在下载更新',
+                busy: true
+            }));
+            return await this.updater.downloadUpdate();
+        } catch (error) {
+            this.handleError(error, this.currentSource);
+            throw error;
+        } finally {
+            this.endOperation('downloading');
         }
-        return this.updater.downloadUpdate();
     }
 
     /**
@@ -371,11 +433,28 @@ class UpdateManager {
     }
 
     /**
+     * 仅接收当前 updater 实例发出的状态事件。
+     * @param {number} generation updater 代次
+     * @param {Object} status 更新状态
+     */
+    broadcastStatusForGeneration(generation, status) {
+        if (generation !== this.updaterGeneration) {
+            this.log('info', `[在线更新] 忽略过期 updater 状态（代次 ${generation}）`);
+            return;
+        }
+        this.broadcastStatus(status);
+    }
+
+    /**
      * 处理更新错误并同步状态。
      * @param {Error} error 错误对象
      * @param {Object} source 当前更新源
      */
-    handleError(error, source) {
+    handleError(error, source, generation = null) {
+        if (generation !== null && generation !== this.updaterGeneration) {
+            this.log('info', `[在线更新] 忽略过期 updater 错误（代次 ${generation}）`);
+            return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         this.log('error', `${source?.id || 'unknown'} 更新失败: ${message}`);
         this.broadcastStatus(createUpdateStatus({
@@ -383,7 +462,8 @@ class UpdateManager {
             sourceId: source?.id || '',
             state: 'error',
             message: '更新失败',
-            error: message
+            error: message,
+            busy: false
         }));
     }
 }

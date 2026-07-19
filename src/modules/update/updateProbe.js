@@ -1,5 +1,5 @@
-const https = require('https');
-const { buildLatestYmlUrl } = require('./updateSources');
+const https = require("https");
+const { buildLatestYmlUrl } = require("./updateSources");
 
 /**
  * 发送默认 HTTPS 请求并记录首字节耗时。
@@ -26,15 +26,15 @@ function defaultRequest(url, timeoutMs) {
                 });
             };
 
-            res.once('data', finish);
-            res.once('end', finish);
+            res.once("data", finish);
+            res.once("end", finish);
         });
 
-        req.on('timeout', () => {
-            req.destroy(new Error('请求超时'));
+        req.on("timeout", () => {
+            req.destroy(new Error("请求超时"));
         });
 
-        req.on('error', reject);
+        req.on("error", reject);
     });
 }
 
@@ -63,7 +63,7 @@ async function probeUpdateSource(source, options = {}) {
             statusCode: response.statusCode,
             firstByteMs: response.firstByteMs,
             totalMs,
-            error: ''
+            error: ""
         };
     } catch (error) {
         return {

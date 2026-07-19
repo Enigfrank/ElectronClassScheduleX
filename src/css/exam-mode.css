@@ -1,0 +1,334 @@
+:root {
+    --color-primary: #ffffff;
+    --color-secondary: #d1d5db;
+    --color-neutral-0: #000000;
+    --color-neutral-100: #f3f4f6;
+    --color-neutral-300: #d1d5db;
+    --color-neutral-700: #374151;
+    --color-neutral-900: #111827;
+    --color-success: #ffffff;
+    --color-warning: #ffffff;
+    --color-error: #ffffff;
+
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 20px;
+    --text-xl: 24px;
+    --text-2xl: 32px;
+    --text-exam-info: 40px;
+    --text-exam-info-min: 24px;
+    --text-exam-clock: 168px;
+    --text-exam-slogan: 72px;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --border-width: 2px;
+    --slogan-column-width: 144px;
+    --slogan-inline-position: 25%;
+    --exam-info-width: 40vw;
+    --dialog-width: 560px;
+    --touch-target: 64px;
+    --clock-width: 8ch;
+    --motion-duration-fast: 160ms;
+    --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-neutral-0);
+    color: var(--color-primary);
+}
+
+body {
+    font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+    font-size: var(--text-base);
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+button {
+    font: inherit;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.exam-screen {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    min-width: 0;
+    background: var(--color-neutral-0);
+}
+
+.exam-slogan-column {
+    position: absolute;
+    top: 50%;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--slogan-column-width);
+    min-width: 0;
+    transform: translate(-50%, -50%);
+}
+
+.exam-slogan-column:first-of-type {
+    left: var(--slogan-inline-position);
+}
+
+.exam-slogan-column:last-of-type {
+    left: calc(100% - var(--slogan-inline-position));
+}
+
+.exam-slogan {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    margin: 0;
+    font-size: var(--text-exam-slogan);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.exam-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-12);
+    min-width: 0;
+    padding: var(--space-16) var(--space-8);
+}
+
+.exam-info {
+    width: var(--exam-info-width);
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-primary);
+    font-size: var(--text-exam-info);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.exam-clock {
+    display: block;
+    width: var(--clock-width);
+    color: var(--color-primary);
+    font-family: Consolas, "Cascadia Mono", "Segoe UI Mono", monospace;
+    font-size: var(--text-exam-clock);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.exam-exit-trigger {
+    position: fixed;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch-target);
+    height: var(--touch-target);
+    padding: 0;
+    border: var(--border-width) solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    background: var(--color-neutral-0);
+    color: var(--color-primary);
+    cursor: pointer;
+}
+
+.exam-exit-trigger span {
+    font-size: var(--text-2xl);
+    line-height: 1;
+}
+
+.exam-exit-trigger:hover,
+.exam-exit-trigger:active {
+    background: var(--color-neutral-900);
+}
+
+.exam-exit-trigger:focus-visible,
+.exam-dialog-button:focus-visible {
+    outline: var(--border-width) solid var(--color-primary);
+    outline-offset: var(--space-1);
+}
+
+.exam-exit-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+    background: var(--color-neutral-0);
+    opacity: 0;
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.exam-exit-dialog {
+    width: min(100%, var(--dialog-width));
+    padding: var(--space-12);
+    border: var(--border-width) solid var(--color-primary);
+    border-radius: var(--radius-md);
+    background: var(--color-neutral-0);
+    text-align: center;
+    opacity: 0;
+    transform: translateY(var(--space-1));
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
+}
+
+.exam-exit-layer.is-visible {
+    opacity: 1;
+}
+
+.exam-exit-layer.is-visible .exam-exit-dialog {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.exam-exit-dialog h1 {
+    margin: 0;
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0;
+}
+
+.exam-exit-dialog > p {
+    margin: var(--space-4) 0 0;
+    color: var(--color-secondary);
+    font-size: var(--text-base);
+}
+
+.exam-exit-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+    margin-top: var(--space-8);
+}
+
+.exam-dialog-button {
+    min-height: var(--touch-target);
+    padding: var(--space-3) var(--space-4);
+    border: var(--border-width) solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-base);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+
+.exam-dialog-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.exam-dialog-button-secondary {
+    background: var(--color-neutral-0);
+    color: var(--color-primary);
+}
+
+.exam-dialog-button-primary {
+    background: var(--color-primary);
+    color: var(--color-neutral-0);
+}
+
+.exam-dialog-button-secondary:hover,
+.exam-dialog-button-secondary:active {
+    background: var(--color-neutral-900);
+}
+
+.exam-dialog-button-primary:hover,
+.exam-dialog-button-primary:active {
+    background: var(--color-neutral-300);
+}
+
+.exam-exit-error {
+    color: var(--color-error) !important;
+    font-size: var(--text-sm) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .exam-exit-dialog {
+        transform: none;
+        transition: opacity var(--motion-duration-fast) var(--motion-ease-out);
+    }
+}
+
+@media (min-width: 3000px) and (min-height: 1800px) {
+    :root {
+        --text-exam-info: 64px;
+        --text-exam-info-min: 32px;
+        --text-exam-clock: 320px;
+        --text-exam-slogan: 128px;
+        --slogan-column-width: 240px;
+        --dialog-width: 720px;
+        --touch-target: 80px;
+    }
+}
+
+@media (max-width: 1600px), (max-height: 900px) {
+    :root {
+        --text-exam-info: 32px;
+        --text-exam-info-min: 20px;
+        --text-exam-clock: 120px;
+        --text-exam-slogan: 52px;
+        --slogan-column-width: 112px;
+        --slogan-inline-position: 22%;
+        --exam-info-width: 44vw;
+    }
+
+    .exam-center {
+        gap: var(--space-8);
+        padding: var(--space-8) var(--space-6);
+    }
+}
+
+@media (max-width: 1100px), (max-height: 700px) {
+    :root {
+        --text-exam-info: 24px;
+        --text-exam-info-min: 16px;
+        --text-exam-clock: 96px;
+        --text-exam-slogan: 40px;
+        --slogan-column-width: 96px;
+        --slogan-inline-position: 20%;
+        --exam-info-width: 48vw;
+    }
+}

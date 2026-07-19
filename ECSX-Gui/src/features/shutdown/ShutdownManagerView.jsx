@@ -99,10 +99,10 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
     };
 
     loadShutdownTimes();
-    ipcRenderer.on('shutdownTimesUpdated', handleShutdownTimesUpdated);
+    const unsubscribe = ipcRenderer.on('shutdownTimesUpdated', handleShutdownTimesUpdated);
 
     return () => {
-      ipcRenderer.removeListener('shutdownTimesUpdated', handleShutdownTimesUpdated);
+      unsubscribe();
     };
   }, [ipcRenderer, loadShutdownTimes]);
 

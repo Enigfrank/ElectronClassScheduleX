@@ -62,7 +62,22 @@
     --space-8: 32px;
     --space-12: 48px;
     --space-16: 64px;
-    transition: opacity .5s .2s;
+    --motion-duration-fast: 160ms;
+    --motion-duration-standard: 200ms;
+    --motion-duration-pulse: 2000ms;
+    --motion-easing-standard: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-easing-exit: cubic-bezier(0.23, 1, 0.32, 1);
+    --drag-boundary-flow-duration: 2200ms;
+    --drag-boundary-line-width: var(--space-1);
+    --drag-boundary-gradient-origin-x: 50%;
+    --drag-boundary-gradient-origin-y: 50%;
+    --color-boundary-pink: #ff2d55;
+    --color-boundary-orange: #ff9500;
+    --color-boundary-yellow: #ffe100;
+    --color-boundary-green: #00d26a;
+    --color-boundary-cyan: #00b8d9;
+    --color-boundary-blue: #2684ff;
+    --color-boundary-violet: #7a5cff;
 }
 
 .background {
@@ -72,7 +87,7 @@
     font-size: var(--center-font-size);
     font-weight: 600;
     backdrop-filter: blur(5px); /* 添加背景模糊效果 */
-    transition: background-color 0.3s ease;
+    transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
 /* 触摸屏悬停状态 - 仅对鼠标设备生效 */
@@ -115,7 +130,6 @@
     top: var(--top-space);
     left: 50%;
     transform: translateX(-50%);
-    transition: opacity 0.5s ease, transform 0.5s ease; /* 添加过渡效果 */
 }
 
 .class {
@@ -133,8 +147,7 @@
 
 .upcoming {
     color: rgba(0, 255, 10, 1);
-    animation: highlightUpcoming 1.5s;
-    animation-iteration-count: infinite;
+    animation: highlightUpcoming var(--motion-duration-pulse) ease-in-out infinite;
 }
 
 @keyframes highlightUpcoming {
@@ -172,23 +185,11 @@
     font-family: Sou;
 }
 
-.triangle {
-    width: 0;
-    height: 0;
-    border-style: solid;
-    border-width: 0 var(--triangle-size) var(--triangle-size);
-    border-color: transparent transparent rgba(0, 0, 0, var(--global-bg-opacity));
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
 .countdowner {
     background-color: rgba(0, 0, 0, var(--global-bg-opacity));
     border-radius: var(--global-border-radius);
     padding: var(--countdown-bg-padding);
     font-size: var(--countdown-font-size);
-    transition: all 2s;
     backdrop-filter: blur(5px);
 }
 
@@ -196,7 +197,7 @@
     color: rgba(0, 255, 10, 1);
     display: inline;
     font-family: Sou;
-    transition: all 2s;
+    transition: color var(--motion-duration-standard) var(--motion-easing-standard);
     font-weight: bold;
 }
 
@@ -207,15 +208,21 @@
 }
 
 /* 切换动画类 */
+.fade-element,
+.fade-hidden {
+    transition-property: opacity;
+    transition-duration: var(--motion-duration-standard);
+}
+
 .fade-element {
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transition-timing-function: var(--motion-easing-standard);
     opacity: 1;
 }
 
 .fade-hidden {
+    transition-timing-function: var(--motion-easing-exit);
     opacity: 0;
     pointer-events: none;
-    transform: translateY(-20px); /* 向上移动并消失 */
 }
 
 .miniCountdown {
@@ -232,72 +239,47 @@
     display: none; 
     border: 2px solid #4CAF50; 
     backdrop-filter: blur(5px);
-    transition: opacity 0.5s ease, transform 0.5s ease; 
     touch-action: none; 
     cursor: grab;
 }
 
 .miniCountdown.dragging {
     transition: none !important; 
-    will-change: left, top;
+    will-change: transform;
     cursor: grabbing;
 }
 
 .dragBoundaryHint {
     position: fixed;
     inset: 0;
+    padding: var(--drag-boundary-line-width);
     pointer-events: none;
     opacity: 0;
+    overflow: hidden;
     z-index: 999;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--motion-duration-fast) var(--motion-easing-exit);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
 }
 
 .dragBoundaryHint::before {
     content: "";
     position: absolute;
-    inset: 0;
-    padding: 3px;
-    border-radius: 6px;
-    background:
-        linear-gradient(90deg,
-            #ff2d55,
-            #ff9500,
-            #ffe100,
-            #00ff66,
-            #00ffcc,
-            #00a2ff,
-            #5e5cff,
-            #c442ff,
-            #ff2d55) 0 0 / 320% 100%;
-    animation: dragBoundaryRgbFlow 2.2s linear infinite;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-}
-
-.dragBoundaryHint::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    padding: 6px;
-    border-radius: 8px;
-    background:
-        linear-gradient(90deg,
-            #ff2d55,
-            #ff9500,
-            #ffe100,
-            #00ff66,
-            #00ffcc,
-            #00a2ff,
-            #5e5cff,
-            #c442ff,
-            #ff2d55) 0 0 / 280% 100%;
-    animation: dragBoundaryRgbFlow 2.2s linear infinite;
-    filter: blur(8px);
-    opacity: 0.9;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+    inset: -50%;
+    background: conic-gradient(
+        from 0deg at var(--drag-boundary-gradient-origin-x) var(--drag-boundary-gradient-origin-y),
+        var(--color-boundary-pink),
+        var(--color-boundary-orange),
+        var(--color-boundary-yellow),
+        var(--color-boundary-green),
+        var(--color-boundary-cyan),
+        var(--color-boundary-blue),
+        var(--color-boundary-violet),
+        var(--color-boundary-pink)
+    );
+    animation: dragBoundaryColorFlow var(--drag-boundary-flow-duration) linear infinite;
+    will-change: transform;
 }
 
 .dragBoundaryHint.active {
@@ -309,7 +291,6 @@
     left: 100%;
     top: 50%;
     transform: translateY(-50%);
-    transition: all 0.5s ease; /* 优化过渡时间 */
     padding: var(--container-bg-padding);
 }
 
@@ -349,48 +330,55 @@
     font-size: var(--countdown-font-size);
     font-family: JETB;
     color: #FFF;
-    transition: opacity 0.5s;
     border: 2px solid #4CAF50;
     /* 绿色边框突出提示 */
     opacity: 0;
-    animation: fadeIn 0.5s ease-in-out forwards;
+    animation: fadeIn var(--motion-duration-standard) var(--motion-easing-standard) forwards;
 }
 
 .nextClassHint.fadeOut {
     opacity: 0;
-    animation: fadeOut 0.5s ease-in-out forwards;
+    animation: fadeOut var(--motion-duration-standard) var(--motion-easing-exit) forwards;
 }
 
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(-10px);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
 @keyframes fadeOut {
     from {
         opacity: 1;
-        transform: translateY(0);
     }
 
     to {
         opacity: 0;
-        transform: translateY(-10px);
     }
 }
 
-@keyframes dragBoundaryRgbFlow {
+@keyframes dragBoundaryColorFlow {
     from {
-        background-position: 0% 0;
+        transform: rotate(0deg);
     }
 
     to {
-        background-position: 300% 0;
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .upcoming {
+        animation: none;
+        color: rgba(0, 255, 10, 1);
+    }
+
+    .dragBoundaryHint::before {
+        animation: none;
+        will-change: auto;
     }
 }

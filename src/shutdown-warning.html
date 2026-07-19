@@ -56,51 +56,8 @@
     <button class="btn delay60" id="btn60">延长60秒</button>
     <button class="btn close" id="btnClose">取消本次</button>
 
-    <script>
-        const { ipcRenderer } = require('electron');
-
-        let seconds = 15;
-        let interval;
-        let targetTime = null;
-
-        window.addEventListener('DOMContentLoaded', () => {
-            const targetTimeEl = document.getElementById('targetTime');
-            if (window.shutdownTargetTime) {
-                targetTimeEl.textContent = window.shutdownTargetTime;
-                targetTime = new Date(window.shutdownTargetTime);
-            }
-
-            startCountdown();
-        });
-
-        function startCountdown() {
-            const countdownEl = document.querySelector('.countdown');
-
-            interval = setInterval(() => {
-                seconds--;
-                countdownEl.textContent = seconds;
-
-                if (seconds <= 0) {
-                    clearInterval(interval);
-                }
-            }, 1000);
-        }
-
-        document.getElementById('btn30').addEventListener('click', () => {
-            clearInterval(interval);
-            ipcRenderer.send('shutdown-action', 'delay30');
-        });
-
-        document.getElementById('btn60').addEventListener('click', () => {
-            clearInterval(interval);
-            ipcRenderer.send('shutdown-action', 'delay60');
-        });
-
-        document.getElementById('btnClose').addEventListener('click', () => {
-            clearInterval(interval);
-            ipcRenderer.send('shutdown-action', 'close');
-        });
-    </script>
+    <script src="./shared/shutdownWarning.js"></script>
+    <script src="./js/shutdown-warning.js"></script>
 </body>
 
 </html>
