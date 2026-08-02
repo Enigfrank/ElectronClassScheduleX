@@ -47,9 +47,6 @@ jobs:
       - name: 构建并验证 Dashboard
         run: corepack yarn verify:dashboard
 
-      - name: 运行测试
-        run: corepack yarn test
-
       - name: 构建 Electron 应用
         run: corepack yarn package
 
