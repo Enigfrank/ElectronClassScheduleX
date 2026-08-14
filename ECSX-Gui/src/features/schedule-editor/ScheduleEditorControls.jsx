@@ -7,12 +7,16 @@ import {
   Flex,
   IconButton,
   Input,
+  Menu,
+  MenuButton,
+  MenuItemOption,
+  MenuList,
   Select,
   SimpleGrid,
   Text,
   Tooltip,
 } from '@chakra-ui/react';
-import { Trash2 } from 'lucide-react';
+import { ChevronDown, Trash2 } from 'lucide-react';
 
 /**
  * 展示课表编辑器的概览统计卡片。
@@ -82,5 +86,93 @@ export function ScheduleTypeEditor({ selectedType, types, onSelect, onRename, on
         删除此类型
       </Button>
     </SimpleGrid>
+  );
+}
+
+/**
+ * 渲染最多可按选择顺序选中两门课程的受控菜单。
+ * @param {{value: string|string[], options: Array<{key: string, label: string}>, onChange: (value: string|string[]) => void}} props 组件属性
+ * @returns {React.ReactElement} 科目多选菜单
+ */
+export function SubjectMultiSelect({ value, options, onChange }) {
+  const optionKeys = new Set(options.map((option) => option.key));
+  const optionLabels = new Map(options.map((option) => [option.key, option.label]));
+  const currentValues = Array.isArray(value) ? value : value ? [value] : [];
+  const selectedValues = currentValues.filter((item) => optionKeys.has(item)).slice(0, 2);
+
+  /**
+   * 将 Chakra 复选菜单值转换为课表配置使用的课程格式。
+   * @param {string[]} nextValues Chakra 复选菜单值
+   * @returns {void}
+   */
+  const handleChange = (nextValues) => {
+    if (nextValues.length > 2) return;
+    if (nextValues.length === 0) {
+      onChange('');
+      return;
+    }
+    onChange(nextValues.length === 1 ? nextValues[0] : nextValues);
+  };
+
+  /**
+   * 切换一个科目的选中状态并保持点击顺序。
+   * @param {string} subjectKey 科目简称
+   * @returns {void}
+   */
+  const toggleSubject = (subjectKey) => {
+    const nextValues = selectedValues.includes(subjectKey)
+      ? selectedValues.filter((item) => item !== subjectKey)
+      : [...selectedValues, subjectKey];
+    handleChange(nextValues);
+  };
+
+  const displayValues = selectedValues.map((key) => optionLabels.get(key) || key);
+  const buttonLabel = options.length === 0
+    ? '暂无可选科目'
+    : displayValues.length === 0
+      ? '请选择课程'
+      : displayValues.length === 1
+        ? displayValues[0]
+        : `单周：${displayValues[0]} / 双周：${displayValues[1]}`;
+
+  return (
+    <Menu closeOnSelect={false}>
+      <MenuButton
+        as={Button}
+        flex={1}
+        minW={0}
+        variant="outline"
+        rightIcon={<ChevronDown size={16} />}
+        textAlign="left"
+        isDisabled={options.length === 0}
+      >
+        <Text as="span" noOfLines={1}>{buttonLabel}</Text>
+      </MenuButton>
+      <MenuList w={{ base: 'calc(100vw - 32px)', md: '480px' }} maxW="calc(100vw - 32px)">
+        <SimpleGrid minChildWidth="96px" gap={2} p={2}>
+          {options.map((option) => (
+            <MenuItemOption
+              key={option.key}
+              type="checkbox"
+              value={option.key}
+              isChecked={selectedValues.includes(option.key)}
+              isDisabled={selectedValues.length >= 2 && !selectedValues.includes(option.key)}
+              minH="48px"
+              w="100%"
+              minW={0}
+              border="1px solid"
+              borderColor="gray.200"
+              borderRadius="md"
+              px={3}
+              py={2}
+              whiteSpace="nowrap"
+              onClick={() => toggleSubject(option.key)}
+            >
+              <Text as="span" fontSize="sm" lineHeight="short" textAlign="left">{option.label}</Text>
+            </MenuItemOption>
+          ))}
+        </SimpleGrid>
+      </MenuList>
+    </Menu>
   );
 }

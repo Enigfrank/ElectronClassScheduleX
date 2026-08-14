@@ -90,17 +90,6 @@ export function parseTypedValue(value) {
 }
 
 /**
- * 解析课程输入，逗号分隔时返回轮换课程数组。
- * @param {string} value 输入文本
- * @returns {string|string[]} 课程项
- */
-export function parseClassItem(value) {
-  const tokens = value.split(/[,，、]/).map((item) => item.trim());
-  if (tokens.every((item) => item === '')) return '';
-  return tokens.length > 1 ? tokens : tokens[0] || '';
-}
-
-/**
  * 获取一个不冲突的新时间段键。
  * @param {Object} table 当前时间表
  * @returns {string} 新时间段键

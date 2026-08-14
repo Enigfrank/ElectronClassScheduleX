@@ -49,14 +49,15 @@ import {
   DeleteButton,
   EditorCard,
   ScheduleTypeEditor,
+  SubjectMultiSelect,
   SummaryCard,
 } from './ScheduleEditorControls.jsx';
 import {
   nextTimeRangeKey,
   findSubjectReferences,
   findTimetableReferences,
-  parseClassItem,
   parseTypedValue,
+  renameObjectKey,
   renameScheduleTypeReferences,
   TAB_INDEX,
 } from './scheduleEditorHelpers.mjs';
@@ -84,6 +85,10 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
 
   const timetableTypes = useMemo(() => Object.keys(config.timetable || {}), [config.timetable]);
   const dividerTypes = useMemo(() => Object.keys(config.divider || {}), [config.divider]);
+  const subjectOptions = useMemo(() => Object.entries(config.subject_name || {}).map(([key, fullName]) => {
+    const normalizedFullName = String(fullName ?? '').trim();
+    return { key, label: normalizedFullName || key };
+  }), [config.subject_name]);
 
   /**
    * 使用配置源码刷新编辑器状态
@@ -525,11 +530,15 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
                       <Flex direction="column" gap={2}>
                         {(day.classList || []).map((item, itemIndex) => (
                           <HStack key={itemIndex}>
-                            <Input value={Array.isArray(item) ? item.join(',') : String(item)} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].classList[itemIndex] = parseClassItem(event.target.value); })} placeholder="课程简称，轮换课用逗号分隔" />
+                            <SubjectMultiSelect
+                              value={item}
+                              options={subjectOptions}
+                              onChange={(nextValue) => updateConfig((draft) => { draft.daily_class[dayIndex].classList[itemIndex] = nextValue; })}
+                            />
                             <DeleteButton label="删除课程" onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.splice(itemIndex, 1); })} />
                           </HStack>
                         ))}
-                        <Button size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.push(''); })}>
+                        <Button size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} isDisabled={subjectOptions.length === 0} onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.push(''); })}>
                           添加课程
                         </Button>
                       </Flex>
