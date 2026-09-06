@@ -9,7 +9,7 @@ export const TAB_INDEX = {
 };
 
 /**
- * 重命名对象键并保持原值。
+ * 重命名对象键并保持原值和条目顺序。
  * @param {Object} target 目标对象
  * @param {string} oldKey 原键
  * @param {string} nextKey 新键
@@ -17,9 +17,14 @@ export const TAB_INDEX = {
  * @returns {void}
  */
 export function renameObjectKey(target, oldKey, nextKey, selectCallback) {
-  if (!target || !oldKey || !nextKey || oldKey === nextKey || target[nextKey]) return;
-  target[nextKey] = target[oldKey];
-  delete target[oldKey];
+  if (!target || !oldKey || !nextKey || oldKey === nextKey
+    || !Object.prototype.hasOwnProperty.call(target, oldKey)
+    || Object.prototype.hasOwnProperty.call(target, nextKey)) return;
+  const entries = Object.entries(target);
+  entries.forEach(([key]) => { delete target[key]; });
+  entries.forEach(([key, value]) => {
+    target[key === oldKey ? nextKey : key] = value;
+  });
   selectCallback?.(nextKey);
 }
 

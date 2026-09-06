@@ -136,7 +136,7 @@ export function SubjectMultiSelect({ value, options, onChange }) {
         : `单周：${displayValues[0]} / 双周：${displayValues[1]}`;
 
   return (
-    <Menu closeOnSelect={false}>
+    <Menu closeOnSelect={false} isLazy lazyBehavior="unmount">
       <MenuButton
         as={Button}
         flex={1}
