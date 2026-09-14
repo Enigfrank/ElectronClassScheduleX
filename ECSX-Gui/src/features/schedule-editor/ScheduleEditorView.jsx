@@ -438,7 +438,14 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
         <SummaryCard label="样式变量" value={Object.keys(config.css_style || {}).length} onClick={() => setTabIndex(TAB_INDEX.style)} />
       </SimpleGrid>
 
-      <Tabs index={tabIndex} onChange={setTabIndex} colorScheme="blue" variant="enclosed">
+      <Tabs
+        index={tabIndex}
+        onChange={setTabIndex}
+        isLazy
+        lazyBehavior="unmount"
+        colorScheme="blue"
+        variant="enclosed"
+      >
         <TabList overflowX="auto">
           <Tab>基础设置</Tab>
           <Tab>科目名称</Tab>
