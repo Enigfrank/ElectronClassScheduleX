@@ -16,6 +16,7 @@ const registerScheduleConfigIpc = require('./ipc/registerScheduleConfigIpc');
 const registerDiagnosticsIpc = require('./ipc/registerDiagnosticsIpc');
 const registerOobeIpc = require('./ipc/registerOobeIpc');
 const registerExamModeIpc = require('./ipc/registerExamModeIpc');
+const registerMiniCountdownIpc = require('./ipc/registerMiniCountdownIpc');
 
 /**
  * IPC 通信管理模块，负责装配各业务域注册器。
@@ -39,6 +40,7 @@ class IpcManager {
         this.shutdownScheduler = shutdownScheduler;
         this.autoLaunchManager = autoLaunchManager;
         this.updateManager = updateManager;
+        this.miniCountdownGlassWindow = windowManager.getMiniCountdownGlassWindow();
 
         this.setupIpcEvents();
         this.setupOobeEvents();
@@ -74,6 +76,13 @@ class IpcManager {
             autoLaunchManager: this.autoLaunchManager
         });
         registerWindowIpc({ ipcMain, windowManager: this.windowManager, screen, log });
+        registerMiniCountdownIpc({
+            ipcMain,
+            glassWindow: this.miniCountdownGlassWindow,
+            windowManager: this.windowManager,
+            screen,
+            log
+        });
         registerApplicationIpc({
             ipcMain,
             configManager: this.configManager,

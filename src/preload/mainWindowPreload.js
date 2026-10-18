@@ -5,10 +5,10 @@ const SEND_CHANNELS = new Set([
     'getTimeOffset',
     'getWeekIndex',
     'log',
-    'setDragState',
+    'reset-glass-countdown-position',
+    'set-glass-countdown-state',
     'setIgnore',
-    'show-schedule-config-error',
-    'updateInteractiveRect'
+    'show-schedule-config-error'
 ]);
 
 const INVOKE_CHANNELS = new Set([
@@ -16,6 +16,7 @@ const INVOKE_CHANNELS = new Set([
 ]);
 
 const RECEIVE_CHANNELS = new Set([
+    'glass-countdown-unavailable',
     'ClassCountdown',
     'ClassHidden',
     'getDayOffset',
@@ -26,8 +27,7 @@ const RECEIVE_CHANNELS = new Set([
     'openSettingDialog',
     'setDayOffset',
     'setTimeOffset',
-    'setWeekIndex',
-    'mini-countdown-overlay-pointer'
+    'setWeekIndex'
 ]);
 
 /**

@@ -115,7 +115,13 @@ out/
 /ECSX-Gui/dist
 /.claude
 agent.md
-/tests
+/tests/*
+!/tests/examModeGlassLifecycle.test.js
+!/tests/miniCountdownGlassWindow.test.js
+!/tests/miniCountdownIpc.test.js
+!/tests/miniCountdownRenderer.test.js
+!/tests/desktopLumaSampler.test.js
+!/tests/miniCountdownSizeObserver.test.js
 /docs
 /.agents
 /.codex

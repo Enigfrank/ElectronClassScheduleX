@@ -62,6 +62,7 @@
     --space-8: 32px;
     --space-12: 48px;
     --space-16: 64px;
+    --countdown-fallback-center: 50%;
     --motion-duration-fast: 160ms;
     --motion-duration-standard: 200ms;
     --motion-duration-pulse: 2000ms;
@@ -78,22 +79,40 @@
     --color-boundary-cyan: #00b8d9;
     --color-boundary-blue: #2684ff;
     --color-boundary-violet: #7a5cff;
+    /* 玻璃表面配方，与 mini-countdown.css 保持一致。
+       面近乎无色（不透明度每升高一点就读成涂漆塑料），
+       光只出现在 1px 边缘，悬浮高度交给投影表达。 */
+    --glass-fill: rgba(255, 255, 255, 0.06);
+    --glass-rim-light: rgba(255, 255, 255, 0.62);
+    --glass-rim-shade: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    /* 课表固定用白字，不参与桌面明暗判定。
+       迷你倒计时药丸会跟着光标移动，白字不可读的风险集中在药丸上，
+       由那边的 desktopCapturer 采样处理；课表常驻在屏幕顶部同一位置，
+       采样锚点未必覆盖它，为此再加一套判定既不准确又持续占用 CPU。 */
+    --text-on-glass: #ffffff;
+    --text-accent-on-glass: #3ddc84;
+    --text-elapsed-on-glass: #a6a6a6;
+    --text-corner-on-glass: #ffffff;
+    --text-alert-on-glass: #ff3a3a;
+    --text-shadow-on-glass: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .background {
-    border-radius: var(--global-border-radius);
-    background-color: rgba(0, 0, 0, var(--global-bg-opacity));
-    padding: var(--container-bg-padding);
-    font-size: var(--center-font-size);
+    /* 玻璃面由 .globalContainer 统一提供，子块只负责排版与字号。
+       保留自身圆角会与外层圆角叠出双层边，读起来像贴了块黑胶。 */
+    border-radius: 0;
+    background-color: transparent;
+    padding: var(--container-bg-padding, 8px 14px);
+    font-size: var(--center-font-size, 28px);
     font-weight: 600;
-    backdrop-filter: blur(5px); /* 添加背景模糊效果 */
-    transition: background-color var(--motion-duration-fast) var(--motion-easing-standard);
+    transition: opacity var(--motion-duration-fast) var(--motion-easing-standard);
 }
 
 /* 触摸屏悬停状态 - 仅对鼠标设备生效 */
 @media (hover: hover) and (pointer: fine) {
     .background:hover {
-        background-color: rgba(0, 0, 0, calc(var(--global-bg-opacity) + 0.1));
+        background-color: var(--glass-fill);
     }
 }
 
@@ -125,84 +144,121 @@
     width: auto;
 }
 
+/* 主体与天数块在上课隐藏时整块移除，不占位，
+   避免玻璃面里留出一大片空白。
+   用 class 而非 style.display：倒计时块由 toggleElement 独占该属性。 */
+.hiddenBlock {
+    display: none;
+}
+
+/* 上课时三个子块全部隐藏，globalContainer 只剩空白，留着玻璃面与投影
+   会在迷你倒计时药丸背后形成一条竖直长条。
+   迷你倒计时已由独立玻璃窗口承载，这里必须整块消失。
+   必须写成 .globalContainer.globalSurfaceHidden：.globalContainer 声明的
+   display:flex 在文件里位置更靠后，同等特异性下会覆盖单类选择器。 */
+.globalContainer.globalSurfaceHidden {
+    display: none;
+}
+
 .globalContainer {
     position: fixed;
     top: var(--top-space);
     left: 50%;
     transform: translateX(-50%);
+    /* 与迷你倒计时同一套玻璃配方：面近乎无色，光只在边缘，靠投影表达悬浮。
+       整块课表共用一个表面，内部子块不再各自铺深色底，
+       否则玻璃里套深色块会立刻发闷退回塑料感。 */
+    display: flex;
+    align-items: center;
+    gap: var(--container-space, 12px);
+    /* 用户可配变量（--container-bg-padding / --global-border-radius）在
+       课表配置注入前不存在，var() 失效会让整条声明被丢弃，
+       玻璃面就退化成无圆角无内边距的色块，因此一律带兜底值。 */
+    /* 不加 padding：投影由 box-shadow 绘制在边框盒之外，
+       主窗口足够高，投影不需要挤进布局尺寸。
+       加 padding 会把玻璃面撑大一圈，尺寸和药丸对不上。 */
+    border-radius: calc(var(--global-border-radius, 30px) + 4px);
+    background: var(--glass-fill);
+    box-shadow:
+        inset 0 1px 0 0 var(--glass-rim-light),
+        inset 0 -1px 0 0 var(--glass-rim-shade),
+        var(--glass-shadow);
 }
 
 .class {
-    color: rgba(255, 255, 255, 1);
+    color: var(--text-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     margin: 0 var(--main-horizontal-space);
 }
 
 .elapsed {
-    color: rgba(166, 166, 166);
+    color: var(--text-elapsed-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
 }
 
 .current {
-    color: rgba(0, 255, 10, 1);
+    color: var(--text-accent-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
 }
 
 .upcoming {
-    color: rgba(0, 255, 10, 1);
+    color: var(--text-accent-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     animation: highlightUpcoming var(--motion-duration-pulse) ease-in-out infinite;
 }
 
 @keyframes highlightUpcoming {
     0% {
-        color: rgba(255, 255, 255, 1)
+        color: var(--text-on-glass)
     }
 
     50% {
-        color: rgba(0, 255, 10, 1);
+        color: var(--text-accent-on-glass);
     }
 
     100% {
-        color: rgba(255, 255, 255, 1)
+        color: var(--text-on-glass)
     }
 
 }
 
 .sidebar {
     /* height: 100%; */
-    position: absolute;
-    top: 0;
     font-family: Ali;
 }
 
 .countdownSidebar {
-    left: 0;
-    color: #FF3a3a;
-    transform: translateX(calc(-100% - var(--container-space)));
+    color: var(--text-alert-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
 }
 
 .corner {
     display: inline;
     font-size: var(--corner-font-size);
-    color: rgba(255, 255, 255, 1);
+    color: var(--text-corner-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     font-family: Sou;
 }
 
 .countdowner {
-    background-color: rgba(0, 0, 0, var(--global-bg-opacity));
-    border-radius: var(--global-border-radius);
-    padding: var(--countdown-bg-padding);
-    font-size: var(--countdown-font-size);
-    backdrop-filter: blur(5px);
+    /* 玻璃面由 .globalContainer 提供，倒计时块只留排版。 */
+    background-color: transparent;
+    border-radius: 0;
+    padding: var(--countdown-bg-padding, 8px 12px);
+    font-size: var(--countdown-font-size, 18px);
 }
 
 .currentClass {
-    color: rgba(0, 255, 10, 1);
+    color: var(--text-accent-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     display: inline;
     font-family: Sou;
-    transition: color var(--motion-duration-standard) var(--motion-easing-standard);
     font-weight: bold;
 }
 
 .countdown {
-    color: rgba(255, 255, 255, 1);
+    color: var(--text-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     display: inline;
     font-family: JETB;
 }
@@ -225,20 +281,38 @@
     pointer-events: none;
 }
 
+.countdownFallback {
+    position: fixed;
+    top: var(--top-space);
+    left: var(--countdown-fallback-center);
+    transform: translateX(calc(-1 * var(--countdown-fallback-center)));
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.countdownFallback > :is(.miniCountdown, .nextClassHint) {
+    position: static;
+    transform: none;
+}
+
 .miniCountdown {
     position: fixed;
     left: 50%;
     transform: translateX(-50%);
     top: var(--top-space);
     border-radius: var(--global-border-radius);
-    background-color: rgba(0, 0, 0, var(--global-bg-opacity));
+    background-color: var(--glass-fill);
     padding: var(--countdown-bg-padding);
     font-size: var(--countdown-font-size);
     font-family: JETB;
-    color: #FFF;
-    display: none; 
-    border: 2px solid #4CAF50; 
-    backdrop-filter: blur(5px);
+    color: var(--text-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
+    display: none;
+    /* 1px 边缘高光：上缘受光强，下缘仅留极淡亮边，不再压暗 */
+    box-shadow:
+        inset 0 1px 0 0 var(--glass-rim-light),
+        inset 0 -1px 0 0 var(--glass-rim-shade);
     touch-action: none; 
     cursor: grab;
 }
@@ -287,18 +361,16 @@
 }
 
 .countdownContainer {
-    position: absolute;
-    left: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    padding: var(--container-bg-padding);
+    /* 改为 globalContainer 的普通 flex 子项：三个块在同一块玻璃内并排，
+       绝对定位会让玻璃面与内容错位。 */
+    padding: var(--container-bg-padding, 8px 14px);
 }
 
 .hint-label {
-    color: rgba(0, 255, 10, 1);
+    color: var(--text-accent-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
     /* 自定义颜色 */
     font-weight: bold;
-    /* 可选：加粗突出 */
 }
 
 .divider {
@@ -325,13 +397,16 @@
     display: none;
     position: fixed;
     border-radius: var(--global-border-radius);
-    background-color: rgba(0, 0, 0, var(--global-bg-opacity));
+    background-color: var(--glass-fill);
     padding: var(--countdown-bg-padding);
     font-size: var(--countdown-font-size);
     font-family: JETB;
-    color: #FFF;
-    border: 2px solid #4CAF50;
-    /* 绿色边框突出提示 */
+    color: var(--text-on-glass);
+    text-shadow: var(--text-shadow-on-glass);
+    /* 与迷你倒计时保持一致的 1px 边缘高光 */
+    box-shadow:
+        inset 0 1px 0 0 var(--glass-rim-light),
+        inset 0 -1px 0 0 var(--glass-rim-shade);
     opacity: 0;
     animation: fadeIn var(--motion-duration-standard) var(--motion-easing-standard) forwards;
 }
@@ -374,7 +449,7 @@
 @media (prefers-reduced-motion: reduce) {
     .upcoming {
         animation: none;
-        color: rgba(0, 255, 10, 1);
+        color: var(--text-accent-on-glass);
     }
 
     .dragBoundaryHint::before {

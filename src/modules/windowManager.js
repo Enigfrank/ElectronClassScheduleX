@@ -2,6 +2,8 @@ const fs = require('fs');
 const { BrowserWindow, screen, app } = require('electron');
 const path = require('path');
 const ExamModeWindowController = require('./examModeWindowController');
+const MiniCountdownGlassWindow = require('./miniCountdownGlassWindow');
+const DesktopLumaSampler = require('./desktopLumaSampler');
 
 /**
  * 窗口管理模块
@@ -19,16 +21,83 @@ class WindowManager {
             main: null,
             gui: null,
             oobe: null,
-            devTools: null,
-            touchDragOverlay: null
+            devTools: null
         };
-        this.touchDragOverlayRect = null;
         this.mainAlwaysOnTopRestoreTimer = null;
         this.examModeController = new ExamModeWindowController({
             windowManager: this,
             configManager: this.configManager,
             logger: this.logger
         });
+        this.miniCountdownGlassWindow = new MiniCountdownGlassWindow(this.configManager, this.logger);
+        // 玻璃面近乎无色，文字对比度只能靠桌面明暗决定。
+        // 采样在主进程做，renderer 在透明窗口里看不到桌面。
+        this.desktopLumaSampler = new DesktopLumaSampler(this.logger, {
+            resolveDisplay: () => this.resolveCountdownDisplay(),
+            resolveExclusions: () => this.getCountdownScreenRects(),
+            resolveAnchor: () => this.resolveCountdownAnchor()
+        });
+        this.miniCountdownGlassWindow.on('visibility-changed', visible => {
+            this.desktopLumaSampler.setActive(visible);
+        });
+        this.miniCountdownGlassWindow.on('drag-ended', () => {
+            this.desktopLumaSampler.setDragging(false);
+        });
+        this.desktopLumaSampler.start(lightBackground => {
+            this.miniCountdownGlassWindow.setLightBackground(lightBackground);
+        });
+    }
+
+    /**
+     * 解析迷你倒计时药丸当前所在的显示器。
+     *
+     * 药丸可以被拖到任意屏幕，亮度必须采样那块屏的桌面，
+     * 否则拖到副屏后文字配色会跟着主屏走。
+     * @returns {Electron.Display} 药丸所在显示器
+     */
+    resolveCountdownDisplay() {
+        const bounds = this.miniCountdownGlassWindow.getCountdownBounds();
+        return screen.getDisplayMatching(bounds);
+    }
+
+    /**
+     * 取药丸当前所在矩形，作为桌面亮度采样的中心。
+     *
+     * 采样必须以药丸为中心而不是屏幕中心：药丸可以被拖到任意位置，
+     * 固定在屏幕顶部采样的话，拖到白底区域后采样到的仍是别处的壁纸，
+     * 文字永远不会切换配色。
+     * @returns {{x: number, y: number, width: number, height: number}|null} 药丸矩形
+     */
+    resolveCountdownAnchor() {
+        const win = this.miniCountdownGlassWindow.getWindow();
+        if (win && !win.isDestroyed()) return win.getBounds();
+        return this.miniCountdownGlassWindow.getCountdownBounds();
+    }
+
+    /**
+     * 列出需要从桌面亮度采样中排除的屏幕矩形。
+     *
+     * desktopCapturer 拍的是合成后的画面，药丸与提示窗口也在里面。
+     * 不排除的话，中位亮度采到的是玻璃面与其投影，判定会随药丸出现而抖动。
+     * 窗口尚不存在时返回空数组，此时桌面上本来就没有干扰。
+     * @returns {{x: number, y: number, width: number, height: number}[]} 需要排除的矩形
+     */
+    getCountdownScreenRects() {
+        const rects = [];
+        const push = bounds => {
+            if (bounds && bounds.width > 0 && bounds.height > 0) rects.push(bounds);
+        };
+        push(this.miniCountdownGlassWindow.getWindow()?.getBounds());
+        push(this.miniCountdownGlassWindow.getHintWindow()?.getBounds());
+        return rects;
+    }
+
+    /**
+     * 获取迷你倒计时玻璃窗口控制器。
+     * @returns {MiniCountdownGlassWindow} 玻璃窗口控制器
+     */
+    getMiniCountdownGlassWindow() {
+        return this.miniCountdownGlassWindow;
     }
 
     /**
@@ -146,7 +215,9 @@ class WindowManager {
             x: 0,
             y: 0,
             width: screenWidth,
-            height: 120, // 保持固定高度
+            // 玻璃面不再带投影留白 padding，内容高约 55px，
+            // 加上贴顶偏移与投影扩散（8+24）仍在 120px 内，不会被裁切。
+            height: 120,
             frame: false,
             transparent: true,
             alwaysOnTop: this.configManager.getWindowAlwaysOnTop(),
@@ -168,10 +239,8 @@ class WindowManager {
         });
 
         this.windows.main = win;
-        this.createTouchDragOverlay(win);
         win.on('closed', () => {
             this.stopMainWindowAlwaysOnTopGuard();
-            this.destroyTouchDragOverlay();
             if (this.windows.main === win) {
                 this.windows.main = null;
             }
@@ -184,106 +253,6 @@ class WindowManager {
 
         this.setWindowAlwaysOnTop(win, this.configManager.getWindowAlwaysOnTop());
         return win;
-    }
-
-    /**
-     * 创建仅用于接收迷你倒计时触摸输入的透明覆盖窗口。
-     * @param {BrowserWindow} mainWindow 主课表窗口
-     * @returns {BrowserWindow} 覆盖窗口实例
-     */
-    createTouchDragOverlay(mainWindow) {
-        this.destroyTouchDragOverlay();
-
-        const overlay = new BrowserWindow({
-            parent: mainWindow,
-            x: mainWindow.getBounds().x,
-            y: mainWindow.getBounds().y,
-            width: 1,
-            height: 1,
-            frame: false,
-            transparent: true,
-            show: false,
-            focusable: false,
-            skipTaskbar: true,
-            resizable: false,
-            movable: false,
-            minimizable: false,
-            maximizable: false,
-            alwaysOnTop: mainWindow.isAlwaysOnTop(),
-            type: 'toolbar',
-            webPreferences: {
-                preload: path.join(__dirname, '..', 'preload', 'touchDragOverlayPreload.js'),
-                nodeIntegration: false,
-                contextIsolation: true,
-                sandbox: true
-            }
-        });
-
-        overlay.loadFile(path.join(__dirname, '..', 'touch-drag-overlay.html')).catch(err => {
-            this.log('error', `[窗口管理] 加载触摸拖动覆盖窗口失败: ${err.message}`);
-        });
-        overlay.webContents.once('did-finish-load', () => {
-            if (this.windows.touchDragOverlay === overlay) {
-                this.updateTouchDragOverlay(this.touchDragOverlayRect);
-            }
-        });
-        overlay.on('closed', () => {
-            if (this.windows.touchDragOverlay === overlay) {
-                this.windows.touchDragOverlay = null;
-            }
-        });
-
-        this.windows.touchDragOverlay = overlay;
-        return overlay;
-    }
-
-    /**
-     * 用主课表 renderer 的 CSS/DIP 矩形更新触摸覆盖窗口，仅覆盖扩展命中区。
-     * @param {{x: number, y: number, width: number, height: number}|null} rect 迷你倒计时矩形
-     */
-    updateTouchDragOverlay(rect) {
-        this.touchDragOverlayRect = rect;
-        const overlay = this.windows.touchDragOverlay;
-        const mainWindow = this.windows.main;
-        if (!overlay || overlay.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return;
-
-        const mainBounds = mainWindow.getBounds();
-        const isValidRect = rect &&
-            [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
-            rect.x >= 0 &&
-            rect.y >= 0 &&
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.x + rect.width <= mainBounds.width &&
-            rect.y + rect.height <= mainBounds.height;
-        if (!isValidRect) {
-            overlay.hide();
-            return;
-        }
-
-        if (overlay.webContents.isLoading()) return;
-
-        const touchHitPadding = 10;
-        const minimumTouchTargetSize = 44;
-        const width = Math.max(minimumTouchTargetSize, Math.ceil(rect.width + touchHitPadding * 2));
-        const height = Math.max(minimumTouchTargetSize, Math.ceil(rect.height + touchHitPadding * 2));
-        const desiredX = Math.round(mainBounds.x + rect.x - (width - rect.width) / 2);
-        const desiredY = Math.round(mainBounds.y + rect.y - (height - rect.height) / 2);
-        const x = Math.max(mainBounds.x, Math.min(desiredX, mainBounds.x + mainBounds.width - width));
-        const y = Math.max(mainBounds.y, Math.min(desiredY, mainBounds.y + mainBounds.height - height));
-
-        overlay.setBounds({ x, y, width, height });
-        if (!overlay.isVisible()) overlay.showInactive();
-    }
-
-    /**
-     * 销毁触摸输入覆盖窗口，避免主课表重建后留下无视觉输入区。
-     */
-    destroyTouchDragOverlay() {
-        const overlay = this.windows.touchDragOverlay;
-        if (overlay && !overlay.isDestroyed()) overlay.destroy();
-        this.windows.touchDragOverlay = null;
-        this.touchDragOverlayRect = null;
     }
 
     /**
@@ -426,22 +395,7 @@ class WindowManager {
         }
 
         if (win === this.windows.main) {
-            this.setTouchDragOverlayAlwaysOnTop(alwaysOnTop);
-        }
-    }
-
-    /**
-     * 让透明触摸覆盖窗口跟随主课表的置顶策略，避免它独立悬在其他应用之上。
-     * @param {boolean} alwaysOnTop 是否置顶
-     */
-    setTouchDragOverlayAlwaysOnTop(alwaysOnTop) {
-        const overlay = this.windows.touchDragOverlay;
-        if (!overlay || overlay.isDestroyed()) return;
-
-        if (alwaysOnTop) {
-            this.refreshWindowAlwaysOnTop(overlay);
-        } else {
-            overlay.setAlwaysOnTop(false);
+            this.miniCountdownGlassWindow.setAlwaysOnTop(alwaysOnTop);
         }
     }
 

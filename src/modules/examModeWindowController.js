@@ -152,13 +152,14 @@ class ExamModeWindowController {
     }
 
     /**
-     * 隐藏顶部课表和 GUI，并停止主窗口置顶守护。
+     * 隐藏顶部课表、GUI 和玻璃倒计时，并停止主窗口置顶守护。
      */
     hideNormalWindows() {
         if (this.normalWindowsHidden) return;
         this.normalWindowsHidden = true;
 
         try {
+            this.windowManager.getMiniCountdownGlassWindow().setSuppressed(true);
             this.windowManager.stopMainWindowAlwaysOnTopGuard();
             const mainWindow = this.windowManager.getWindow('main');
             const guiWindow = this.windowManager.getWindow('gui');
@@ -171,7 +172,7 @@ class ExamModeWindowController {
     }
 
     /**
-     * 幂等恢复顶部课表和原 GUI 窗口。
+     * 幂等恢复顶部课表、原 GUI 窗口和玻璃倒计时。
      */
     restoreNormalWindows() {
         if (!this.normalWindowsHidden || this.isRestoring || this.isAppQuitting) return;
@@ -179,6 +180,7 @@ class ExamModeWindowController {
         this.normalWindowsHidden = false;
 
         try {
+            this.windowManager.getMiniCountdownGlassWindow().setSuppressed(false);
             const mainWindow = this.windowManager.getWindow('main');
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.show();

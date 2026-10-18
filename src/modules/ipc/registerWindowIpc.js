@@ -3,50 +3,7 @@
  * @param {{ipcMain: Electron.IpcMain, windowManager: Object, screen: Electron.Screen, log: Function}} dependencies 注册依赖
  */
 function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
-    let interactiveRect = null;
-    let checkTimer = null;
-    let isDragging = false;
     let lastIgnoreMouseEvents = null;
-
-    /**
-     * 根据当前鼠标位置更新主窗口的穿透状态。
-     */
-    function checkMousePosition() {
-        if (isDragging) return;
-        const mainWindow = windowManager.getWindow('main');
-        if (!mainWindow || mainWindow.isDestroyed()) {
-            if (checkTimer) {
-                clearInterval(checkTimer);
-                checkTimer = null;
-            }
-            return;
-        }
-
-        try {
-            const point = screen.getCursorScreenPoint();
-            const bounds = mainWindow.getBounds();
-
-            if (interactiveRect) {
-                const absoluteRect = {
-                    x: bounds.x + interactiveRect.x,
-                    y: bounds.y + interactiveRect.y,
-                    width: interactiveRect.width,
-                    height: interactiveRect.height
-                };
-                const padding = 5;
-                const inArea = point.x >= absoluteRect.x - padding && point.x <= absoluteRect.x + absoluteRect.width + padding &&
-                               point.y >= absoluteRect.y - padding && point.y <= absoluteRect.y + absoluteRect.height + padding;
-
-                const ignoreMouseEvents = !inArea;
-                if (lastIgnoreMouseEvents !== ignoreMouseEvents) {
-                    mainWindow.setIgnoreMouseEvents(ignoreMouseEvents, inArea ? undefined : { forward: true });
-                    lastIgnoreMouseEvents = ignoreMouseEvents;
-                }
-            }
-        } catch (error) {
-            log('warn', `[IPC管理] 鼠标位置检测异常: ${error.message}`);
-        }
-    }
 
     /**
      * 执行 GUI 自定义标题栏请求的窗口操作。
@@ -74,43 +31,6 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
             default:
                 log('warn', `[IPC管理] 未知的 GUI 窗口操作: ${action}`);
         }
-    }
-
-    /**
-     * 验证透明输入窗口转发的指针事件，防止其他 renderer 注入坐标。
-     * @param {unknown} payload 待验证的 IPC 数据
-     * @returns {payload is {type: 'down'|'move'|'up'|'cancel', pointerId: number, clientX: number, clientY: number}} 是否为有效事件
-     */
-    function isValidTouchDragPointerEvent(payload) {
-        return Boolean(
-            payload &&
-            typeof payload === 'object' &&
-            ['down', 'move', 'up', 'cancel'].includes(payload.type) &&
-            Number.isInteger(payload.pointerId) &&
-            Number.isFinite(payload.clientX) &&
-            Number.isFinite(payload.clientY)
-        );
-    }
-
-    /**
-     * 将覆盖窗口局部 CSS/DIP 坐标换算成主课表 renderer 坐标并转发。
-     * @param {Electron.IpcMainEvent} event IPC 事件
-     * @param {unknown} payload 覆盖窗口指针数据
-     */
-    function forwardTouchDragPointerEvent(event, payload) {
-        const overlay = windowManager.getWindow('touchDragOverlay');
-        const mainWindow = windowManager.getWindow('main');
-        if (!overlay || overlay.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return;
-        if (event.sender !== overlay.webContents || !isValidTouchDragPointerEvent(payload)) return;
-
-        const overlayBounds = overlay.getBounds();
-        const mainBounds = mainWindow.getBounds();
-        mainWindow.webContents.send('mini-countdown-overlay-pointer', {
-            type: payload.type,
-            pointerId: payload.pointerId,
-            clientX: overlayBounds.x + payload.clientX - mainBounds.x,
-            clientY: overlayBounds.y + payload.clientY - mainBounds.y
-        });
     }
 
     ipcMain.on('openSettingDialog', () => {
@@ -145,38 +65,6 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         mainWindow.setIgnoreMouseEvents(ignoreMouseEvents, ignoreMouseEvents ? { forward: true } : undefined);
         lastIgnoreMouseEvents = ignoreMouseEvents;
     });
-
-    ipcMain.on('updateInteractiveRect', (event, rect) => {
-        const mainWindow = windowManager.getWindow('main');
-        if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
-
-        interactiveRect = rect;
-        windowManager.updateTouchDragOverlay?.(rect);
-        if (rect) {
-            if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);
-        } else {
-            if (checkTimer) {
-                clearInterval(checkTimer);
-                checkTimer = null;
-            }
-            mainWindow.setIgnoreMouseEvents(true, { forward: true });
-            lastIgnoreMouseEvents = true;
-        }
-    });
-
-    ipcMain.on('setDragState', (event, state) => {
-        isDragging = state;
-        const mainWindow = windowManager.getWindow('main');
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            if (isDragging) {
-                mainWindow.setIgnoreMouseEvents(false);
-                lastIgnoreMouseEvents = false;
-            }
-            else checkMousePosition();
-        }
-    });
-
-    ipcMain.on('touch-drag-overlay-pointer', forwardTouchDragPointerEvent);
 }
 
 module.exports = registerWindowIpc;

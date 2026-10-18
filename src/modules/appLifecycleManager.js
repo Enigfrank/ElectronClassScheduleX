@@ -216,6 +216,8 @@ class AppLifecycleManager {
             this.logger?.flush();
             this.logger?.cleanupOldLogs();
 
+            this.windowManager?.getMiniCountdownGlassWindow?.()?.destroy();
+            this.windowManager?.desktopLumaSampler?.stop();
             this.trayManager?.destroy();
         });
 

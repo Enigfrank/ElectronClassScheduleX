@@ -1,0 +1,277 @@
+@font-face {
+    font-family: JETB;
+    src: url("../font/JETBRAINSMONO-BOLD.TTF");
+}
+
+@font-face {
+    font-family: Sou;
+    src: url("../font/SourceHanSansCN-Bold.otf");
+}
+
+/* 悬浮玻璃表面样式。
+   窗口为 transparent，桌面由系统直接透出，圆角完全由这里决定。
+
+   玻璃与塑料的区别在于"看穿"而不是"涂色"：
+   1) 面本身必须近乎无色。不透明度每升高一点，背景细节就少一点，
+      一旦盖住桌面就退化成不透明塑料片。这里只用 0.06 的白做提亮。
+   2) 光只出现在边缘。玻璃的亮部是棱边折射，上下各一条 1px 线足够；
+      在面内加渐变或暗角会被读成涂漆的塑料。
+   3) 靠投影表达悬浮高度，而不是靠厚度。
+   刻意不用 backdrop-filter：它只模糊窗口自身背景，
+   在 transparent 窗口上没有可模糊的源，反而带来一层灰雾。 */
+:root {
+    --countdown-font-size: 20px;
+    --global-border-radius: 16px;
+    --countdown-bg-padding: 8px 14px;
+    --glass-tint: rgba(255, 255, 255, 0.06);
+    /* 上缘是主光源，下缘只有极淡的反光，强度差必须拉开才能读成棱边。 */
+    --glass-rim-light: rgba(255, 255, 255, 0.62);
+    --glass-rim-shade: rgba(255, 255, 255, 0.12);
+    /* 投影偏中性黑，只提供高度感；带色投影会被读成塑料的脏边。 */
+    --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    /* 文字配色分亮底/暗底两套，由主进程采样桌面亮度后切换。
+       默认暗底：桌面通常偏深，白字最常见也最安全。
+       玻璃面本身近乎无色，白字落在白底上会直接消失，
+       所以亮底必须换成深字，而不是把玻璃面调暗——调暗就退回塑料感。 */
+    --text-white: #ffffff;
+    --text-accent: #3ddc84;
+    --text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    --text-shadow-light-bg: 0 1px 2px rgba(255, 255, 255, 0.75);
+    --text-white-light-bg: #111827;
+    --text-accent-light-bg: #047857;
+    /* 明暗翻转时颜色必须渐变。玻璃面几乎无色，文字色一硬跳
+       就会像闪烁而不是"换了个底"；320ms 短到察觉不到延迟，
+       长到不会显得突兀。投影与面内填充一起过渡，
+       否则文字渐变而玻璃瞬变，两者的时点对不上反而更假。 */
+    --tone-duration: 320ms;
+    --tone-easing: cubic-bezier(0.4, 0, 0.2, 1);
+    --tone-transition:
+        color var(--tone-duration) var(--tone-easing),
+        text-shadow var(--tone-duration) var(--tone-easing),
+        background-color var(--tone-duration) var(--tone-easing),
+        box-shadow var(--tone-duration) var(--tone-easing);
+    /* 投影空间：必须 >= 投影的垂直扩散距离，否则阴影被窗口裁成硬边。
+       8+24 的合成偏移需要 32px，这里留 34px。 */
+    --glass-shadow-space: 34px;
+}
+
+/* 亮底：深字 + 白色描边式投影，替代默认的黑影。
+   黑影在白底上会形成一圈脏边，读起来像模糊重影。 */
+body.lightBackground {
+    --text-white: var(--text-white-light-bg);
+    --text-accent: var(--text-accent-light-bg);
+    --text-shadow: var(--text-shadow-light-bg);
+}
+
+/* 亮底上 1px 白色棱边与桌面同色，药丸会失去形状边界。
+   玻璃在浅色表面上同样有折射边，只是变暗而不是变亮，
+   因此亮底把棱边换成一条极淡的深线，投影也同步减淡。 */
+body.lightBackground .glassPill {
+    --glass-rim-light: rgba(15, 23, 42, 0.12);
+    --glass-rim-shade: rgba(15, 23, 42, 0.06);
+    --glass-shadow: 0 6px 20px rgba(15, 23, 42, 0.16);
+    /* 4% 的中性暗只够让药丸内部与桌面有一丝可辨的差异，
+       再高就会盖住桌面重新读成塑料板。 */
+    --glass-tint: rgba(15, 23, 42, 0.04);
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* body 自身宽度由 .glassPill 的 max-content 决定，
+   让 getBoundingClientRect 返回真实内容尺寸而不是撑满视口。
+   padding 为药丸的投影留出空间：窗口尺寸按 body 收紧，
+   投影若被窗口边缘切掉会立刻变回扁平硬边。 */
+body.glassBody {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    height: max-content;
+    padding: var(--glass-shadow-space);
+    font-family: JETB, "Microsoft YaHei", sans-serif;
+}
+
+.glassPill {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: var(--countdown-bg-padding);
+    border-radius: var(--global-border-radius);
+    background: var(--glass-tint);
+    /* 上缘受光强，下缘只留极淡亮边：薄玻璃的高光来自边缘，不来自阴影。 */
+    box-shadow:
+        inset 0 1px 0 0 var(--glass-rim-light),
+        inset 0 -1px 0 0 var(--glass-rim-shade),
+        var(--glass-shadow);
+    color: var(--text-white);
+    font-size: var(--countdown-font-size);
+    line-height: 1.25;
+    white-space: nowrap;
+    touch-action: none;
+    cursor: grab;
+    transition: var(--tone-transition);
+}
+
+/* 内棱的角向高光。
+   原来只有上下两条 1px 直边，读起来是"描了一条线"而不是"玻璃有厚度"。
+   真实玻璃的受光取决于法线朝向：同一个光源下，左上棱最亮、
+   向右下逐渐转暗，四角最暗。这层用 135 度线性渐变叠在 inset 上，
+   只影响紧贴边缘的一两像素，不会在面内形成可见的明暗块。
+   mask 让渐变只在边缘 1px 内可见，中间完全透明，
+   因此面内亮度不被抬高——这是"通透"与"发灰"的分界线。 */
+.glassPill::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    /* 135 度：左上亮 -> 右下暗，与桌面左上主光源一致。 */
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.30) 0%,
+        rgba(255, 255, 255, 0.10) 28%,
+        rgba(255, 255, 255, 0) 52%,
+        rgba(255, 255, 255, 0) 74%,
+        rgba(0, 0, 0, 0.10) 100%
+    );
+    /* 只保留紧贴边缘的一圈：用 1px 透明 border 把渐变裁到边框盒内。
+       不做这个裁切的话，135 度渐变会在整个面内铺开，
+       左上角明显发白，玻璃立刻塌回塑料。
+       padding-box 与 border-box 组合的 mask 在 Chromium 上兼容性不稳，
+       border 方案结果确定且不需要额外合成层。 */
+    border: 1px solid transparent;
+    -webkit-mask:
+        linear-gradient(#000 0 0) padding-box,
+        linear-gradient(#000 0 0) border-box;
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#000 0 0) padding-box,
+        linear-gradient(#000 0 0) border-box;
+    mask-composite: exclude;
+    /* 必须单独指定 background-image 的过渡：--tone-transition 里只有
+       color / text-shadow / background-color / box-shadow，不含渐变本身。
+       漏掉的话明暗翻转时文字花 320ms 而棱边瞬变，两者时点对不上，反而更假。
+       渐变是可插值属性，只要亮暗两条规则的色标数量一致就能平滑过渡
+       （下面两条覆盖规则都是 5 个 / 4 个色标）。 */
+    transition: background-image var(--tone-duration) var(--tone-easing);
+}
+
+/* 色散：棱边内侧的极淡互补色。
+   玻璃对不同波长的折射率不同，白光过棱时会散出一圈彩色，
+   这是"廉价磨砂塑料"和"光学玻璃"最直接的区别。
+   强度必须极低（峰值 6% 以下）：真实色散只在特定角度可见，
+   铺满整条棱边会读成装饰描边。
+   同样只用 mask 限制在 1px 边缘内，避免在面内染上色偏。 */
+.glassPill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+        from 180deg at 50% 50%,
+        rgba(120, 190, 255, 0.06),
+        rgba(255, 160, 190, 0.05),
+        rgba(180, 255, 210, 0.05),
+        rgba(120, 190, 255, 0.06)
+    );
+    /* 裁切方式与 ::before 一致：1px 透明 border + padding/border-box mask，
+       把色散限制在棱边那一圈，不让它渗进面内。 */
+    border: 1px solid transparent;
+    -webkit-mask:
+        linear-gradient(#000 0 0) padding-box,
+        linear-gradient(#000 0 0) border-box;
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#000 0 0) padding-box,
+        linear-gradient(#000 0 0) border-box;
+    mask-composite: exclude;
+    transition: background-image var(--tone-duration) var(--tone-easing);
+}
+
+.currentClass,
+.hintLabel,
+.hintName {
+    /* 提到 ::before/::after 之上。角向高光与色散是绝对定位的伪元素，
+       与同样处于定位流中的文字默认按源码顺序叠放，
+       不显式提升的话色散会糊在字符边缘上。 */
+    position: relative;
+    z-index: 1;
+    font-family: Sou, JETB, sans-serif;
+    font-weight: 700;
+    text-shadow: var(--text-shadow);
+    transition: var(--tone-transition);
+}
+
+.currentClass {
+    color: var(--text-accent);
+}
+
+.countdown {
+    position: relative;
+    z-index: 1;
+    font-family: JETB, monospace;
+    color: var(--text-white);
+    text-shadow: var(--text-shadow);
+    font-variant-numeric: tabular-nums;
+    transition: var(--tone-transition);
+}
+
+/* 拖动时略微提亮，让用户确认药丸已被抓起。 */
+.glassPill.dragging {
+    --glass-tint: rgba(255, 255, 255, 0.1);
+    cursor: grabbing;
+    /* 拖动反馈必须立刻出现。320ms 的配色过渡会让"抓起来了"这件事
+       慢半拍，用户会以为没点中。 */
+    transition: none;
+}
+
+.hintPill {
+    cursor: default;
+}
+
+.hintLabel {
+    color: var(--text-accent);
+}
+
+.hintName {
+    color: var(--text-white);
+}
+
+/* 亮底覆盖：必须放在基础 ::before / ::after 规则之后。
+   两条规则的特异性相同，靠文件顺序决定谁生效，
+   写在前面会被后面的基础规则覆盖掉。 */
+
+/* 棱边在浅色表面上不再受光，而是折射出的暗线。
+   135 度渐变里的白色高光落在白底上会整条消失，药丸直接失去边界，
+   因此换成同角度的暗色渐变，而不是简单调低白色透明度。 */
+body.lightBackground .glassPill::before {
+    background: linear-gradient(
+        135deg,
+        rgba(15, 23, 42, 0.14) 0%,
+        rgba(15, 23, 42, 0.06) 28%,
+        rgba(15, 23, 42, 0) 52%,
+        rgba(15, 23, 42, 0) 74%,
+        rgba(15, 23, 42, 0.12) 100%
+    );
+}
+
+/* 白底同样会把光散开，色散仍有物理依据，
+   但强度压到一半：浅背景上彩色稍强就会明显发脏。 */
+body.lightBackground .glassPill::after {
+    background: conic-gradient(
+        from 180deg at 50% 50%,
+        rgba(120, 190, 255, 0.03),
+        rgba(255, 160, 190, 0.025),
+        rgba(180, 255, 210, 0.025),
+        rgba(120, 190, 255, 0.03)
+    );
+}
