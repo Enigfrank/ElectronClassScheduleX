@@ -1,0 +1,46 @@
+name: 手动构建（不发布）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.15.0'
+
+      - name: 启用 Corepack
+        run: corepack enable
+
+      - name: 安装 Electron 依赖
+        run: corepack yarn install --immutable
+
+      - name: 安装 Dashboard 依赖
+        run: npm ci --prefix ECSX-Gui
+
+      - name: 验证项目
+        run: corepack yarn verify
+
+      - name: 构建 Windows 安装包
+        run: corepack yarn package
+
+      - name: 保存 Windows 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-class-schedule-x-windows-x64-${{ github.run_number }}
+          path: out/*.exe
+          if-no-files-found: error
