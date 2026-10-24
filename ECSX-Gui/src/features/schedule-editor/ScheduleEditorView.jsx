@@ -38,7 +38,6 @@ import {
   formatScheduleConfigError,
   generateScheduleConfigSource,
   getScheduleConfigNormalizationIssues,
-  getStyleFieldComment,
   normalizeScheduleConfig,
   normalizeScheduleConfigForEditor,
   normalizeTimeRange,
@@ -61,6 +60,7 @@ import {
   renameScheduleTypeReferences,
   TAB_INDEX,
 } from './scheduleEditorHelpers.mjs';
+import { StyleFieldControl } from './StyleFieldControl.jsx';
 
 /**
  * ECSX GUI 内嵌课表配置编辑器
@@ -585,13 +585,13 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
             <EditorCard title="样式配置" desc="编辑导出配置内的 CSS 变量值">
               <Flex direction="column" gap={3}>
                 {Object.entries(config.css_style || {}).map(([key, value]) => (
-                  <SimpleGrid key={key} columns={[1, 2]} gap={3}>
-                    <Input value={key} isReadOnly />
-                    <FormControl>
-                      <Input aria-label={`${key} 的值`} value={value} onChange={(event) => updateConfig((draft) => { draft.css_style[key] = event.target.value; })} />
-                      <FormHelperText color={mutedTextColor} fontSize="xs">{getStyleFieldComment(key)}</FormHelperText>
-                    </FormControl>
-                  </SimpleGrid>
+                  <StyleFieldControl
+                    key={key}
+                    styleKey={key}
+                    value={value}
+                    mutedTextColor={mutedTextColor}
+                    onChange={(nextValue) => updateConfig((draft) => { draft.css_style[key] = nextValue; })}
+                  />
                 ))}
               </Flex>
             </EditorCard>

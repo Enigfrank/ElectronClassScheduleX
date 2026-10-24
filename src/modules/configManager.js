@@ -1,4 +1,5 @@
 const Store = require('electron-store').default;
+const { normalizeMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
 
 /**
  * 配置管理模块
@@ -14,6 +15,8 @@ class ConfigManager {
         this.store = new Store();
         this.defaultConfig = {
             isDuringClassCountdown: true,
+            isMiniCountdownLiquidGlass: false,
+            miniCountdownGlassStyle: normalizeMiniCountdownGlassStyle(),
             isWindowAlwaysOnTop: true,
             isDuringClassHidden: true,
             isAutoLaunch: true,
@@ -46,7 +49,8 @@ class ConfigManager {
      */
     get(key, defaultValue) {
         const fallback = defaultValue ?? this.defaultConfig[key];
-        return this.store.get(key, fallback);
+        const value = this.store.get(key, fallback);
+        return key === 'miniCountdownGlassStyle' ? normalizeMiniCountdownGlassStyle(value) : value;
     }
 
     /**

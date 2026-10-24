@@ -2,6 +2,8 @@ const fs = require('fs');
 const { BrowserWindow, screen, app } = require('electron');
 const path = require('path');
 const ExamModeWindowController = require('./examModeWindowController');
+const MiniCountdownGlassController = require('./miniCountdownGlassController');
+const { normalizeMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
 
 /**
  * 窗口管理模块
@@ -24,6 +26,13 @@ class WindowManager {
         };
         this.touchDragOverlayRect = null;
         this.mainAlwaysOnTopRestoreTimer = null;
+        this.miniCountdownGlassController = new MiniCountdownGlassController({
+            screen,
+            style: this.configManager.get('miniCountdownGlassStyle'),
+            onState: state => this.sendMiniCountdownGlassState(state),
+            onError: error => this.handleMiniCountdownGlassError(error)
+        });
+        app.once('before-quit', () => this.miniCountdownGlassController.shutdown());
         this.examModeController = new ExamModeWindowController({
             windowManager: this,
             configManager: this.configManager,
@@ -168,6 +177,8 @@ class WindowManager {
         });
 
         this.windows.main = win;
+        this.miniCountdownGlassController.setWindow(win);
+        this.miniCountdownGlassController.setEnabled(this.configManager.get('isMiniCountdownLiquidGlass', false) === true);
         this.createTouchDragOverlay(win);
         win.on('closed', () => {
             this.stopMainWindowAlwaysOnTopGuard();
@@ -287,6 +298,59 @@ class WindowManager {
     }
 
     /**
+     * 应用迷你倒计时液态玻璃偏好，返回实际接受值，由设置 IPC 保存。
+     * @param {boolean} enabled 是否启用
+     * @returns {boolean} 实际接受的启用值
+     */
+    setMiniCountdownLiquidGlass(enabled) {
+        return this.miniCountdownGlassController.setEnabled(enabled);
+    }
+
+    /** 返回当前规范化样式快照，供设置 IPC 和 renderer 状态同步使用。 */
+    getMiniCountdownGlassStyle() {
+        return normalizeMiniCountdownGlassStyle(this.miniCountdownGlassController.style);
+    }
+
+    /** 应用样式并返回是否成功；持久化由设置 IPC 在应用成功后执行。 */
+    setMiniCountdownGlassStyle(style) {
+        return this.miniCountdownGlassController.setStyle(style);
+    }
+
+    /**
+     * 同步迷你倒计时本体的 DIP 矩形，拖动时不调整触摸覆盖窗口。
+     * @param {{x: number, y: number, width: number, height: number, cornerRadius: number}|null} rect 本体矩形
+     */
+    updateMiniCountdownGlass(rect) {
+        this.miniCountdownGlassController.updateRect(rect);
+    }
+
+    /**
+     * 将当前原生首帧状态发送给主窗口。
+     * @param {{active: boolean}} state 玻璃状态，样式取当前控制器快照
+     */
+    sendMiniCountdownGlassState(state) {
+        const win = this.windows.main;
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+            win.webContents.send('mini-countdown-glass-state', {
+                active: state.active, style: this.getMiniCountdownGlassStyle()
+            });
+        }
+    }
+
+    /**
+     * 原生失败时持久化关闭偏好，同步 GUI 并记录一次警告。
+     * @param {Error} error 原生错误
+     */
+    handleMiniCountdownGlassError(error) {
+        this.configManager.set('isMiniCountdownLiquidGlass', false);
+        const gui = this.windows.gui;
+        if (gui && !gui.isDestroyed() && !gui.webContents.isDestroyed()) {
+            gui.webContents.send('updateCheckbox', { id: 'isMiniCountdownLiquidGlass', checked: false });
+        }
+        this.log('warn', `[迷你倒计时] 液态玻璃已关闭: ${error.message}`);
+    }
+
+    /**
      * 销毁并重新创建主课表窗口，使 index.html 重新加载最新课表配置
      * @returns {BrowserWindow} 新创建或复用的主窗口实例
      */
@@ -393,6 +457,7 @@ class WindowManager {
         guiWindow.webContents.once('did-finish-load', () => {
             guiWindow.webContents.send('init', {
                 isDuringClassCountdown: this.configManager.get('isDuringClassCountdown', true),
+                isMiniCountdownLiquidGlass: this.configManager.get('isMiniCountdownLiquidGlass', false) === true,
                 isWindowAlwaysOnTop: this.configManager.getWindowAlwaysOnTop(),
                 isDuringClassHidden: this.configManager.get('isDuringClassHidden', true),
                 isAutoLaunch: this.configManager.getAutoLaunch(),

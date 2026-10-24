@@ -154,6 +154,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hicccc77/electron-liquid-glass@npm:0.4.0":
+  version: 0.4.0
+  resolution: "@hicccc77/electron-liquid-glass@npm:0.4.0"
+  dependencies:
+    node-addon-api: "npm:^8.5.0"
+    node-gyp: "npm:latest"
+    node-gyp-build: "npm:^4.8.4"
+  checksum: 10c0/af60d72e534fc8564ca625e4f8b46385e514264f8563754ae0cc4e552081b574f811049a17384683c0260b47cf9ccf592bf34e7119955936ccf6602e42d16546
+  languageName: node
+  linkType: hard
+
 "@isaacs/fs-minipass@npm:^4.0.0":
   version: 4.0.1
   resolution: "@isaacs/fs-minipass@npm:4.0.1"
@@ -1012,6 +1023,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "electron-class-schedule-x@workspace:."
   dependencies:
+    "@hicccc77/electron-liquid-glass": "npm:0.4.0"
     electron: "npm:42.4.1"
     electron-builder: "npm:26.8.1"
     electron-log: "npm:^5.4.4"
@@ -1923,12 +1935,32 @@ __metadata:
   languageName: node
   linkType: hard
 
+"node-addon-api@npm:^8.5.0":
+  version: 8.9.2
+  resolution: "node-addon-api@npm:8.9.2"
+  dependencies:
+    node-gyp: "npm:latest"
+  checksum: 10c0/5cf5231e0da22b22862e6b593982a0e390ca89d022a9ac666c83deceecf20378cb8afe47c456ac1a58a9f62ef60099c950aec05814a287fdfd751d9d154fb12d
+  languageName: node
+  linkType: hard
+
 "node-api-version@npm:^0.2.1":
   version: 0.2.1
   resolution: "node-api-version@npm:0.2.1"
   dependencies:
     semver: "npm:^7.3.5"
   checksum: 10c0/3fe6c273e4f9dd184bb8b959ba3d8afae7eade663611d82c8538c79ac3a7b8f1d136632ceb4bf8cdc46a851fc169407746996cf7d1096de9a186e0e70fca95fa
+  languageName: node
+  linkType: hard
+
+"node-gyp-build@npm:^4.8.4":
+  version: 4.8.4
+  resolution: "node-gyp-build@npm:4.8.4"
+  bin:
+    node-gyp-build: bin.js
+    node-gyp-build-optional: optional.js
+    node-gyp-build-test: build-test.js
+  checksum: 10c0/444e189907ece2081fe60e75368784f7782cfddb554b60123743dfb89509df89f1f29c03bbfa16b3a3e0be3f48799a4783f487da6203245fa5bed239ba7407e1
   languageName: node
   linkType: hard
 

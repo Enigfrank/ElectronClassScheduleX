@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ShutdownManagerView from './features/shutdown/ShutdownManagerView.jsx';
 import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.jsx';
 import UpdateManagerView from './features/update/UpdateManagerView.jsx';
 import ExamModeView from './features/exam-mode/ExamModeView.jsx';
+import AppearanceView from './features/appearance/AppearanceView.jsx';
 import WindowControls from './WindowControls.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
-  SimpleGrid, Tooltip, IconButton, useColorMode, useColorModeValue, ChakraProvider,
+  SimpleGrid, Tooltip, IconButton, useColorMode, useColorModeValue, useToast, ChakraProvider,
   extendTheme // <-- 修复点：加回 extendTheme
 } from '@chakra-ui/react';
 import {
   Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
   EyeOff, Rocket, Power, RotateCcw, Info, X,
-  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck
+  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck, Layers, Palette
 } from 'lucide-react';
 
 const ipcRenderer = window.dashboardApi;
@@ -155,12 +156,13 @@ const MainView = ({ handleButtonClick, semesterStartDate }) => {
   );
 };
 
-const SettingsView = ({ settings, handleSettingChange }) => {
+const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending }) => {
   const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   const settingItems = [
     { id: 'isDuringClassCountdown', icon: <Timer size={20} />, label: '课上计时', desc: '在课程进行中显示倒计时' },
+    { id: 'isMiniCountdownLiquidGlass', icon: <Layers size={20} />, label: '迷你倒计时液态玻璃', desc: '关闭时使用黑色半透明背景' },
     { id: 'isWindowAlwaysOnTop', icon: <Pin size={20} />, label: '窗口置顶', desc: '保持窗口始终在最前端' },
     { id: 'isDuringClassHidden', icon: <EyeOff size={20} />, label: '上课隐藏', desc: '上课期间自动隐藏窗口' },
     { id: 'isAutoLaunch', icon: <Rocket size={20} />, label: '开机启动', desc: '系统启动时自动运行' },
@@ -181,7 +183,7 @@ const SettingsView = ({ settings, handleSettingChange }) => {
                   <Text fontSize="sm" color={mutedTextColor} display="block">{item.desc}</Text>
                 </Box>
               </Flex>
-              <Switch isChecked={settings[item.id]} onChange={() => handleSettingChange(item.id)} colorScheme="blue" />
+              <Switch aria-label={item.label} isChecked={settings[item.id]} isDisabled={item.id === 'isMiniCountdownLiquidGlass' && miniCountdownGlassPending} onChange={() => handleSettingChange(item.id)} colorScheme="blue" />
             </Flex>
           ))}
         </CardBody>
@@ -242,8 +244,12 @@ const ReactGUI = () => {
   const [currentView, setCurrentView] = useState('main');
   const [settings, setSettings] = useState({
     isDuringClassCountdown: false, isWindowAlwaysOnTop: false,
-    isDuringClassHidden: false, isAutoLaunch: false, scheduleShutdown: false
+    isDuringClassHidden: false, isAutoLaunch: false, scheduleShutdown: false,
+    isMiniCountdownLiquidGlass: false
   });
+  const toast = useToast();
+  const pendingMiniCountdownGlassEnable = useRef(null);
+  const requestedMiniCountdownGlassEnable = useRef(false);
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [semesterStartDate, setSemesterStartDate] = useState('');
@@ -259,6 +265,7 @@ const ReactGUI = () => {
   const viewTitles = {
     main: { title: '仪表盘', subtitle: 'Dashboard' },
     settings: { title: '设置选项', subtitle: 'Settings' },
+    appearance: { title: '界面配置', subtitle: 'Appearance' },
     editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
     exam: { title: '考试模式', subtitle: 'Exam Mode' },
     update: { title: '在线更新', subtitle: '在线更新' },
@@ -268,16 +275,40 @@ const ReactGUI = () => {
 
   useEffect(() => {
     // 优化 IPC 监听器清理
+    /**
+     * 同步主进程提供的设置，并兼容尚未保存液态玻璃偏好的旧配置。
+     * @param {undefined} event 预加载隐藏的 IPC 事件
+     * @param {Object} data 初始设置
+     */
     const handleInit = (event, data) => {
+      requestedMiniCountdownGlassEnable.current = data.isMiniCountdownLiquidGlass === true;
       setSettings({
         isDuringClassCountdown: data.isDuringClassCountdown,
+        isMiniCountdownLiquidGlass: requestedMiniCountdownGlassEnable.current,
         isWindowAlwaysOnTop: data.isWindowAlwaysOnTop,
         isDuringClassHidden: data.isDuringClassHidden,
         isAutoLaunch: data.isAutoLaunch,
         scheduleShutdown: data.scheduleShutdown
       });
     };
+    /**
+     * 回写实际设置；液态玻璃启用被拒绝时提示用户并恢复关闭状态。
+     * @param {undefined} event 预加载隐藏的 IPC 事件
+     * @param {{id: string, checked: boolean}} data 已接受的设置
+     */
     const handleUpdate = (event, data) => {
+      if (data.id === 'isMiniCountdownLiquidGlass') {
+        if (requestedMiniCountdownGlassEnable.current && data.checked === false) {
+          toast({
+            title: '无法启用液态玻璃',
+            description: '当前系统不支持或效果应用失败，已恢复默认背景。',
+            status: 'warning',
+            isClosable: true
+          });
+        }
+        if (data.checked === false) requestedMiniCountdownGlassEnable.current = false;
+        pendingMiniCountdownGlassEnable.current = null;
+      }
       setSettings(prev => ({ ...prev, [data.id]: data.checked }));
     };
 
@@ -288,7 +319,7 @@ const ReactGUI = () => {
       unsubscribeInit();
       unsubscribeUpdate();
     };
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     let isMounted = true;
@@ -312,11 +343,21 @@ const ReactGUI = () => {
     return () => { isMounted = false; };
   }, []);
 
+  /**
+   * 切换设置并发送对应 IPC，串行提交液态玻璃请求并保留延迟失败反馈。
+   * @param {string} settingName 设置键名
+   */
   const handleSettingChange = (settingName) => {
     const newValue = !settings[settingName];
+    if (settingName === 'isMiniCountdownLiquidGlass') {
+      if (pendingMiniCountdownGlassEnable.current !== null) return;
+      pendingMiniCountdownGlassEnable.current = newValue;
+      requestedMiniCountdownGlassEnable.current = newValue;
+    }
     setSettings(prev => ({ ...prev, [settingName]: newValue }));
     const ipcMessages = {
       isDuringClassCountdown: 'setClassCountdown',
+      isMiniCountdownLiquidGlass: 'setMiniCountdownLiquidGlass',
       isWindowAlwaysOnTop: 'setWindowAlwaysOnTop',
       isDuringClassHidden: 'setDuringClassHidden',
       isAutoLaunch: 'setAutoLaunch',
@@ -369,6 +410,7 @@ const ReactGUI = () => {
           {[
             { view: 'main', icon: <Calendar size={20} />, text: '功能选项' },
             { view: 'settings', icon: <Settings size={20} />, text: '设置选项' },
+            { view: 'appearance', icon: <Palette size={20} />, text: '界面配置' },
             { view: 'editor', icon: <FilePenLine size={20} />, text: '课表编辑器' },
             { view: 'exam', icon: <ClipboardCheck size={20} />, text: '考试模式' },
             { view: 'update', icon: <DownloadCloud size={20} />, text: '在线更新' },
@@ -407,7 +449,12 @@ const ReactGUI = () => {
 
         <Box flex={1} p={8} overflowY="auto" bg={bgColor}>
           {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} semesterStartDate={semesterStartDate} />}
-          {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} />}
+          {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} miniCountdownGlassPending={pendingMiniCountdownGlassEnable.current !== null} />}
+          {currentView === 'appearance' && (
+            <AppearanceView ipcRenderer={ipcRenderer} enabled={settings.isMiniCountdownLiquidGlass}
+              isTogglePending={pendingMiniCountdownGlassEnable.current !== null}
+              onToggle={() => handleSettingChange('isMiniCountdownLiquidGlass')} />
+          )}
           {currentView === 'editor' && (
             <ScheduleEditorView
               ipcRenderer={ipcRenderer}

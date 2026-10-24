@@ -151,6 +151,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
 
         interactiveRect = rect;
+        windowManager.updateMiniCountdownGlass?.(rect);
         windowManager.updateTouchDragOverlay?.(rect);
         if (rect) {
             if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);
@@ -163,6 +164,22 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
             lastIgnoreMouseEvents = true;
         }
     });
+
+    /**
+     * 只让主课表在拖动帧同步玻璃背景，不移动正在接收触摸的覆盖窗口。
+     * @param {Electron.IpcMainEvent} event IPC 事件
+     * @param {{x: number, y: number, width: number, height: number, cornerRadius: number}|null} rect 玻璃矩形
+     */
+    function updateGlassDragRect(event, rect) {
+        const mainWindow = windowManager.getWindow('main');
+        if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+        if (rect !== null && (!rect ||
+            ![rect.x, rect.y, rect.width, rect.height, rect.cornerRadius].every(Number.isFinite) ||
+            rect.width <= 0 || rect.height <= 0 || rect.cornerRadius < 0)) return;
+        windowManager.updateMiniCountdownGlass?.(rect);
+    }
+
+    ipcMain.on('mini-countdown-glass-rect', updateGlassDragRect);
 
     ipcMain.on('setDragState', (event, state) => {
         isDragging = state;

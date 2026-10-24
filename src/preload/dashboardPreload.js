@@ -16,6 +16,7 @@ const SEND_CHANNELS = new Set([
     'setClassCountdown',
     'setDayOffset',
     'setDuringClassHidden',
+    'setMiniCountdownLiquidGlass',
     'setWeekIndex',
     'setWindowAlwaysOnTop',
     'showMoreInfo',
@@ -30,6 +31,7 @@ const INVOKE_CHANNELS = new Set([
     'export-schedule-config-source',
     'get-exam-mode-config',
     'get-logs',
+    'get-mini-countdown-glass-style',
     'get-update-settings',
     'get-update-status',
     'getShutdownTimes',
@@ -39,6 +41,7 @@ const INVOKE_CHANNELS = new Set([
     'read-schedule-config-source',
     'save-schedule-config-source',
     'set-update-settings',
+    'set-mini-countdown-glass-style',
     'test-update-sources'
 ]);
 

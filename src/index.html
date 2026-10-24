@@ -9,6 +9,7 @@
   <script type="text/javascript" src="shared/weekRotation.js"></script>
   <script type="text/javascript" src="js/index.js"></script>
   <script type="text/javascript" src="js/scheduleBootstrap.js"></script>
+  <script type="text/javascript" src="js/miniCountdownGlass.js"></script>
   <link rel="stylesheet" type="text/css" href="css/style.css">
 </head>
 
@@ -92,6 +93,8 @@
   const visibilityTransitionDurationMs = 200;
   const toolbarRestoreDelayMs = 2500;
   const visibilityHideTimers = new WeakMap();
+  const miniCountdownGlass = createMiniCountdownGlass({ api: ipcRenderer, element: miniCountdown });
+  window.addEventListener('beforeunload', miniCountdownGlass.destroy, { once: true });
 
   function setScheduleClass() {
     let classHtml = '';
@@ -158,7 +161,8 @@
           element.classList.remove('fade-element');
           
           if (element.id === 'miniCountdown') {
-              ipcRenderer.send('updateInteractiveRect', null);
+              if (isDragging) finishMiniCountdownDrag(dragPointerId);
+              updateInteractiveRect();
           }
           
           const hideTimer = setTimeout(() => {
@@ -318,18 +322,7 @@
    * 将当前视觉矩形同步给主进程的鼠标穿透逻辑与触摸输入覆盖窗口。
    */
   function updateInteractiveRect() {
-    const miniCountdown = document.getElementById('miniCountdown');
-    if (miniCountdown.style.display === 'block') {
-      const rect = miniCountdown.getBoundingClientRect();
-      ipcRenderer.send('updateInteractiveRect', {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height
-      });
-    } else {
-      ipcRenderer.send('updateInteractiveRect', null);
-    }
+    miniCountdownGlass.reportInteractiveRect();
   }
 
   /**
@@ -358,6 +351,7 @@
     const miniCountdown = document.getElementById('miniCountdown');
     if (!miniCountdown) return;
     miniCountdown.classList.toggle('dragging', dragging);
+    miniCountdownGlass.setDragging(dragging);
   }
 
   /**
@@ -413,14 +407,17 @@
    * 将最新拖动坐标合并到下一帧，仅更新合成层 transform。
    * @param {number} x 元素左侧的视口坐标
    * @param {number} y 元素顶部的视口坐标
+   * @param {number} width 当前倒计时宽度
+   * @param {number} height 当前倒计时高度
    */
-  function scheduleMiniCountdownPosition(x, y) {
-    pendingDragPosition = { x, y };
+  function scheduleMiniCountdownPosition(x, y, width, height) {
+    pendingDragPosition = { x, y, width, height };
     if (dragFrameId !== null) return;
 
     dragFrameId = requestAnimationFrame(() => {
       if (pendingDragPosition) {
         miniCountdown.style.transform = `translate3d(${pendingDragPosition.x}px, ${pendingDragPosition.y}px, 0)`;
+        miniCountdownGlass.reportDragPosition(pendingDragPosition);
       }
       dragFrameId = null;
     });
@@ -474,7 +471,7 @@
       ? getDragBoundaryOrigin(newX, newY, miniWidth, miniHeight, windowWidth, windowHeight)
       : null;
     setDragBoundaryHintVisible(isAtBoundary, boundaryOrigin);
-    scheduleMiniCountdownPosition(newX, newY);
+    scheduleMiniCountdownPosition(newX, newY, miniWidth, miniHeight);
     miniCountdownHasMoved = true;
   }
 
@@ -529,6 +526,7 @@
    */
   function handlePointerUp(event) {
     if (event.pointerId !== dragPointerId) return;
+    if (event.type === 'pointerup') updateMiniCountdownDragPosition(event.clientX, event.clientY);
     finishMiniCountdownDrag(event.pointerId);
     event.preventDefault();
   }
@@ -549,6 +547,9 @@
         updateMiniCountdownDragPosition(pointerEvent.clientX, pointerEvent.clientY);
       }
     } else if (pointerEvent.type === 'up' || pointerEvent.type === 'cancel') {
+      if (pointerEvent.type === 'up' && pointerEvent.pointerId === dragPointerId) {
+        updateMiniCountdownDragPosition(pointerEvent.clientX, pointerEvent.clientY);
+      }
       finishMiniCountdownDrag(pointerEvent.pointerId);
     }
   }

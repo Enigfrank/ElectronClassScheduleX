@@ -5,6 +5,7 @@ const SEND_CHANNELS = new Set([
     'getTimeOffset',
     'getWeekIndex',
     'log',
+    'mini-countdown-glass-rect',
     'setDragState',
     'setIgnore',
     'show-schedule-config-error',
@@ -18,6 +19,7 @@ const INVOKE_CHANNELS = new Set([
 const RECEIVE_CHANNELS = new Set([
     'ClassCountdown',
     'ClassHidden',
+    'mini-countdown-glass-state',
     'getDayOffset',
     'getSelectedChangingClass',
     'getSelectedClassIndex',

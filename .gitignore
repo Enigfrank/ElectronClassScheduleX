@@ -116,6 +116,14 @@ out/
 /.claude
 agent.md
 /tests
+!/tests/
+/tests/*
+!/tests/miniCountdownGlassController.test.js
+!/tests/miniCountdownGlassSettings.test.js
+!/tests/miniCountdownGlassRenderer.test.js
+!/tests/miniCountdownGlassStyle.test.js
+!/tests/appearanceView.test.js
+!/tests/scheduleStyleSliders.test.js
 /docs
 /.agents
 /.codex
