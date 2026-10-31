@@ -124,6 +124,8 @@ agent.md
 !/tests/miniCountdownGlassStyle.test.js
 !/tests/appearanceView.test.js
 !/tests/scheduleStyleSliders.test.js
+!/tests/shutdownWarning.test.js
+!/tests/shutdownScheduler.test.js
 /docs
 /.agents
 /.codex

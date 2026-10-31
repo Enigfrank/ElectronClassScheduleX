@@ -17,6 +17,7 @@ const SEND_CHANNELS = new Set([
     'setDayOffset',
     'setDuringClassHidden',
     'setMiniCountdownLiquidGlass',
+    'setGlobalContainerLiquidGlass',
     'setWeekIndex',
     'setWindowAlwaysOnTop',
     'showMoreInfo',

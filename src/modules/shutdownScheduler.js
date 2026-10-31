@@ -159,7 +159,10 @@ class ShutdownScheduler {
 
                 this.playWarningSound();
                 this.showShutdownWarningWindow(plan);
-                plan.finalTimer = setTimeout(() => this.executeShutdown(plan), WARNING_DURATION_MS);
+                plan.finalTimer = setTimeout(
+                    () => this.executeShutdown(plan),
+                    Math.max(0, plan.targetDate.getTime() - Date.now())
+                );
             }, warningDelay);
             return;
         }
@@ -297,7 +300,8 @@ class ShutdownScheduler {
             if (!warningWindow.isDestroyed()) {
                 warningWindow.webContents.send('shutdown-warning-init', {
                     planId: plan.id,
-                    targetTime: plan.targetDate.toLocaleString()
+                    targetTime: plan.targetDate.toLocaleString(),
+                    targetTimestamp: plan.targetDate.getTime()
                 });
             }
         });

@@ -11,7 +11,7 @@ const channel = 'setMiniCountdownLiquidGlass';
 const { defaults } = require('../src/shared/miniCountdownGlassStyle.json');
 
 /** 装配真实 Dashboard 设置回调与 Hook 状态，验证异步回执且不生成打包产物。 */
-function createDashboardHarness() {
+function createDashboardHarness(targetSetting = settingId) {
     const guiRequire = createRequire(path.resolve(__dirname, '../ECSX-Gui/package.json'));
     const { transformSync } = guiRequire('@babel/core');
     const filename = path.resolve(__dirname, '../ECSX-Gui/src/GUI.jsx');
@@ -86,9 +86,9 @@ function createDashboardHarness() {
     return {
         toasts, sent,
         receive(name, data) { listeners.get(name)(undefined, data); render(); },
-        toggle() { settingsView.handleSettingChange(settingId); render(); },
-        get enabled() { return settingsView.settings[settingId]; },
-        get pending() { return settingsView.miniCountdownGlassPending; },
+        toggle() { settingsView.handleSettingChange(targetSetting); render(); },
+        get enabled() { return settingsView.settings[targetSetting]; },
+        get pending() { return targetSetting === settingId ? settingsView.miniCountdownGlassPending : settingsView.globalContainerGlassPending; },
         destroy() { cleanups.forEach(cleanup => cleanup()); }
     };
 }
@@ -134,6 +134,10 @@ function createSettingsHarness(accepted = true) {
         },
         setMiniCountdownLiquidGlass: (enabled) => {
             calls.push(['apply', enabled]);
+            return accepted;
+        },
+        setGlobalContainerLiquidGlass: enabled => {
+            calls.push(['applyGlobal', enabled]);
             return accepted;
         }
     };
@@ -182,12 +186,50 @@ test('迷你倒计时液态玻璃默认关闭，保存和重置均使用现有�
     const configManager = new ConfigManager();
     assert.equal(configManager.get(settingId), false);
     assert.equal(configManager.getAll()[settingId], false);
+    assert.equal(configManager.getAll().isGlobalContainerLiquidGlass, false);
 
     configManager.set(settingId, true);
+    configManager.set('isGlobalContainerLiquidGlass', true);
     const reopenedConfig = new ConfigManager();
     assert.equal(reopenedConfig.getAll()[settingId], true);
+    assert.equal(reopenedConfig.getAll().isGlobalContainerLiquidGlass, true);
     reopenedConfig.reset();
     assert.equal(reopenedConfig.get(settingId), false);
+    assert.equal(reopenedConfig.get('isGlobalContainerLiquidGlass'), false);
+});
+
+test('主课表设置只接受 GUI 布尔请求，并独立持久化主进程接受值', () => {
+    for (const accepted of [true, false]) {
+        const h = createSettingsHarness(accepted);
+        const update = h.handlers.get('setGlobalContainerLiquidGlass');
+        for (const invalid of [undefined, null, 0, 1, 'true']) update(h.event, invalid);
+        update({ ...h.event, sender: {} }, true);
+        assert.deepEqual(h.calls, []);
+        update(h.event, true);
+        assert.deepEqual(h.calls, [
+            ['applyGlobal', true], ['persist', 'isGlobalContainerLiquidGlass', accepted],
+            ['reply', 'updateCheckbox', { id: 'isGlobalContainerLiquidGlass', checked: accepted }]
+        ]);
+    }
+});
+
+test('Dashboard 主课表开关独立等待回执并处理延迟失败', t => {
+    const id = 'isGlobalContainerLiquidGlass';
+    const h = createDashboardHarness(id);
+    t.after(() => h.destroy());
+    h.receive('init', { isMiniCountdownLiquidGlass: true, [id]: false });
+    h.toggle();
+    h.toggle();
+    assert.equal(h.enabled, true);
+    assert.equal(h.pending, true);
+    assert.deepEqual(h.sent, [['setGlobalContainerLiquidGlass', true]]);
+    h.receive('updateCheckbox', { id, checked: true });
+    assert.equal(h.pending, false);
+    h.receive('updateCheckbox', { id, checked: false });
+    assert.equal(h.enabled, false);
+    assert.equal(h.toasts.length, 1);
+    h.receive('updateCheckbox', { id, checked: false });
+    assert.equal(h.toasts.length, 1);
 });
 
 test('Dashboard 启用请求先应用原生效果，再保存并回写实际接受值', () => {
@@ -276,9 +318,13 @@ test('Dashboard 预加载仅允许发送新通道，保留回写事件隔离及�
 
     dashboardApi.send(channel, true);
     dashboardApi.send(channel, false);
+    dashboardApi.send('setGlobalContainerLiquidGlass', true);
+    dashboardApi.send('setGlobalContainerLiquidGlass', false);
     assert.throws(() => dashboardApi.send('setMiniCountdownLiquidGlassUnsafe', true), /Unsupported dashboard IPC send channel/);
     assert.throws(() => dashboardApi.invoke(channel, true), /Unsupported dashboard IPC invoke channel/);
     assert.throws(() => dashboardApi.on(channel, () => {}), /Unsupported dashboard IPC receive channel/);
+    assert.throws(() => dashboardApi.invoke('setGlobalContainerLiquidGlass', true), /Unsupported dashboard IPC invoke channel/);
+    assert.throws(() => dashboardApi.on('setGlobalContainerLiquidGlass', () => {}), /Unsupported dashboard IPC receive channel/);
 
     const payload = { id: settingId, checked: false };
     let received;
@@ -286,7 +332,8 @@ test('Dashboard 预加载仅允许发送新通道，保留回写事件隔离及�
     listener({ sender: 'privileged' }, payload);
     assert.deepEqual(received, [undefined, payload]);
     unsubscribe();
-    assert.deepEqual(calls, [['send', channel, true], ['send', channel, false], ['unsubscribe']]);
+    assert.deepEqual(calls, [['send', channel, true], ['send', channel, false],
+        ['send', 'setGlobalContainerLiquidGlass', true], ['send', 'setGlobalContainerLiquidGlass', false], ['unsubscribe']]);
 });
 
 test('Dashboard 成功回执后的延迟原生失败仍提示，重复失败只提示一次', t => {

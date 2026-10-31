@@ -40,6 +40,14 @@ function registerSettingsIpc({
 
     ipcMain.on('setMiniCountdownLiquidGlass', handleMiniCountdownLiquidGlass);
 
+    /** 主课表外观独立持久化，拒绝其他窗口和非布尔值。 */
+    ipcMain.on('setGlobalContainerLiquidGlass', (event, enabled) => {
+        if (!isGuiSender(event) || typeof enabled !== 'boolean') return;
+        const accepted = windowManager.setGlobalContainerLiquidGlass(enabled);
+        configManager.set('isGlobalContainerLiquidGlass', accepted);
+        event.reply('updateCheckbox', { id: 'isGlobalContainerLiquidGlass', checked: accepted });
+    });
+
     /** 只允许当前 Dashboard 窗口读取和修改玻璃样式。 */
     function isGuiSender(event) {
         const guiWindow = windowManager.getWindow('gui');
@@ -66,7 +74,7 @@ function registerSettingsIpc({
         try {
             previous = windowManager.getMiniCountdownGlassStyle();
             if (!windowManager.setMiniCountdownGlassStyle(result.style)) {
-                return { success: false, error: '迷你倒计时玻璃样式应用失败' };
+                return { success: false, error: '液态玻璃样式应用失败' };
             }
             applied = true;
             configManager.set('miniCountdownGlassStyle', result.style);

@@ -156,13 +156,14 @@ const MainView = ({ handleButtonClick, semesterStartDate }) => {
   );
 };
 
-const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending }) => {
+const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending, globalContainerGlassPending }) => {
   const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   const settingItems = [
     { id: 'isDuringClassCountdown', icon: <Timer size={20} />, label: '课上计时', desc: '在课程进行中显示倒计时' },
     { id: 'isMiniCountdownLiquidGlass', icon: <Layers size={20} />, label: '迷你倒计时液态玻璃', desc: '关闭时使用黑色半透明背景' },
+    { id: 'isGlobalContainerLiquidGlass', icon: <Layers size={20} />, label: '主课表液态玻璃', desc: '主课表、侧栏及课程计时共用界面配置中的颜色' },
     { id: 'isWindowAlwaysOnTop', icon: <Pin size={20} />, label: '窗口置顶', desc: '保持窗口始终在最前端' },
     { id: 'isDuringClassHidden', icon: <EyeOff size={20} />, label: '上课隐藏', desc: '上课期间自动隐藏窗口' },
     { id: 'isAutoLaunch', icon: <Rocket size={20} />, label: '开机启动', desc: '系统启动时自动运行' },
@@ -183,7 +184,10 @@ const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending
                   <Text fontSize="sm" color={mutedTextColor} display="block">{item.desc}</Text>
                 </Box>
               </Flex>
-              <Switch aria-label={item.label} isChecked={settings[item.id]} isDisabled={item.id === 'isMiniCountdownLiquidGlass' && miniCountdownGlassPending} onChange={() => handleSettingChange(item.id)} colorScheme="blue" />
+              <Switch aria-label={item.label} isChecked={settings[item.id]}
+                isDisabled={(item.id === 'isMiniCountdownLiquidGlass' && miniCountdownGlassPending)
+                  || (item.id === 'isGlobalContainerLiquidGlass' && globalContainerGlassPending)}
+                onChange={() => handleSettingChange(item.id)} colorScheme="blue" />
             </Flex>
           ))}
         </CardBody>
@@ -245,11 +249,13 @@ const ReactGUI = () => {
   const [settings, setSettings] = useState({
     isDuringClassCountdown: false, isWindowAlwaysOnTop: false,
     isDuringClassHidden: false, isAutoLaunch: false, scheduleShutdown: false,
-    isMiniCountdownLiquidGlass: false
+    isMiniCountdownLiquidGlass: false, isGlobalContainerLiquidGlass: false
   });
   const toast = useToast();
   const pendingMiniCountdownGlassEnable = useRef(null);
   const requestedMiniCountdownGlassEnable = useRef(false);
+  const pendingGlobalContainerGlassEnable = useRef(null);
+  const requestedGlobalContainerGlassEnable = useRef(false);
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [semesterStartDate, setSemesterStartDate] = useState('');
@@ -282,9 +288,11 @@ const ReactGUI = () => {
      */
     const handleInit = (event, data) => {
       requestedMiniCountdownGlassEnable.current = data.isMiniCountdownLiquidGlass === true;
+      requestedGlobalContainerGlassEnable.current = data.isGlobalContainerLiquidGlass === true;
       setSettings({
         isDuringClassCountdown: data.isDuringClassCountdown,
         isMiniCountdownLiquidGlass: requestedMiniCountdownGlassEnable.current,
+        isGlobalContainerLiquidGlass: requestedGlobalContainerGlassEnable.current,
         isWindowAlwaysOnTop: data.isWindowAlwaysOnTop,
         isDuringClassHidden: data.isDuringClassHidden,
         isAutoLaunch: data.isAutoLaunch,
@@ -308,6 +316,15 @@ const ReactGUI = () => {
         }
         if (data.checked === false) requestedMiniCountdownGlassEnable.current = false;
         pendingMiniCountdownGlassEnable.current = null;
+      }
+      if (data.id === 'isGlobalContainerLiquidGlass') {
+        if (requestedGlobalContainerGlassEnable.current && data.checked === false) {
+          toast({ title: '无法启用主课表液态玻璃',
+            description: '当前系统不支持或效果应用失败，已恢复原版样式。',
+            status: 'warning', isClosable: true });
+        }
+        if (data.checked === false) requestedGlobalContainerGlassEnable.current = false;
+        pendingGlobalContainerGlassEnable.current = null;
       }
       setSettings(prev => ({ ...prev, [data.id]: data.checked }));
     };
@@ -354,10 +371,16 @@ const ReactGUI = () => {
       pendingMiniCountdownGlassEnable.current = newValue;
       requestedMiniCountdownGlassEnable.current = newValue;
     }
+    if (settingName === 'isGlobalContainerLiquidGlass') {
+      if (pendingGlobalContainerGlassEnable.current !== null) return;
+      pendingGlobalContainerGlassEnable.current = newValue;
+      requestedGlobalContainerGlassEnable.current = newValue;
+    }
     setSettings(prev => ({ ...prev, [settingName]: newValue }));
     const ipcMessages = {
       isDuringClassCountdown: 'setClassCountdown',
       isMiniCountdownLiquidGlass: 'setMiniCountdownLiquidGlass',
+      isGlobalContainerLiquidGlass: 'setGlobalContainerLiquidGlass',
       isWindowAlwaysOnTop: 'setWindowAlwaysOnTop',
       isDuringClassHidden: 'setDuringClassHidden',
       isAutoLaunch: 'setAutoLaunch',
@@ -449,11 +472,16 @@ const ReactGUI = () => {
 
         <Box flex={1} p={8} overflowY="auto" bg={bgColor}>
           {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} semesterStartDate={semesterStartDate} />}
-          {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange} miniCountdownGlassPending={pendingMiniCountdownGlassEnable.current !== null} />}
+          {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange}
+            miniCountdownGlassPending={pendingMiniCountdownGlassEnable.current !== null}
+            globalContainerGlassPending={pendingGlobalContainerGlassEnable.current !== null} />}
           {currentView === 'appearance' && (
             <AppearanceView ipcRenderer={ipcRenderer} enabled={settings.isMiniCountdownLiquidGlass}
               isTogglePending={pendingMiniCountdownGlassEnable.current !== null}
-              onToggle={() => handleSettingChange('isMiniCountdownLiquidGlass')} />
+              onToggle={() => handleSettingChange('isMiniCountdownLiquidGlass')}
+              globalEnabled={settings.isGlobalContainerLiquidGlass}
+              isGlobalTogglePending={pendingGlobalContainerGlassEnable.current !== null}
+              onGlobalToggle={() => handleSettingChange('isGlobalContainerLiquidGlass')} />
           )}
           {currentView === 'editor' && (
             <ScheduleEditorView

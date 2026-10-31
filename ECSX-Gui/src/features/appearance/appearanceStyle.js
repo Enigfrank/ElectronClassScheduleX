@@ -27,7 +27,7 @@ export function readStyle(result) {
   return { backgroundColor: style.backgroundColor.toLowerCase(), blurSigma: style.blurSigma, opacity: style.opacity };
 }
 
-/** 在提交边界校验输入范围和步长，不在输入过程中截断或转换草稿。 */
+/** 在编辑结束或显式保存时校验范围和步长，保留未完成的草稿文本。 */
 export function parseField(key, text) {
   const input = text.trim();
   if (key === 'backgroundColor') {
@@ -47,7 +47,27 @@ export function parseField(key, text) {
   return { value: Number(value.toFixed(2)) };
 }
 
-/** 比较实际样式，避免未修改输入和重复结束事件产生 IPC。 */
+/** 比较完整样式，避免显式保存未修改的参数。 */
 export function sameStyle(first, second) {
   return Object.keys(defaults).every(key => first[key] === second[key]);
+}
+
+/** 一次校验完整草稿；预览中的无效字段暂用已确认值，保存必须检查所有错误。 */
+export function parseDraft(draft, fallback = defaults) {
+  const style = {};
+  const errors = {};
+  for (const key of Object.keys(defaults)) {
+    const parsed = parseField(key, draft[key]);
+    if (parsed.error) errors[key] = parsed.error;
+    style[key] = parsed.error ? fallback[key] : parsed.value;
+  }
+  return { style, errors };
+}
+
+/** 只将校验后的颜色和数值写入演示区 CSS 变量，避免草稿成为任意样式。 */
+export function previewVariables(style) {
+  const safe = readStyle({ success: true, style });
+  const channels = [1, 3, 5].map(offset => parseInt(safe.backgroundColor.slice(offset, offset + 2), 16));
+  // GUI 的构建样式表位于根节点之后，用更具体的作用域覆盖默认变量。
+  return `.appearance-view .appearance-preview { --preview-tint: rgba(${channels.join(', ')}, ${safe.opacity}); --preview-blur: ${safe.blurSigma}px; }`;
 }

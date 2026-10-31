@@ -10,6 +10,7 @@
   <script type="text/javascript" src="js/index.js"></script>
   <script type="text/javascript" src="js/scheduleBootstrap.js"></script>
   <script type="text/javascript" src="js/miniCountdownGlass.js"></script>
+  <script type="text/javascript" src="js/toolbarGlass.js"></script>
   <link rel="stylesheet" type="text/css" href="css/style.css">
 </head>
 
@@ -94,7 +95,10 @@
   const toolbarRestoreDelayMs = 2500;
   const visibilityHideTimers = new WeakMap();
   const miniCountdownGlass = createMiniCountdownGlass({ api: ipcRenderer, element: miniCountdown });
+  const toolbarGlass = createToolbarGlass({ api: ipcRenderer, container: globalContainer,
+    elements: { classContainer, countdownSidebar, countdowner, nextClassHint } });
   window.addEventListener('beforeunload', miniCountdownGlass.destroy, { once: true });
+  window.addEventListener('beforeunload', toolbarGlass.destroy, { once: true });
 
   function setScheduleClass() {
     let classHtml = '';
@@ -650,9 +654,13 @@
     }
 
     root.style.opacity = '0'
+    miniCountdownGlass.reportInteractiveRect();
+    toolbarGlass.reportRects();
     clearTimeout(toolbarRestoreTimer)
     toolbarRestoreTimer = setTimeout(() => {
       root.style.opacity = '1'
+      miniCountdownGlass.reportInteractiveRect();
+      toolbarGlass.reportRects();
     }, toolbarRestoreDelayMs);
   }
 

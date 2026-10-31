@@ -10,6 +10,7 @@ const { transformSync } = guiRequire('@babel/core');
 const { defaults } = require('../src/shared/miniCountdownGlassStyle.json');
 const viewPath = 'ECSX-Gui/src/features/appearance/AppearanceView.jsx';
 const sliderPath = 'ECSX-Gui/src/components/CommitSlider.jsx';
+const previewPath = 'ECSX-Gui/src/features/appearance/AppearancePreview.jsx';
 
 /** 挂载真实 JSX 与 Hook 状态；只替换 Chakra 展示组件和 IPC 依赖，不生成产物。 */
 function mount(relativePath, initialProps = {}, exportedName) {
@@ -74,7 +75,8 @@ function mount(relativePath, initialProps = {}, exportedName) {
                 if (name === 'lucide-react') return new Proxy({}, { get: (_target, key) => String(key) });
                 const target = path.resolve(path.dirname(filename), name);
                 if (name.endsWith('.json')) return require(target);
-                if (name.endsWith('.jsx') && !/AppearanceView|CommitSlider/.test(name)) {
+                if (name.endsWith('.css')) return {};
+                if (name.endsWith('.jsx') && !/AppearanceView|AppearancePreview|CommitSlider/.test(name)) {
                     return { __esModule: true, default: function FeatureView() {} };
                 }
                 return load(target);
@@ -99,6 +101,7 @@ function mount(relativePath, initialProps = {}, exportedName) {
     /** 遍历 JSX 树，按可访问名称或组件类型查询真实事件回调。 */
     function all(predicate) {
         const results = [];
+        /** 遍历子节点，不执行被测试组件之外的 Hook。 */
         function visit(node) {
             if (Array.isArray(node)) return node.forEach(visit);
             if (!node || typeof node !== 'object') return;
@@ -112,6 +115,8 @@ function mount(relativePath, initialProps = {}, exportedName) {
     render();
     return {
         render, all,
+        /** 合并父组件传入的新属性，保留其他依赖。 */
+        updateProps(nextProps) { return render({ ...props, ...nextProps }); },
         find: predicate => {
             const node = all(predicate)[0];
             assert.ok(node, '未找到预期 JSX 控件');
@@ -144,7 +149,8 @@ function appearance(handler, overrides = {}) {
             return handler ? handler(channel, style) : Promise.resolve({ success: true, style: style || defaults });
         },
     };
-    return { ...mount(viewPath, { ipcRenderer, enabled: true, isTogglePending: false, onToggle() {}, ...overrides }), calls };
+    return { ...mount(viewPath, { ipcRenderer, enabled: true, isTogglePending: false, onToggle() {},
+        globalEnabled: false, isGlobalTogglePending: false, onGlobalToggle() {}, ...overrides }), calls };
 }
 
 /** 向实际输入回调传递浏览器事件中的当前值。 */
@@ -191,7 +197,17 @@ test('CommitSlider 拖动零提交，松手去重提交，外部值同步且禁�
     assert.deepEqual(committed, [3]);
 });
 
-test('配置页加载一次；真实共享滑块拖动无 IPC，松手仅保存一次完整样式', async () => {
+/** 按按钮可见文案取实际事件处理函数。 */
+function button(harness, label) {
+    return harness.find(node => node.type === 'Button' && textContent(node) === label);
+}
+
+/** 获取传给实际模拟组件的参数，验证预览与草稿的数据流。 */
+function previewProps(harness) {
+    return harness.find(node => node.type?.name === 'AppearancePreview').props;
+}
+
+test('加载一次；滑块拖动和松手仅改草稿，显式保存才发送完整对象', async () => {
     const h = appearance();
     assert.equal(h.calls.length, 1);
     assert.equal(h.input('迷你倒计时液态玻璃').props.isDisabled, true);
@@ -207,96 +223,201 @@ test('配置页加载一次；真实共享滑块拖动无 IPC，松手仅保存�
     control.props.onChangeEnd(4.2);
     control.props.onChangeEnd(4.2);
     h.render();
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '4.2');
+    assert.equal(previewProps(h).styleValue.blurSigma, 4.2);
+    assert.equal(h.input('液态玻璃背景颜色').props.isDisabled, false);
+    button(h, '保存并应用').props.onClick();
+    h.render();
     assert.equal(h.input('液态玻璃背景颜色').props.isDisabled, true);
     await h.flush();
     assert.deepEqual(h.calls, [
         ['get-mini-countdown-glass-style'],
         ['set-mini-countdown-glass-style', { ...defaults, blurSigma: 4.2 }],
     ]);
-    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '4.2');
-    assert.equal(h.input('液态玻璃背景颜色').props.isDisabled, false);
-    edit(h, '液态玻璃模糊强度数值', '4.2', 'onBlur');
-    await h.flush();
-    assert.equal(h.calls.length, 2);
+    assert.equal(button(h, '保存并应用').props.isDisabled, true);
+    assert.ok(h.all(node => node.props.role === 'status').some(node => textContent(node).includes('主进程已确认')));
 });
 
-test('原生颜色与 hex 输入仅更新草稿，失焦或回车提交并忽略相同颜色', async () => {
+test('调色、失焦、回车都不保存；显式保存合并所有草稿并转换百分比', async () => {
     const h = appearance();
     await h.flush();
     edit(h, '液态玻璃背景颜色选择器', '#123456');
     edit(h, '液态玻璃背景颜色选择器', '#abcdef');
-    assert.equal(h.calls.length, 1);
     edit(h, '液态玻璃背景颜色选择器', '#abcdef', 'onBlur');
-    await h.flush();
-    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style', { ...defaults, backgroundColor: '#abcdef' }]);
-    edit(h, '液态玻璃背景颜色', '#');
-    assert.equal(h.input('液态玻璃背景颜色').props.value, '#');
-    assert.ok(h.all(node => node.props.role === 'status').some(node => textContent(node) === '未保存'));
-    edit(h, '液态玻璃背景颜色', '#', 'onBlur');
-    assert.equal(h.calls.length, 2);
-    assert.ok(h.all(node => node.type === 'FormErrorMessage').some(node => textContent(node).includes('六位')));
-    edit(h, '液态玻璃背景颜色', '#ABCDEF', 'onBlur');
-    assert.equal(h.calls.length, 2);
     edit(h, '液态玻璃背景颜色', '#654321');
     let prevented = false;
-    h.input('液态玻璃背景颜色').props.onKeyDown({ key: 'Enter', currentTarget: { value: '#654321' }, preventDefault() { prevented = true; } });
+    h.input('液态玻璃背景颜色').props.onKeyDown({
+        key: 'Enter', currentTarget: { value: '#654321' }, preventDefault() { prevented = true; },
+    });
+    h.render();
     edit(h, '液态玻璃背景颜色', '#654321', 'onBlur');
-    await h.flush();
+    edit(h, '液态玻璃模糊强度数值', '2.3');
+    edit(h, '液态玻璃模糊强度数值', '2.3', 'onBlur');
+    edit(h, '液态玻璃不透明度数值', '45');
+    edit(h, '液态玻璃不透明度数值', '45', 'onBlur');
     assert.equal(prevented, true);
-    assert.equal(h.calls.length, 3);
+    assert.equal(h.calls.length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(previewProps(h).styleValue)),
+        { backgroundColor: '#654321', blurSigma: 2.3, opacity: 0.45 });
+    button(h, '保存并应用').props.onClick();
+    await h.flush();
+    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style',
+        { backgroundColor: '#654321', blurSigma: 2.3, opacity: 0.45 }]);
+    button(h, '保存并应用').props.onClick();
+    await h.flush();
+    assert.equal(h.calls.length, 2);
 });
 
-test('数字草稿保留未完成内容，越界和错误步长不提交，不透明度按整数百分比提交', async () => {
+test('同一事件轮内编辑后点击旧回调，保存仍读取最新草稿', async () => {
+    const h = appearance();
+    await h.flush();
+    const save = button(h, '保存并应用').props.onClick;
+    h.input('液态玻璃背景颜色').props.onChange({ target: { value: '#ABCDEF' } });
+    h.input('液态玻璃模糊强度数值').props.onBlur({ currentTarget: { value: '6.1' } });
+    h.input('液态玻璃不透明度数值').props.onChange({ target: { value: '79' } });
+    save();
+    await h.flush();
+    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style',
+        { backgroundColor: '#abcdef', blurSigma: 6.1, opacity: 0.79 }]);
+});
+
+test('无效颜色、数值、范围或步长阻止完整保存，草稿与错误保留', async () => {
     const h = appearance();
     await h.flush();
     for (const value of ['', '.', '1.', '2.3']) {
         edit(h, '液态玻璃模糊强度数值', value);
         assert.equal(h.input('液态玻璃模糊强度数值').props.value, value);
     }
-    assert.equal(h.calls.length, 1);
-    for (const value of ['', '-1', '10.1', '1.05', 'Infinity']) {
-        edit(h, '液态玻璃模糊强度数值', value, 'onBlur');
+    const cases = [
+        ['液态玻璃背景颜色', '#'],
+        ...['', '.', '-1', '10.1', '1.05', 'Infinity'].map(value => ['液态玻璃模糊强度数值', value]),
+        ...['101', '-1', '30.5'].map(value => ['液态玻璃不透明度数值', value]),
+    ];
+    for (const [label, value] of cases) {
+        button(h, '恢复默认样式').props.onClick();
+        h.render();
+        edit(h, label, value);
+        button(h, '保存并应用').props.onClick();
+        h.render();
         assert.equal(h.calls.length, 1);
+        assert.equal(h.input(label).props.value, value);
+        assert.equal(previewProps(h).hasInvalidDraft, true);
+        assert.ok(h.all(node => node.type === 'FormErrorMessage').some(node => textContent(node).length > 0));
     }
-    for (const value of ['101', '-1', '30.5']) {
-        edit(h, '液态玻璃不透明度数值', value, 'onBlur');
-        assert.equal(h.calls.length, 1);
-    }
-    edit(h, '液态玻璃不透明度数值', '45');
-    assert.equal(h.calls.length, 1);
-    edit(h, '液态玻璃不透明度数值', '45', 'onBlur');
-    await h.flush();
-    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style', { ...defaults, opacity: 0.45 }]);
+    edit(h, '液态玻璃背景颜色', '#');
+    pageSlider(h, '液态玻璃模糊强度').props.onCommit(10);
     pageSlider(h, '液态玻璃不透明度').props.onCommit(100);
+    h.render();
+    button(h, '保存并应用').props.onClick();
+    assert.equal(h.calls.length, 1, '有效滑块不能绕过另一个无效字段');
+    edit(h, '液态玻璃背景颜色', '#123456');
+    button(h, '保存并应用').props.onClick();
     await h.flush();
-    assert.equal(h.calls[2][1].opacity, 1);
+    assert.deepEqual(h.calls[1][1], { backgroundColor: '#123456', blurSigma: 10, opacity: 1 });
 });
 
-test('保存失败可见且回滚；保存锁阻止并发及重复事件，后续仍可重试', async () => {
-    const saving = deferred();
-    const h = appearance((channel, style) => channel.startsWith('get-')
-        ? Promise.resolve({ success: true, style: defaults }) : saving.promise);
+test('所有模板和恢复默认仅改预览，关闭状态不被启用，保存时才提交', async () => {
+    let miniToggles = 0;
+    let globalToggles = 0;
+    const h = appearance((_channel, style) => Promise.resolve({ success: true, style: style || { ...defaults, blurSigma: 8 } }), {
+        enabled: false, globalEnabled: false,
+        onToggle() { miniToggles += 1; }, onGlobalToggle() { globalToggles += 1; },
+    });
     await h.flush();
+    const values = new Set();
+    for (const label of ['中性深灰', '冷灰', '暖灰', '浓灰']) {
+        button(h, label).props.onClick();
+        h.render();
+        assert.equal(button(h, label).props['aria-pressed'], true);
+        values.add(JSON.stringify(previewProps(h).styleValue));
+        assert.equal(h.calls.length, 1);
+        assert.equal(h.input('迷你倒计时液态玻璃').props.isChecked, false);
+        assert.equal(h.input('主课表液态玻璃').props.isChecked, false);
+    }
+    assert.equal(values.size, 4);
+    button(h, '恢复默认样式').props.onClick();
+    h.render();
+    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '1');
+    assert.equal(h.calls.length, 1);
+    button(h, '保存并应用').props.onClick();
+    await h.flush();
+    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style', defaults]);
+    button(h, '恢复默认样式').props.onClick();
+    h.render();
+    button(h, '保存并应用').props.onClick();
+    assert.equal(h.calls.length, 2);
+    assert.equal(miniToggles + globalToggles, 0);
+});
+
+test('保存锁阻止并发与草稿覆盖，失败保留完整草稿且可直接重试', async () => {
+    const saving = deferred();
+    let attempts = 0;
+    const h = appearance((channel, style) => {
+        if (channel.startsWith('get-')) return Promise.resolve({ success: true, style: defaults });
+        attempts += 1;
+        return attempts === 1 ? saving.promise : Promise.resolve({ success: true, style });
+    });
+    await h.flush();
+    edit(h, '液态玻璃背景颜色', '#123456');
+    pageSlider(h, '液态玻璃模糊强度').props.onCommit(7);
+    h.render();
+    const save = button(h, '保存并应用').props.onClick;
+    const change = h.input('液态玻璃背景颜色').props.onChange;
+    const template = button(h, '冷灰').props.onClick;
     const commit = pageSlider(h, '液态玻璃模糊强度').props.onCommit;
-    commit(7);
+    save();
+    save();
+    change({ target: { value: '#ffffff' } });
+    template();
     commit(8);
     h.render();
     assert.equal(h.calls.length, 2);
     assert.equal(pageSlider(h, '液态玻璃模糊强度').props.isDisabled, true);
-    assert.equal(h.input('液态玻璃背景颜色选择器').props.isDisabled, true);
+    assert.equal(h.input('主课表液态玻璃').props.isDisabled, true);
     assert.equal(h.input('迷你倒计时液态玻璃').props.isDisabled, true);
+    assert.ok(h.all(node => node.props.role === 'status').some(node => textContent(node).includes('等待主进程确认')));
     saving.resolve({ success: false, error: '原生效果应用失败' });
     await h.flush();
-    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '1');
-    assert.match(textContent(h.find(node => node.props.role === 'alert')), /原生效果应用失败/);
-    assert.equal(pageSlider(h, '液态玻璃模糊强度').props.value, 1);
-    assert.equal(pageSlider(h, '液态玻璃模糊强度').props.isDisabled, false);
-    pageSlider(h, '液态玻璃模糊强度').props.onCommit(7);
+    assert.equal(h.input('液态玻璃背景颜色').props.value, '#123456');
+    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '7');
+    assert.equal(pageSlider(h, '液态玻璃模糊强度').props.value, 7);
+    assert.match(textContent(h.find(node => node.props.role === 'alert')), /草稿已保留.*原生效果应用失败/);
+    assert.equal(button(h, '保存并应用').props.isDisabled, false);
+    button(h, '保存并应用').props.onClick();
     await h.flush();
-    assert.equal(h.calls.length, 3);
+    assert.deepEqual(h.calls[2], h.calls[1]);
+    assert.equal(h.all(node => node.props.role === 'alert').length, 0);
 });
 
-test('加载失败显示重试入口；重试成功使用持久化值且不额外保存', async () => {
+test('异常或无效保存回执保留草稿，成功后采用主进程确认的值', async () => {
+    const accepted = { ...defaults, backgroundColor: '#123456', blurSigma: 2 };
+    const replies = [
+        () => Promise.reject('IPC 请求失败'),
+        () => Promise.resolve({ success: true, style: { ...defaults, opacity: 2 } }),
+        () => Promise.resolve({ success: true, style: accepted }),
+    ];
+    const h = appearance(channel => channel.startsWith('get-')
+        ? Promise.resolve({ success: true, style: defaults }) : replies.shift()());
+    await h.flush();
+    pageSlider(h, '液态玻璃模糊强度').props.onCommit(3);
+    h.render();
+    for (const message of [/IPC 请求失败/, /样式无效/]) {
+        button(h, '保存并应用').props.onClick();
+        await h.flush();
+        assert.equal(h.input('液态玻璃模糊强度数值').props.value, '3');
+        assert.equal(h.input('液态玻璃背景颜色').props.isDisabled, false);
+        assert.match(textContent(h.find(node => node.props.role === 'alert')), message);
+    }
+    button(h, '保存并应用').props.onClick();
+    await h.flush();
+    assert.equal(h.input('液态玻璃背景颜色').props.value, '#123456');
+    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '2');
+    assert.equal(button(h, '保存并应用').props.isDisabled, true);
+    assert.equal(h.all(node => node.props.role === 'alert').length, 0);
+});
+
+test('加载失败可重试；成功使用持久化值，不额外保存', async () => {
     let attempts = 0;
     const persisted = { backgroundColor: '#ab1234', blurSigma: 3.5, opacity: 0.68 };
     const h = appearance(() => {
@@ -306,14 +427,14 @@ test('加载失败显示重试入口；重试成功使用持久化值且不额�
     await h.flush();
     assert.match(textContent(h.find(node => node.props.role === 'alert')), /读取失败/);
     assert.equal(h.input('液态玻璃背景颜色'), undefined);
-    h.find(node => node.type === 'Button' && textContent(node) === '重试加载').props.onClick();
+    button(h, '重试加载').props.onClick();
     await h.flush();
     assert.equal(h.input('液态玻璃背景颜色').props.value, persisted.backgroundColor);
     assert.equal(h.input('液态玻璃不透明度数值').props.value, '68');
     assert.deepEqual(h.calls, [['get-mini-countdown-glass-style'], ['get-mini-countdown-glass-style']]);
 });
 
-test('无效加载回执不会进入可编辑状态，失败结果中的错误可见', async () => {
+test('无效加载回执不会进入可编辑状态', async () => {
     for (const reply of [
         { success: false, error: '无法读取配置' },
         { success: true, style: { ...defaults, opacity: 2 } },
@@ -328,76 +449,127 @@ test('无效加载回执不会进入可编辑状态，失败结果中的错误�
     }
 });
 
-test('保存请求抛出异常时回滚并恢复控件，成功回执使用主进程确认的值', async () => {
-    let attempt = 0;
-    const accepted = { ...defaults, backgroundColor: '#123456', blurSigma: 2 };
-    const h = appearance((channel, style) => {
-        if (channel.startsWith('get-')) return Promise.resolve({ success: true, style: defaults });
-        attempt += 1;
-        return attempt === 1 ? Promise.reject('IPC 请求失败') : Promise.resolve({ success: true, style: accepted });
+test('主课表和迷你开关复用各自实时回调与 pending，修改草稿不触发开关', async () => {
+    const events = [];
+    const h = appearance(undefined, {
+        enabled: false, globalEnabled: true,
+        onToggle: event => events.push(['mini', event]),
+        onGlobalToggle: event => events.push(['global', event]),
     });
     await h.flush();
-    pageSlider(h, '液态玻璃模糊强度').props.onCommit(2);
-    await h.flush();
-    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '1');
-    assert.equal(h.input('液态玻璃背景颜色').props.isDisabled, false);
-    assert.match(textContent(h.find(node => node.props.role === 'alert')), /IPC 请求失败/);
-    pageSlider(h, '液态玻璃模糊强度').props.onCommit(2);
-    await h.flush();
-    assert.equal(h.input('液态玻璃背景颜色').props.value, '#123456');
-    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '2');
-    assert.equal(h.all(node => node.props.role === 'alert').length, 0);
+    const miniEvent = { target: { checked: true } };
+    const globalEvent = { target: { checked: false } };
+    assert.equal(h.input('迷你倒计时液态玻璃').props.isChecked, false);
+    assert.equal(h.input('主课表液态玻璃').props.isChecked, true);
+    h.input('迷你倒计时液态玻璃').props.onChange(miniEvent);
+    h.input('主课表液态玻璃').props.onChange(globalEvent);
+    assert.deepEqual(events, [['mini', miniEvent], ['global', globalEvent]]);
+    h.updateProps({ isGlobalTogglePending: true, isTogglePending: false });
+    assert.equal(h.input('主课表液态玻璃').props.isDisabled, true);
+    assert.equal(h.input('迷你倒计时液态玻璃').props.isDisabled, false);
+    h.updateProps({ isGlobalTogglePending: false, isTogglePending: true });
+    assert.equal(h.input('主课表液态玻璃').props.isDisabled, false);
+    assert.equal(h.input('迷你倒计时液态玻璃').props.isDisabled, true);
+    edit(h, '液态玻璃背景颜色', '#123456');
+    assert.equal(events.length, 2);
+    assert.equal(h.calls.length, 1);
+    assert.equal(previewProps(h).enabled, false);
+    assert.equal(previewProps(h).globalEnabled, true);
 });
 
-test('恢复默认只保存样式，开关复用传入回调；默认未改变时不请求', async () => {
-    let toggles = 0;
-    const custom = { ...defaults, blurSigma: 8 };
-    const h = appearance((_channel, style) => Promise.resolve({ success: true, style: style || custom }), { onToggle() { toggles += 1; } });
-    await h.flush();
-    h.input('迷你倒计时液态玻璃').props.onChange();
-    assert.equal(toggles, 1);
-    const reset = () => h.find(node => node.type === 'Button' && textContent(node) === '恢复默认样式');
-    reset().props.onClick();
-    await h.flush();
-    assert.deepEqual(h.calls[1], ['set-mini-countdown-glass-style', defaults]);
-    reset().props.onClick();
-    await h.flush();
-    assert.equal(h.calls.length, 2);
-    assert.equal(toggles, 1);
-});
-
-test('加载和保存回执晚于卸载时不再更新组件状态', async () => {
+test('加载或保存回执晚于卸载时不更新状态，旧控件回调也不能发请求', async () => {
     const loading = deferred();
     const h = appearance(() => loading.promise);
     h.destroy();
     loading.resolve({ success: true, style: defaults });
     await h.flush();
     assert.equal(h.lateUpdates, 0);
-    const saving = deferred();
-    const mounted = appearance(channel => channel.startsWith('get-') ? Promise.resolve({ success: true, style: defaults }) : saving.promise);
-    await mounted.flush();
-    pageSlider(mounted, '液态玻璃模糊强度').props.onCommit(2);
-    mounted.destroy();
-    saving.reject(new Error('保存失败'));
-    await mounted.flush();
-    assert.equal(mounted.lateUpdates, 0);
+    for (const rejectSave of [true, false]) {
+        const saving = deferred();
+        const mounted = appearance(channel => channel.startsWith('get-')
+            ? Promise.resolve({ success: true, style: defaults }) : saving.promise);
+        await mounted.flush();
+        pageSlider(mounted, '液态玻璃模糊强度').props.onCommit(2);
+        mounted.render();
+        const save = button(mounted, '保存并应用').props.onClick;
+        const choose = button(mounted, '冷灰').props.onClick;
+        const commit = pageSlider(mounted, '液态玻璃模糊强度').props.onCommit;
+        save();
+        mounted.destroy();
+        if (rejectSave) saving.reject(new Error('保存失败'));
+        else saving.resolve({ success: true, style: defaults });
+        await mounted.flush();
+        save();
+        choose();
+        commit(4);
+        assert.equal(mounted.lateUpdates, 0);
+        assert.equal(mounted.calls.length, 2);
+    }
 });
 
-test('GUI 侧栏可进入界面配置，header 与共享开关 props 一致', async () => {
-    const sent = [];
-    const ipcRenderer = { invoke: async () => ({ success: false }), on: () => () => {}, send: (...args) => sent.push(args) };
-    const h = mount('ECSX-Gui/src/GUI.jsx', { ipcRenderer }, 'ReactGUI');
-    h.find(node => node.type === 'Button' && textContent(node) === '界面配置').props.onClick();
-    h.render();
-    assert.equal(textContent(h.find(node => node.type === 'Heading')), '界面配置');
-    const view = () => h.find(node => node.type?.name === 'AppearanceView');
-    assert.equal(view().props.enabled, false);
-    assert.equal(view().props.isTogglePending, false);
-    view().props.onToggle();
-    h.render();
-    assert.equal(view().props.enabled, true);
-    assert.equal(view().props.isTogglePending, true);
-    assert.deepEqual(sent, [['setMiniCountdownLiquidGlass', true]]);
+test('IPC 依赖切换时忽略旧生命周期回执，使用新来源加载的样式', async () => {
+    const oldLoad = deferred();
+    const h = appearance(() => oldLoad.promise);
+    const next = { ...defaults, blurSigma: 8 };
+    const calls = [];
+    h.updateProps({ ipcRenderer: { invoke: async channel => { calls.push(channel); return { success: true, style: next }; } } });
     await h.flush();
-    h.destroy();
+    oldLoad.resolve({ success: true, style: defaults });
+    await h.flush();
+    assert.equal(h.input('液态玻璃模糊强度数值').props.value, '8');
+    assert.deepEqual(calls, ['get-mini-countdown-glass-style']);
+});
+
+test('模拟区模式与背景独立；下节课提示始终跟随迷你模式，主课表独立', () => {
+    const h = mount(previewPath, { styleValue: defaults, enabled: false, globalEnabled: false });
+    const regions = () => h.all(node => node.props['data-region']).map(node => [node.props['data-region'], node.props['data-glass']]);
+    assert.equal(h.input('主课表演示模式').props.value, 'glass');
+    assert.equal(h.input('迷你倒计时演示模式').props.value, 'glass');
+    assert.deepEqual(regions(), [['globalContainer', true], ['miniCountdown', true], ['nextClassHint', true]]);
+    const mini = h.find(node => node.props['data-region'] === 'miniCountdown');
+    assert.equal(textContent(mini), '数学08:24');
+    assert.equal(textContent(h.find(node => node.props['data-region'] === 'nextClassHint')), '下节: 语文');
+    assert.equal(textContent(mini.props.children.find(node => node.props?.className === 'appearance-preview-current-class')), '数学');
+    h.updateProps({ globalEnabled: true });
+    edit(h, '主课表演示模式', 'current');
+    edit(h, '迷你倒计时演示模式', 'current');
+    assert.deepEqual(regions(), [['globalContainer', true], ['miniCountdown', false], ['nextClassHint', false]]);
+    edit(h, '主课表演示模式', 'plain');
+    edit(h, '迷你倒计时演示模式', 'glass');
+    assert.deepEqual(regions(), [['globalContainer', false], ['miniCountdown', true], ['nextClassHint', true]]);
+    h.updateProps({ enabled: true, globalEnabled: false });
+    assert.deepEqual(regions(), [['globalContainer', false], ['miniCountdown', true], ['nextClassHint', true]]);
+    edit(h, '迷你倒计时演示模式', 'plain');
+    assert.deepEqual(regions(), [['globalContainer', false], ['miniCountdown', false], ['nextClassHint', false]]);
+    edit(h, '主课表演示模式', 'glass');
+    assert.deepEqual(regions(), [['globalContainer', true], ['miniCountdown', false], ['nextClassHint', false]]);
+    edit(h, '主课表演示模式', 'current');
+    edit(h, '迷你倒计时演示模式', 'current');
+    assert.deepEqual(regions(), [['globalContainer', false], ['miniCountdown', true], ['nextClassHint', true]]);
+    for (const value of ['light', 'contrast', 'detail']) {
+        edit(h, '演示背景', value);
+        assert.equal(h.find(node => node.props['data-background']).props['data-background'], value);
+    }
+    assert.match(textContent(h.find(node => node.props['aria-label'] === '液态玻璃模拟演示')), /仅演示设置.*原生玻璃.*可能不同/);
+});
+
+test('草稿颜色、透明度与模糊进入 CSS 变量；无效字段回退并明确标注', async () => {
+    const h = appearance();
+    await h.flush();
+    edit(h, '液态玻璃背景颜色', '#102030');
+    pageSlider(h, '液态玻璃模糊强度').props.onCommit(5.2);
+    pageSlider(h, '液态玻璃不透明度').props.onCommit(61);
+    h.render();
+    const p = mount(previewPath, previewProps(h));
+    assert.match(textContent(p.find(node => node.type === 'style')), /rgba\(16, 32, 48, 0\.61\).*5\.2px/);
+    edit(h, '液态玻璃背景颜色', '#</style><script>');
+    const safe = previewProps(h);
+    assert.equal(safe.styleValue.backgroundColor, defaults.backgroundColor);
+    assert.equal(safe.styleValue.blurSigma, 5.2);
+    p.updateProps(safe);
+    const css = textContent(p.find(node => node.type === 'style'));
+    assert.match(css, /rgba\(32, 32, 32, 0\.61\)/);
+    assert.doesNotMatch(css, /<script>|<\/style>/);
+    assert.ok(p.all(node => node.props.role === 'status').some(node => textContent(node).includes('无效草稿')));
+    assert.equal(h.calls.length, 1);
 });

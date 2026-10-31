@@ -16,6 +16,7 @@ class ConfigManager {
         this.defaultConfig = {
             isDuringClassCountdown: true,
             isMiniCountdownLiquidGlass: false,
+            isGlobalContainerLiquidGlass: false,
             miniCountdownGlassStyle: normalizeMiniCountdownGlassStyle(),
             isWindowAlwaysOnTop: true,
             isDuringClassHidden: true,

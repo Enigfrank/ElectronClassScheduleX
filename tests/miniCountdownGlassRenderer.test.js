@@ -4,6 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createMiniCountdownGlass } = require('../src/js/miniCountdownGlass');
+const { createToolbarGlass } = require('../src/js/toolbarGlass');
 const registerWindowIpc = require('../src/modules/ipc/registerWindowIpc');
 
 /** 构造最小页面依赖，观察布局测量、IPC 和监听清理行为。 */
@@ -15,6 +16,7 @@ function createFixture() {
     let notifyResize;
     let styleSheet;
     const document = {
+        documentElement: { style: { opacity: '1' } },
         getElementById: () => styleSheet,
         createElement(tag) {
             assert.equal(tag, 'style');
@@ -40,7 +42,7 @@ function createFixture() {
         getBoundingClientRect() { counts.measurements += 1; return { ...bounds }; }
     };
     const api = {
-        send(channel, value) { messages.push({ channel, value }); },
+        send(channel, value, ...args) { messages.push({ channel, value, ...(args.length ? { args } : {}) }); },
         on(channel, callback) {
             listeners.set(channel, callback);
             return () => { counts.unsubscribed += 1; listeners.delete(channel); };
@@ -88,6 +90,7 @@ function createPageFixture() {
             querySelector: () => boundary
         },
         createMiniCountdownGlass: () => fixture.sync,
+        createToolbarGlass: () => ({ reportRects() {}, destroy() {} }),
         requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
         cancelAnimationFrame: id => frames.delete(id),
         setTimeout: () => 1,
@@ -145,7 +148,7 @@ test('custom glass color updates one scoped stylesheet without inline styles or 
     fixture.state({ active: false, style });
     assert.equal(fixture.styleSheet().id, 'mini-countdown-glass-style');
     assert.equal(fixture.styleSheet().textContent,
-        '.miniCountdown.liquidGlass { --color-mini-glass-tint: rgba(18, 52, 171, 0.45); }');
+        ':root { --color-mini-glass-tint: rgba(18, 52, 171, 0.45); }');
     assert.deepEqual(fixture.element.style, { display: 'block' });
     assert.equal(fixture.messages.length, 0);
     fixture.state({ active: true, style });
@@ -312,12 +315,221 @@ test('preload permits only the new scoped glass channels and cleans wrapped list
     });
     facade.send('mini-countdown-glass-rect', null);
     assert.deepEqual(sent, [['mini-countdown-glass-rect', null]]);
+    facade.send('toolbar-glass-rect', { id: 'nextClassHint', rect: null });
+    assert.deepEqual(sent[1], ['toolbar-glass-rect', { id: 'nextClassHint', rect: null }]);
     let received;
     const unsubscribe = facade.on('mini-countdown-glass-state', (...args) => { received = args; });
     const state = { active: true };
     subscriptions.get('mini-countdown-glass-state')({ sender: 'private' }, state);
     assert.deepEqual(received, [undefined, state]);
     unsubscribe();
+    const unsubscribeToolbar = facade.on('toolbar-glass-state', (...args) => { received = args; });
+    const toolbarState = { id: 'classContainer', active: true, style: { backgroundColor: '#123456', opacity: 0.4 } };
+    subscriptions.get('toolbar-glass-state')({ sender: 'private' }, toolbarState);
+    assert.deepEqual(received, [undefined, toolbarState]);
+    unsubscribeToolbar();
     assert.equal(subscriptions.size, 0);
     assert.throws(() => facade.send('shutdown-native-glass'), /Unsupported/);
+});
+
+test('根节点避让期间切入 mini 保留交互矩形但禁止原生创建，恢复只上报背景', t => {
+    const h = createFixture();
+    const handlers = new Map();
+    const glassRects = [];
+    const overlayRects = [];
+    const sender = {};
+    registerWindowIpc({
+        ipcMain: { on: (channel, handler) => handlers.set(channel, handler) },
+        windowManager: {
+            getWindow: () => ({ isDestroyed: () => false, webContents: sender, setIgnoreMouseEvents() {} }),
+            updateMiniCountdownGlass: rect => glassRects.push(rect),
+            updateTouchDragOverlay: rect => overlayRects.push(rect),
+        }, screen: {}, log() {},
+    });
+    t.after(() => handlers.get('updateInteractiveRect')({ sender }, null));
+    /** 将 renderer 消息送进真实 IPC 回调，验证视觉抑制不会改变输入覆盖窗口。 */
+    function deliver() {
+        for (const message of h.messages.splice(0)) {
+            handlers.get(message.channel)({ sender }, message.value, ...(message.args || []));
+        }
+    }
+    h.element.style.display = 'none';
+    h.element.ownerDocument.documentElement.style.opacity = '0';
+    h.sync.reportInteractiveRect();
+    deliver();
+    h.element.style.display = 'block';
+    h.sync.reportInteractiveRect();
+    deliver();
+    const rect = { ...h.bounds, cornerRadius: 16 };
+    assert.deepEqual(overlayRects.at(-1), rect);
+    assert.ok(glassRects.every(value => value === null));
+    h.sync.reportInteractiveRect();
+    assert.equal(h.messages.length, 0);
+    const overlays = overlayRects.length;
+    h.element.ownerDocument.documentElement.style.opacity = '1';
+    h.sync.reportInteractiveRect();
+    assert.deepEqual(h.messages, [{ channel: 'mini-countdown-glass-rect', value: rect }]);
+    deliver();
+    assert.deepEqual(glassRects.at(-1), rect);
+    assert.equal(overlayRects.length, overlays);
+    h.sync.destroy();
+});
+
+/** 装配多区域 renderer，保留真实可见性、状态和事件合并代码。 */
+function createToolbarFixture() {
+    const messages = [];
+    const listeners = new Map();
+    const frames = new Map();
+    const counts = { measurements: 0, styles: 0, disconnected: 0 };
+    let frameId = 0;
+    let resize;
+    let mutate;
+    const document = {};
+    /** 创建具有独立可见性、类名和矩形的 DOM 区域替身。 */
+    function createElement(parentElement = null) {
+        const classes = new Set();
+        return {
+            ownerDocument: document, parentElement, style: {},
+            computed: { display: 'block', visibility: 'visible', borderTopLeftRadius: '8px' },
+            bounds: { x: 20, y: 8, width: 200, height: 40 },
+            get className() { return [...classes].join(' '); },
+            classList: {
+                contains: value => classes.has(value),
+                toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value),
+            },
+            getBoundingClientRect() { counts.measurements += 1; return { ...this.bounds }; },
+        };
+    }
+    document.documentElement = createElement();
+    document.body = createElement(document.documentElement);
+    const container = createElement(document.body);
+    const countdownParent = createElement(container);
+    const elements = {
+        classContainer: createElement(container), countdownSidebar: createElement(container),
+        countdowner: createElement(countdownParent), nextClassHint: createElement(document.body),
+    };
+    const sync = createToolbarGlass({
+        api: { send: (channel, payload) => messages.push({ channel, payload }),
+            on: (channel, listener) => { listeners.set(channel, listener); return () => listeners.delete(channel); } },
+        container, elements, getStyle: element => element.computed,
+        applyStyle: () => { counts.styles += 1; },
+        observeResize(callback) { resize = callback; return { observe() {}, disconnect() { counts.disconnected += 1; } }; },
+        observeMutations(callback) { mutate = callback; return { observe() {}, disconnect() { counts.disconnected += 1; } }; },
+        requestFrame: callback => { frames.set(++frameId, callback); return frameId; },
+        cancelFrame: id => frames.delete(id),
+    });
+    return { sync, elements, container, countdownParent, document, messages, counts, listeners,
+        resize: () => resize(), mutate: records => mutate(records),
+        state: state => listeners.get('toolbar-glass-state')(undefined, state),
+        flush() { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); },
+    };
+}
+
+test('主课表和提示分别缓存矩形，祖先隐藏、淡出和指针避让均释放原生背景', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    assert.equal(h.messages.length, 4);
+    assert.ok(h.messages.every(message => message.channel === 'toolbar-glass-rect'));
+    h.sync.reportRects();
+    assert.equal(h.messages.length, 4);
+    h.countdownParent.classList.toggle('fade-hidden', true);
+    h.elements.classContainer.computed.visibility = 'hidden';
+    h.elements.nextClassHint.classList.toggle('fadeOut', true);
+    h.sync.reportRects();
+    assert.deepEqual(h.messages.slice(4).map(message => [message.payload.id, message.payload.rect]), [
+        ['classContainer', null], ['countdowner', null], ['nextClassHint', null],
+    ]);
+    h.document.documentElement.style.opacity = '0';
+    h.sync.reportRects();
+    assert.deepEqual(h.messages.at(-1).payload, { id: 'countdownSidebar', rect: null });
+    h.document.documentElement.style.opacity = '1';
+    h.sync.reportRects();
+    assert.equal(h.messages.at(-1).payload.id, 'countdownSidebar');
+    assert.ok(h.messages.at(-1).payload.rect);
+    h.sync.destroy();
+});
+
+test('区域首帧和颜色推送独立处理，样式事件不测量布局或改变其他区域状态', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    const baseline = h.counts.measurements;
+    h.state({ id: 'classContainer', active: true, style: { backgroundColor: '#123456', opacity: 0.6 } });
+    assert.equal(h.elements.classContainer.classList.contains('liquidGlass'), true);
+    assert.equal(h.container.classList.contains('liquidGlass'), true);
+    assert.equal(h.elements.nextClassHint.classList.contains('liquidGlass'), false);
+    h.state({ id: 'nextClassHint', active: true });
+    h.state({ id: 'classContainer', active: false });
+    assert.equal(h.container.classList.contains('liquidGlass'), false);
+    assert.equal(h.elements.nextClassHint.classList.contains('liquidGlass'), true);
+    h.state({ id: 'nextClassHint', active: true, style: { backgroundColor: '#654321', opacity: 0.3 } });
+    h.mutate([{ type: 'attributes', attributeName: 'class', oldValue: '', target: h.elements.nextClassHint }]);
+    h.state({ id: '__proto__', active: true });
+    h.flush();
+    assert.equal(h.counts.measurements, baseline);
+    assert.equal(h.messages.length, 4);
+    assert.equal(h.counts.styles, 2);
+    h.sync.destroy();
+});
+
+test('多次内容和尺寸变化合并一帧，上报新位置，卸载取消排队帧并清理监听', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    const baseline = h.counts.measurements;
+    h.elements.countdowner.bounds.x = 240;
+    h.resize();
+    h.resize();
+    h.mutate([{ type: 'childList' }]);
+    h.flush();
+    assert.equal(h.counts.measurements, baseline + 4);
+    assert.equal(h.messages.length, 5);
+    assert.equal(h.messages.at(-1).payload.id, 'countdowner');
+    assert.equal(h.messages.at(-1).payload.rect.x, 240);
+    h.resize();
+    h.sync.destroy();
+    h.flush();
+    assert.equal(h.counts.measurements, baseline + 4);
+    assert.equal(h.counts.disconnected, 2);
+    assert.equal(h.listeners.size, 0);
+});
+
+test('区域移出窗口左侧或上侧时上报空矩形，避免 IPC 拒绝负坐标后遗留旧面板', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    for (const axis of ['x', 'y']) {
+        h.elements.classContainer.bounds[axis] = -1;
+        h.sync.reportRects();
+        assert.deepEqual(h.messages.at(-1).payload, { id: 'classContainer', rect: null });
+        const count = h.messages.length;
+        h.sync.reportRects();
+        assert.equal(h.messages.length, count);
+        h.elements.classContainer.bounds[axis] = 8;
+        h.sync.reportRects();
+        assert.equal(h.messages.at(-1).payload.rect[axis], 8);
+    }
+    h.sync.destroy();
+});
+
+test('主课表玻璃 IPC 只接受已知展示区域与合法矩形，不修改交互窗口', () => {
+    const handlers = new Map();
+    const calls = [];
+    const sender = {};
+    registerWindowIpc({
+        ipcMain: { on: (channel, handler) => handlers.set(channel, handler) },
+        windowManager: {
+            getWindow: () => ({ isDestroyed: () => false, webContents: sender }),
+            updateToolbarGlass: (id, rect) => calls.push([id, rect]),
+            updateTouchDragOverlay: () => assert.fail('展示区域不能改变输入覆盖窗口'),
+        }, screen: {}, log() {},
+    });
+    const update = handlers.get('toolbar-glass-rect');
+    const rect = { x: 20, y: 8, width: 200, height: 40, cornerRadius: 8 };
+    for (const payload of [null, {}, { id: '__proto__', rect }, { id: 'miniCountdown', rect },
+        { id: 'classContainer', rect: {} }, { id: 'classContainer', rect: { ...rect, x: -1 } },
+        { id: 'classContainer', rect: { ...rect, width: 0 } },
+        { id: 'classContainer', rect: { ...rect, cornerRadius: NaN } }]) update({ sender }, payload);
+    update({ sender: {} }, { id: 'classContainer', rect });
+    assert.deepEqual(calls, []);
+    update({ sender }, { id: 'classContainer', rect });
+    update({ sender }, { id: 'nextClassHint', rect: null });
+    assert.deepEqual(calls, [['classContainer', rect], ['nextClassHint', null]]);
 });

@@ -5,6 +5,23 @@ const ExamModeWindowController = require('./examModeWindowController');
 const MiniCountdownGlassController = require('./miniCountdownGlassController');
 const { normalizeMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
 
+const GLOBAL_GLASS_IDS = ['classContainer', 'countdownSidebar', 'countdowner'];
+
+/** 按组启停原生背景；任一区域启用失败时让整组恢复原版样式。 */
+function setGlassControllersEnabled(controllers, enabled) {
+    if (enabled !== true) {
+        for (const controller of controllers) controller.setEnabled(false);
+        return false;
+    }
+    for (const controller of controllers) {
+        if (!controller.setEnabled(true)) {
+            for (const current of controllers) current.setEnabled(false);
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * 窗口管理模块
  * 负责应用程序中所有 Electron 窗口（主窗口、仪表盘、OOBE、加载框等）的创建、显示、关闭及层级管理
@@ -26,13 +43,25 @@ class WindowManager {
         };
         this.touchDragOverlayRect = null;
         this.mainAlwaysOnTopRestoreTimer = null;
+        this.handlingGlassErrors = new Set();
+        this.toolbarGlassControllers = {};
         this.miniCountdownGlassController = new MiniCountdownGlassController({
             screen,
             style: this.configManager.get('miniCountdownGlassStyle'),
             onState: state => this.sendMiniCountdownGlassState(state),
             onError: error => this.handleMiniCountdownGlassError(error)
         });
-        app.once('before-quit', () => this.miniCountdownGlassController.shutdown());
+        for (const id of [...GLOBAL_GLASS_IDS, 'nextClassHint']) {
+            this.toolbarGlassControllers[id] = new MiniCountdownGlassController({
+                screen,
+                style: this.configManager.get('miniCountdownGlassStyle'),
+                onState: state => this.sendToolbarGlassState(id, state),
+                onError: error => this.handleToolbarGlassError(id, error)
+            });
+        }
+        app.once('before-quit', () => {
+            for (const controller of this.getGlassControllers()) controller.shutdown();
+        });
         this.examModeController = new ExamModeWindowController({
             windowManager: this,
             configManager: this.configManager,
@@ -178,7 +207,9 @@ class WindowManager {
 
         this.windows.main = win;
         this.miniCountdownGlassController.setWindow(win);
-        this.miniCountdownGlassController.setEnabled(this.configManager.get('isMiniCountdownLiquidGlass', false) === true);
+        for (const controller of Object.values(this.toolbarGlassControllers)) controller.setWindow(win);
+        this.setMiniCountdownLiquidGlass(this.configManager.get('isMiniCountdownLiquidGlass', false) === true);
+        this.setGlobalContainerLiquidGlass(this.configManager.get('isGlobalContainerLiquidGlass', false) === true);
         this.createTouchDragOverlay(win);
         win.on('closed', () => {
             this.stopMainWindowAlwaysOnTopGuard();
@@ -303,7 +334,19 @@ class WindowManager {
      * @returns {boolean} 实际接受的启用值
      */
     setMiniCountdownLiquidGlass(enabled) {
-        return this.miniCountdownGlassController.setEnabled(enabled);
+        return setGlassControllersEnabled([
+            this.miniCountdownGlassController, this.toolbarGlassControllers.nextClassHint
+        ], enabled);
+    }
+
+    /** 主课表及其侧栏、课程计时使用独立开关，不改变迷你倒计时偏好。 */
+    setGlobalContainerLiquidGlass(enabled) {
+        return setGlassControllersEnabled(GLOBAL_GLASS_IDS.map(id => this.toolbarGlassControllers[id]), enabled);
+    }
+
+    /** 枚举共享同一套颜色参数的原生背景控制器。 */
+    getGlassControllers() {
+        return [this.miniCountdownGlassController, ...Object.values(this.toolbarGlassControllers)];
     }
 
     /** 返回当前规范化样式快照，供设置 IPC 和 renderer 状态同步使用。 */
@@ -313,7 +356,18 @@ class WindowManager {
 
     /** 应用样式并返回是否成功；持久化由设置 IPC 在应用成功后执行。 */
     setMiniCountdownGlassStyle(style) {
-        return this.miniCountdownGlassController.setStyle(style);
+        const previous = this.getMiniCountdownGlassStyle();
+        const controllers = this.getGlassControllers();
+        for (const controller of controllers) {
+            if (!controller.setStyle(style)) {
+                for (const current of controllers) {
+                    // 回滚失败会销毁原生面板，再同步一次可恢复关闭组的样式快照。
+                    if (!current.setStyle(previous)) current.setStyle(previous);
+                }
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -322,6 +376,19 @@ class WindowManager {
      */
     updateMiniCountdownGlass(rect) {
         this.miniCountdownGlassController.updateRect(rect);
+    }
+
+    /** 缓存主课表与下节提示各自的可见区域，不改变鼠标穿透区域。 */
+    updateToolbarGlass(id, rect) {
+        if (Object.hasOwn(this.toolbarGlassControllers, id)) this.toolbarGlassControllers[id].updateRect(rect);
+    }
+
+    /** 为每个区域分别推送首帧状态，只有就绪的区域才移除原版背景。 */
+    sendToolbarGlassState(id, state) {
+        const win = this.windows.main;
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+            win.webContents.send('toolbar-glass-state', { id, active: state.active, style: state.style });
+        }
     }
 
     /**
@@ -342,12 +409,27 @@ class WindowManager {
      * @param {Error} error 原生错误
      */
     handleMiniCountdownGlassError(error) {
-        this.configManager.set('isMiniCountdownLiquidGlass', false);
-        const gui = this.windows.gui;
-        if (gui && !gui.isDestroyed() && !gui.webContents.isDestroyed()) {
-            gui.webContents.send('updateCheckbox', { id: 'isMiniCountdownLiquidGlass', checked: false });
+        this.handleToolbarGlassError('miniCountdown', error);
+    }
+
+    /** 原生失败仅回退所属样式组；下节提示与迷你倒计时始终一起回退。 */
+    handleToolbarGlassError(id, error) {
+        const isGlobal = GLOBAL_GLASS_IDS.includes(id);
+        const setting = isGlobal ? 'isGlobalContainerLiquidGlass' : 'isMiniCountdownLiquidGlass';
+        if (this.handlingGlassErrors.has(setting)) return;
+        this.handlingGlassErrors.add(setting);
+        try {
+            if (isGlobal) this.setGlobalContainerLiquidGlass(false);
+            else this.setMiniCountdownLiquidGlass(false);
+            this.configManager.set(setting, false);
+            const gui = this.windows.gui;
+            if (gui && !gui.isDestroyed() && !gui.webContents.isDestroyed()) {
+                gui.webContents.send('updateCheckbox', { id: setting, checked: false });
+            }
+            this.log('warn', `[${isGlobal ? '主课表' : '迷你倒计时'}] 液态玻璃已关闭: ${error.message}`);
+        } finally {
+            this.handlingGlassErrors.delete(setting);
         }
-        this.log('warn', `[迷你倒计时] 液态玻璃已关闭: ${error.message}`);
     }
 
     /**
@@ -458,6 +540,7 @@ class WindowManager {
             guiWindow.webContents.send('init', {
                 isDuringClassCountdown: this.configManager.get('isDuringClassCountdown', true),
                 isMiniCountdownLiquidGlass: this.configManager.get('isMiniCountdownLiquidGlass', false) === true,
+                isGlobalContainerLiquidGlass: this.configManager.get('isGlobalContainerLiquidGlass', false) === true,
                 isWindowAlwaysOnTop: this.configManager.getWindowAlwaysOnTop(),
                 isDuringClassHidden: this.configManager.get('isDuringClassHidden', true),
                 isAutoLaunch: this.configManager.getAutoLaunch(),

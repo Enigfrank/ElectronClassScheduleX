@@ -179,7 +179,7 @@ test('只有有效原生首帧可激活玻璃，之后立即停止亮度回读',
     const panel = enable(h);
     assert.equal(h.controller.active, false);
     assert.equal(h.timers.size, 1);
-    assert.deepEqual(panel.config.lumaBands, [{ id: 0, x: 49, y: 19, width: 2, height: 2 }]);
+    assert.deepEqual(calls(panel.setLumaBands), [[[{ id: 0, x: 49, y: 19, width: 2, height: 2 }]]]);
     assert.equal(panel.config.capturePolicy, 'all');
     assert.equal(panel.config.anchorWindow, h.window);
     assert.deepEqual(calls(panel.show), [[0]]);
@@ -188,12 +188,12 @@ test('只有有效原生首帧可激活玻璃，之后立即停止亮度回读',
     assert.equal(h.controller.active, false);
     panel.config.onLuma(FRAME);
     assert.equal(h.controller.active, true);
-    assert.deepEqual(calls(panel.setLumaBands), [[[]]]);
+    assert.deepEqual(calls(panel.setLumaBands).at(-1), [[]]);
     assert.deepEqual(calls(panel.onLuma), [[null]]);
     assert.equal(h.timers.size, 0);
     panel.config.onLuma(FRAME);
     assert.deepEqual(calls(h.onState), [[{ active: false, style: defaults }], [{ active: true, style: defaults }]]);
-    assert.equal(panel.setLumaBands.mock.callCount(), 1);
+    assert.equal(panel.setLumaBands.mock.callCount(), 2);
     h.controller.shutdown();
 });
 
@@ -250,7 +250,7 @@ test('使用显示器局部 DIP 到物理角点转换，并限制物理圆角', 
         x: Math.round(2000 + (point.x - 1000) * 1.5), y: Math.round(point.y * 1.5)
     }));
     const panel = enable(h, { ...RECT, cornerRadius: 100 });
-    assert.deepEqual(panel.config.lumaBands, [{ id: 0, x: 74, y: 29, width: 2, height: 2 }]);
+    assert.deepEqual(calls(panel.setLumaBands), [[[{ id: 0, x: 74, y: 29, width: 2, height: 2 }]]]);
     assert.deepEqual(calls(h.screen.dipToScreenPoint), [[{ x: 1030, y: 60 }], [{ x: 1130, y: 100 }]]);
     assert.deepEqual(calls(h.screen.getDisplayMatching), [[{ x: 1030, y: 60, width: 100, height: 40 }]]);
     assert.deepEqual({ x: panel.config.x, y: panel.config.y, width: panel.config.width,
@@ -456,6 +456,7 @@ function createWindowManagerHarness(options = {}) {
     const app = new EventEmitter();
     app.isPackaged = true;
     const settings = { isMiniCountdownLiquidGlass: options.persisted ?? false,
+        isGlobalContainerLiquidGlass: options.globalPersisted ?? false,
         miniCountdownGlassStyle: options.style };
     const config = {
         get: (key, fallback) => settings[key] ?? fallback,
@@ -654,4 +655,210 @@ test('WindowManager 启动、重载、重建和重新启动恢复持久化样式
     restarted.manager.updateMiniCountdownGlass(RECT);
     assert.equal(restarted.panels.at(-1).config.blurSigma, 4);
     restarted.app.emit('before-quit');
+});
+
+test('主课表独立启停，下节提示跟随迷你倒计时，最后一个面板关闭才释放共享捕获', t => {
+    const h = createWindowManagerHarness();
+    t.after(() => h.app.emit('before-quit'));
+    h.manager.createMainWindow();
+    assert.equal(h.manager.setGlobalContainerLiquidGlass(true), true);
+    for (const id of ['classContainer', 'countdownSidebar', 'countdowner']) h.manager.updateToolbarGlass(id, RECT);
+    assert.equal(h.panels.length, 3);
+    assert.equal(h.manager.miniCountdownGlassController.enabled, false);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.enabled, false);
+    h.manager.setMiniCountdownLiquidGlass(true);
+    h.manager.updateMiniCountdownGlass(RECT);
+    h.manager.updateToolbarGlass('nextClassHint', RECT);
+    assert.equal(h.panels.length, 5);
+    for (const panel of h.panels) panel.config.onLuma(FRAME);
+    assert.equal(h.manager.setGlobalContainerLiquidGlass(false), false);
+    assert.equal(h.manager.miniCountdownGlassController.active, true);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.active, true);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy).map(args => args[1]), ['all']);
+    h.manager.setMiniCountdownLiquidGlass(false);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.active, false);
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy).map(args => args[1]), ['all', 'none']);
+    assert.ok(h.panels.every(panel => panel.destroy.mock.callCount() === 1));
+});
+
+test('所有区域共用完整样式，任一区域应用失败会回滚已更新参数且只关闭所属组', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    h.manager.createMainWindow();
+    h.manager.updateMiniCountdownGlass(RECT);
+    for (const id of ['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint']) {
+        h.manager.updateToolbarGlass(id, RECT);
+    }
+    for (const panel of h.panels) panel.config.onLuma(FRAME);
+    const style = { backgroundColor: '#123456', blurSigma: 4, opacity: 0.6 };
+    assert.equal(h.manager.setMiniCountdownGlassStyle(style), true);
+    for (const controller of h.manager.getGlassControllers()) assert.deepEqual(controller.style, style);
+    assert.ok(h.panels.every(panel => panel.setParams.mock.callCount() === 1));
+    const broken = h.manager.toolbarGlassControllers.countdowner.panel;
+    broken.setParams.mock.mockImplementation(() => { throw new Error('native failed'); });
+    assert.equal(h.manager.setMiniCountdownGlassStyle({ ...style, blurSigma: 5 }), false);
+    for (const controller of h.manager.getGlassControllers()) assert.deepEqual(controller.style, style);
+    assert.equal(h.manager.miniCountdownGlassController.active, true);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.active, true);
+    assert.equal(h.settings.isGlobalContainerLiquidGlass, false);
+    assert.equal(h.settings.isMiniCountdownLiquidGlass, true);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.equal(h.logger.warn.mock.callCount(), 1);
+});
+
+test('共享捕获中采样初始化失败会销毁新面板，保留其他组的面板和窗口保护', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    const main = h.manager.createMainWindow();
+    h.manager.updateMiniCountdownGlass(RECT);
+    const existing = h.panels[0];
+    existing.config.onLuma(FRAME);
+    h.native.createPanel.mock.mockImplementation(config => {
+        const panel = { config };
+        for (const name of ['show', 'hide', 'destroy', 'setBounds', 'setParams', 'setLumaBands', 'onLuma']) {
+            panel[name] = mock.fn();
+        }
+        h.panels.push(panel);
+        panel.setLumaBands.mock.mockImplementation(() => { throw new Error('sampling failed'); });
+        // 桥接会先分配面板，再应用创建选项中的采样带，异常时不返回句柄。
+        if (config.lumaBands) panel.setLumaBands(config.lumaBands);
+        return panel;
+    });
+    h.manager.updateToolbarGlass('classContainer', RECT);
+    const failed = h.panels[1];
+    assert.equal(failed.destroy.mock.callCount(), 1);
+    assert.equal(failed.show.mock.callCount(), 0);
+    assert.equal(h.manager.toolbarGlassControllers.classContainer.enabled, false);
+    assert.equal(h.settings.isGlobalContainerLiquidGlass, false);
+    assert.equal(h.manager.miniCountdownGlassController.active, true);
+    assert.equal(existing.destroy.mock.callCount(), 0);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all']]);
+    assert.equal(h.timers.size, 0);
+    h.manager.setMiniCountdownLiquidGlass(false);
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+});
+
+test('样式回滚再次遇到原生错误仍恢复全部样式快照，重新启用沿用旧样式', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    h.manager.createMainWindow();
+    h.manager.updateMiniCountdownGlass(RECT);
+    h.manager.updateToolbarGlass('classContainer', RECT);
+    h.panels.forEach(panel => panel.config.onLuma(FRAME));
+    const mini = h.manager.miniCountdownGlassController.panel;
+    let updates = 0;
+    mini.setParams.mock.mockImplementation(() => {
+        if (++updates === 2) throw new Error('rollback failed');
+    });
+    h.manager.toolbarGlassControllers.classContainer.panel.setParams.mock.mockImplementation(() => {
+        throw new Error('apply failed');
+    });
+    const previous = h.manager.getMiniCountdownGlassStyle();
+    assert.equal(h.manager.setMiniCountdownGlassStyle({ ...previous, blurSigma: previous.blurSigma + 1 }), false);
+    for (const controller of h.manager.getGlassControllers()) {
+        assert.deepEqual(controller.style, previous);
+        assert.equal(controller.enabled, false);
+    }
+    assert.equal(h.settings.isMiniCountdownLiquidGlass, false);
+    assert.equal(h.settings.isGlobalContainerLiquidGlass, false);
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    assert.equal(h.manager.setMiniCountdownLiquidGlass(true), true);
+    assert.equal(h.panels.at(-1).config.blurSigma, previous.blurSigma);
+});
+
+test('下节提示首帧失败会关闭倒计时组，主课表继续保持玻璃', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    h.manager.createMainWindow();
+    h.manager.updateMiniCountdownGlass(RECT);
+    h.manager.updateToolbarGlass('classContainer', RECT);
+    h.panels.forEach(panel => panel.config.onLuma(FRAME));
+    h.manager.updateToolbarGlass('nextClassHint', RECT);
+    [...h.timers.values()][0]();
+    assert.equal(h.settings.isMiniCountdownLiquidGlass, false);
+    assert.equal(h.manager.miniCountdownGlassController.active, false);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.enabled, false);
+    assert.equal(h.manager.toolbarGlassControllers.classContainer.active, true);
+    assert.equal(h.settings.isGlobalContainerLiquidGlass, true);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+});
+
+test('主课表偏好恢复到 GUI，重载时所有区域释放且不复用旧矩形', t => {
+    const h = createWindowManagerHarness({ globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    const main = h.manager.createMainWindow();
+    const gui = h.manager.createReactGUIWindow();
+    gui.webContents.emit('did-finish-load');
+    const init = calls(gui.webContents.send).find(([channel]) => channel === 'init')[1];
+    assert.equal(init.isGlobalContainerLiquidGlass, true);
+    assert.equal(init.isMiniCountdownLiquidGlass, false);
+    for (const id of ['classContainer', 'countdownSidebar', 'countdowner']) h.manager.updateToolbarGlass(id, RECT);
+    main.webContents.emit('did-start-loading');
+    assert.ok(h.panels.every(panel => panel.destroy.mock.callCount() === 1));
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    main.webContents.emit('did-finish-load');
+    assert.equal(h.panels.length, 3);
+    assert.ok(Object.values(h.manager.toolbarGlassControllers).every(controller => controller.rect === null));
+});
+
+test('五面板切换 DPR 不提前 shutdown 或解除窗口保护，隐藏后只释放一次', t => {
+    for (const withoutCapturePolicy of [false, true]) {
+        const h = createWindowManagerHarness({ persisted: true, globalPersisted: true, withoutCapturePolicy });
+        t.after(() => h.app.emit('before-quit'));
+        const main = h.manager.createMainWindow();
+        h.manager.updateMiniCountdownGlass(RECT);
+        for (const id of ['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint']) {
+            h.manager.updateToolbarGlass(id, RECT);
+        }
+        const old = [...h.panels];
+        old.forEach(panel => panel.config.onLuma(FRAME));
+        h.screen.scale = 2;
+        main.emit('move');
+        assert.equal(h.panels.length, 10);
+        assert.ok(old.every(panel => panel.destroy.mock.callCount() === 1));
+        assert.equal(h.native.shutdown.mock.callCount(), 0);
+        if (withoutCapturePolicy) {
+            assert.deepEqual(calls(main.setContentProtection), [[true]]);
+            assert.equal(main.protected, true);
+        } else assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all']]);
+        old.forEach(panel => panel.config.onLuma(FRAME));
+        assert.ok(h.manager.getGlassControllers().every(controller => !controller.active));
+        h.panels.slice(5).forEach(panel => panel.config.onLuma(FRAME));
+        main.hide();
+        assert.equal(h.native.shutdown.mock.callCount(), 1);
+        assert.equal(h.timers.size, 0);
+        assert.ok(h.panels.every(panel => panel.destroy.mock.callCount() === 1));
+        if (withoutCapturePolicy) assert.deepEqual(calls(main.setContentProtection), [[true], [false]]);
+        else assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all'], [main, 'none']]);
+        main.show();
+        assert.equal(h.panels.length, 15);
+        assert.equal(h.native.shutdown.mock.callCount(), 1);
+    }
+});
+
+test('共享面板销毁异常只关闭所属组，其他组保留捕获保护直到最后释放', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    const main = h.manager.createMainWindow();
+    h.manager.updateMiniCountdownGlass(RECT);
+    for (const id of ['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint']) {
+        h.manager.updateToolbarGlass(id, RECT);
+    }
+    h.panels.forEach(panel => panel.config.onLuma(FRAME));
+    const broken = h.manager.toolbarGlassControllers.classContainer.panel;
+    broken.destroy.mock.mockImplementation(() => { throw new Error('destroy failed'); });
+    h.manager.updateToolbarGlass('classContainer', null);
+    assert.equal(h.settings.isGlobalContainerLiquidGlass, false);
+    assert.equal(h.manager.miniCountdownGlassController.active, true);
+    assert.equal(h.manager.toolbarGlassControllers.nextClassHint.active, true);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all']]);
+    main.hide();
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all'], [main, 'none']]);
+    assert.equal(h.timers.size, 0);
+    assert.ok(h.panels.every(panel => panel.destroy.mock.callCount() === 1));
 });

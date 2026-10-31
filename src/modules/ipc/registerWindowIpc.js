@@ -146,12 +146,13 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         lastIgnoreMouseEvents = ignoreMouseEvents;
     });
 
-    ipcMain.on('updateInteractiveRect', (event, rect) => {
+    ipcMain.on('updateInteractiveRect', (event, rect, glassVisible = true) => {
         const mainWindow = windowManager.getWindow('main');
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
 
         interactiveRect = rect;
-        windowManager.updateMiniCountdownGlass?.(rect);
+        // 指针避让期间仍按原矩形处理交互，仅阻止不可见文字下的原生背景。
+        windowManager.updateMiniCountdownGlass?.(glassVisible === false ? null : rect);
         windowManager.updateTouchDragOverlay?.(rect);
         if (rect) {
             if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);
@@ -180,6 +181,18 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
     }
 
     ipcMain.on('mini-countdown-glass-rect', updateGlassDragRect);
+
+    /** 仅接受主课表已知展示区域的矩形，不扩大鼠标或触摸交互范围。 */
+    ipcMain.on('toolbar-glass-rect', (event, payload) => {
+        const mainWindow = windowManager.getWindow('main');
+        if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+        if (!payload || !['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint'].includes(payload.id)) return;
+        const rect = payload.rect;
+        if (rect !== null && (!rect ||
+            ![rect.x, rect.y, rect.width, rect.height, rect.cornerRadius].every(Number.isFinite) ||
+            rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0 || rect.cornerRadius < 0)) return;
+        windowManager.updateToolbarGlass(payload.id, rect);
+    });
 
     ipcMain.on('setDragState', (event, state) => {
         isDragging = state;

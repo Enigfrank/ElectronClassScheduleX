@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 /**
  * 订阅关机预警初始化数据，并返回对应的清理函数。
- * @param {(payload: {planId?: string, targetTime?: string}) => void} callback 初始化回调
+ * @param {(payload: {planId?: string, targetTime?: string, targetTimestamp?: number}) => void} callback 初始化回调
  * @returns {() => void} 监听清理函数
  */
 function onInit(callback) {

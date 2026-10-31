@@ -1,4 +1,5 @@
 const { normalizeMiniCountdownGlassStyle, validateMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
+const { retainNativeGlass, protectGlassWindow } = require('./nativeGlassResources');
 
 const STARTUP_TIMEOUT_MS = 5000;
 const FIRST_FRAME_BAND_ID = 0;
@@ -40,6 +41,7 @@ class MiniCountdownGlassController {
         this.panel = null;
         this.geometry = null;
         this.restoreCapture = null;
+        this.releaseNative = null;
         this.startupTimer = null;
         this.generation = 0;
         this.rendererReady = false;
@@ -215,16 +217,7 @@ class MiniCountdownGlassController {
 
     /** 捕获前排除主窗口，销毁时恢复先前保护状态。 */
     protectWindow() {
-        const window = this.window;
-        const protectedBefore = window.isContentProtected?.() === true;
-        /** 恢复 Electron 窗口原先的捕获策略。 */
-        this.restoreCapture = () => {
-            if (window.isDestroyed()) return;
-            if (this.native.setWindowCapturePolicy?.(window, protectedBefore ? 'all' : 'none') !== true) {
-                window.setContentProtection(protectedBefore);
-            }
-        };
-        if (this.native.setWindowCapturePolicy?.(window, 'all') !== true) window.setContentProtection(true);
+        this.restoreCapture = protectGlassWindow(this.window, this.native);
     }
 
     /** 创建面板并通过一次微小亮度回读等待真实原生首帧。 */
@@ -237,17 +230,19 @@ class MiniCountdownGlassController {
         }, this.startupTimeoutMs);
         this.startupTimer?.unref?.();
         this.nativeRunning = true;
+        this.releaseNative = retainNativeGlass(this.native);
         this.panel = this.native.createPanel({
             ...geometry.bounds, dpr: geometry.dpr, ...geometry.params,
             anchorWindow: this.window, capturePolicy: 'all',
-            // 中心 2x2 采样避开圆角遮罩，并避免原生降采样后区域为空。
-            lumaBands: [{ id: FIRST_FRAME_BAND_ID,
-                x: Math.max(0, Math.floor((geometry.bounds.width - 2) / 2)),
-                y: Math.max(0, Math.floor((geometry.bounds.height - 2) / 2)),
-                width: 2, height: 2 }],
             onLuma: bands => this.confirmFirstFrame(generation, bands)
         });
         if (!this.panel) throw new Error('原生液态玻璃面板创建失败');
+        // 先取得句柄，采样初始化异常时才能独立销毁面板而不停止其他区域。
+        // 中心 2x2 采样避开圆角遮罩，并避免原生降采样后区域为空。
+        this.panel.setLumaBands([{ id: FIRST_FRAME_BAND_ID,
+            x: Math.max(0, Math.floor((geometry.bounds.width - 2) / 2)),
+            y: Math.max(0, Math.floor((geometry.bounds.height - 2) / 2)),
+            width: 2, height: 2 }]);
         this.panel.show(0);
     }
 
@@ -282,15 +277,17 @@ class MiniCountdownGlassController {
         this.setActive(false);
         const panel = this.panel;
         const restoreCapture = this.restoreCapture;
+        const releaseNative = this.releaseNative;
         this.panel = null;
         this.geometry = null;
         this.restoreCapture = null;
+        this.releaseNative = null;
         let error = null;
         for (const cleanup of [
             () => panel?.onLuma(null),
             () => panel?.hide(0),
             () => panel?.destroy(),
-            () => { if (this.nativeRunning) this.native.shutdown(); },
+            () => releaseNative?.(),
             () => restoreCapture?.()
         ]) {
             try { cleanup(); } catch (failure) { error ??= failure; }

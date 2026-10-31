@@ -6,7 +6,7 @@
       style.opacity < 0 || style.opacity > 1) return;
     const color = style.backgroundColor.slice(1);
     const channels = [0, 2, 4].map(offset => Number.parseInt(color.slice(offset, offset + 2), 16));
-    const rule = `.miniCountdown.liquidGlass { --color-mini-glass-tint: rgba(${channels.join(', ')}, ${style.opacity}); }`;
+    const rule = `:root { --color-mini-glass-tint: rgba(${channels.join(', ')}, ${style.opacity}); }`;
     let sheet = document.getElementById('mini-countdown-glass-style');
     if (!sheet) {
       sheet = document.createElement('style');
@@ -31,6 +31,12 @@
     let dragging = false;
     let lastRect;
     let lastGlassRect;
+    let glassVisible = true;
+
+    /** 根节点的指针避让只抑制原生背景，不改变交互矩形。 */
+    function isGlassVisible() {
+      return element.ownerDocument?.documentElement?.style.opacity !== '0';
+    }
 
     /** 比较矩形与圆角，避免重复 IPC 和原生窗口更新。 */
     function sameRect(first, second) {
@@ -54,6 +60,7 @@
 
     /** 仅移动原生背景，拖动期间保持触摸覆盖窗口的位置不变。 */
     function reportGlassRect(rect) {
+      if (!isGlassVisible()) rect = null;
       if (!active || sameRect(lastGlassRect, rect)) return;
       lastGlassRect = rect;
       api.send('mini-countdown-glass-rect', rect);
@@ -62,14 +69,21 @@
     /** 尺寸或位置实际变化后才更新交互区，拖动结束时恢复完整同步。 */
     function reportInteractiveRect() {
       const rect = readRect();
+      const visible = isGlassVisible();
+      if (glassVisible !== visible) {
+        glassVisible = visible;
+        lastGlassRect = visible ? rect : null;
+        api.send('mini-countdown-glass-rect', lastGlassRect);
+      }
       if (dragging && rect) {
         reportGlassRect(rect);
         return;
       }
       if (sameRect(lastRect, rect)) return;
       lastRect = rect;
-      lastGlassRect = rect;
-      api.send('updateInteractiveRect', rect);
+      lastGlassRect = visible ? rect : null;
+      if (visible) api.send('updateInteractiveRect', rect);
+      else api.send('updateInteractiveRect', rect, false);
     }
 
     /** 复用拖动帧已有的坐标与尺寸，避免为玻璃额外测量布局。 */
@@ -108,8 +122,9 @@
   }
 
   if (typeof module === 'object' && module.exports) {
-    module.exports = { createMiniCountdownGlass };
+    module.exports = { createMiniCountdownGlass, applyGlassStyle };
   } else {
     scope.createMiniCountdownGlass = createMiniCountdownGlass;
+    scope.applyCountdownGlassStyle = applyGlassStyle;
   }
 }(typeof window === 'object' ? window : globalThis));
