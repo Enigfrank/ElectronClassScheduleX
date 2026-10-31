@@ -374,13 +374,13 @@ class WindowManager {
      * 同步迷你倒计时本体的 DIP 矩形，拖动时不调整触摸覆盖窗口。
      * @param {{x: number, y: number, width: number, height: number, cornerRadius: number}|null} rect 本体矩形
      */
-    updateMiniCountdownGlass(rect) {
-        this.miniCountdownGlassController.updateRect(rect);
+    updateMiniCountdownGlass(rect, presentation) {
+        this.miniCountdownGlassController.updateRect(rect, presentation);
     }
 
     /** 缓存主课表与下节提示各自的可见区域，不改变鼠标穿透区域。 */
-    updateToolbarGlass(id, rect) {
-        if (Object.hasOwn(this.toolbarGlassControllers, id)) this.toolbarGlassControllers[id].updateRect(rect);
+    updateToolbarGlass(id, rect, presentation) {
+        if (Object.hasOwn(this.toolbarGlassControllers, id)) this.toolbarGlassControllers[id].updateRect(rect, presentation);
     }
 
     /** 为每个区域分别推送首帧状态，只有就绪的区域才移除原版背景。 */

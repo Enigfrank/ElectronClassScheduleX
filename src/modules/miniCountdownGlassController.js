@@ -1,5 +1,6 @@
 const { normalizeMiniCountdownGlassStyle, validateMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
 const { retainNativeGlass, protectGlassWindow } = require('./nativeGlassResources');
+const { isValidGlassPresentation } = require('../shared/glassPresentation');
 
 const STARTUP_TIMEOUT_MS = 5000;
 const FIRST_FRAME_BAND_ID = 0;
@@ -38,6 +39,8 @@ class MiniCountdownGlassController {
         this.disposed = false;
         this.window = null;
         this.rect = null;
+        this.presentation = { visible: true, durationMs: 0 };
+        this.panelVisible = null;
         this.panel = null;
         this.geometry = null;
         this.restoreCapture = null;
@@ -150,7 +153,9 @@ class MiniCountdownGlassController {
     }
 
     /** 缓存 renderer 提供的内容区域 DIP 矩形；空值立即停止捕获。 */
-    updateRect(rect) {
+    updateRect(rect, presentation) {
+        if (!isValidGlassPresentation(presentation)) return;
+        this.presentation = presentation ? { ...presentation } : { visible: true, durationMs: 0 };
         this.rect = rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
             rect.x >= 0 && rect.y >= 0 && rect.width > 0 && rect.height > 0 &&
             (rect.cornerRadius === undefined || Number.isFinite(rect.cornerRadius))
@@ -206,10 +211,13 @@ class MiniCountdownGlassController {
                 return;
             }
             if (!sameBounds(this.geometry.bounds, geometry.bounds)) this.panel.setBounds(geometry.bounds);
+            if (!this.active && (this.geometry.bounds.width !== geometry.bounds.width ||
+                this.geometry.bounds.height !== geometry.bounds.height)) this.setFirstFrameBand(geometry.bounds);
             if (Object.keys(geometry.params).some(key => this.geometry.params[key] !== geometry.params[key])) {
                 this.panel.setParams(geometry.params);
             }
             this.geometry = geometry;
+            this.syncPresentation();
         } catch (error) {
             this.fail(error);
         }
@@ -239,11 +247,17 @@ class MiniCountdownGlassController {
         if (!this.panel) throw new Error('原生液态玻璃面板创建失败');
         // 先取得句柄，采样初始化异常时才能独立销毁面板而不停止其他区域。
         // 中心 2x2 采样避开圆角遮罩，并避免原生降采样后区域为空。
+        this.setFirstFrameBand(geometry.bounds);
+        this.panel.show(this.presentation.visible ? this.presentation.durationMs : 0);
+        this.panelVisible = true;
+    }
+
+    /** 收拢途中尚未首帧就绪时，让微小采样区域继续位于当前面板中心。 */
+    setFirstFrameBand(bounds) {
         this.panel.setLumaBands([{ id: FIRST_FRAME_BAND_ID,
-            x: Math.max(0, Math.floor((geometry.bounds.width - 2) / 2)),
-            y: Math.max(0, Math.floor((geometry.bounds.height - 2) / 2)),
+            x: Math.max(0, Math.floor((bounds.width - 2) / 2)),
+            y: Math.max(0, Math.floor((bounds.height - 2) / 2)),
             width: 2, height: 2 }]);
-        this.panel.show(0);
     }
 
     /** 只有当前代面板的有效首帧可移除黑底，之后关闭亮度回读。 */
@@ -256,6 +270,7 @@ class MiniCountdownGlassController {
             this.panel.onLuma(null);
             this.clearTimer(this.startupTimer);
             this.startupTimer = null;
+            this.syncPresentation(true);
             this.setActive(true);
         } catch (error) {
             this.fail(error);
@@ -269,6 +284,14 @@ class MiniCountdownGlassController {
         this.notifyState();
     }
 
+    /** 只在目标显隐改变时调用原生淡化，保留首帧握手与共享资源。 */
+    syncPresentation(firstFrame = false) {
+        if (!this.panel || (!this.active && !firstFrame) || this.panelVisible === this.presentation.visible) return;
+        if (this.presentation.visible) this.panel.show(this.presentation.durationMs);
+        else this.panel.hide(this.presentation.durationMs);
+        this.panelVisible = this.presentation.visible;
+    }
+
     /** 使回调失效，恢复黑底并释放面板、捕获线程及主窗口保护。 */
     destroyPanel() {
         ++this.generation;
@@ -279,6 +302,7 @@ class MiniCountdownGlassController {
         const restoreCapture = this.restoreCapture;
         const releaseNative = this.releaseNative;
         this.panel = null;
+        this.panelVisible = null;
         this.geometry = null;
         this.restoreCapture = null;
         this.releaseNative = null;

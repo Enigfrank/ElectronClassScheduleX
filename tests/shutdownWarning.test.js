@@ -109,6 +109,7 @@ function createMiniCountdownHarness(clock) {
         document: { getElementById: () => element, querySelector: () => element },
         createMiniCountdownGlass: () => ({ destroy() {}, reportInteractiveRect() {} }),
         createToolbarGlass: () => ({ destroy() {}, reportRects() {} }),
+        createToolbarTransition: () => ({ setState() {}, isRunning: () => false, destroy() {} }),
         Date: clock.Date,
         setTimeout: clock.setTimeout,
         clearTimeout: clock.clearTimeout

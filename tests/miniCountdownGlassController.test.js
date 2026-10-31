@@ -5,6 +5,7 @@ const path = require('node:path');
 const { test, mock } = require('node:test');
 const vm = require('node:vm');
 const MiniCountdownGlassController = require('../src/modules/miniCountdownGlassController');
+const registerWindowIpc = require('../src/modules/ipc/registerWindowIpc');
 const { createRequire } = require('node:module');
 const { defaults } = require('../src/shared/miniCountdownGlassStyle.json');
 
@@ -241,6 +242,154 @@ test('相同几何不重复更新原生矩形或参数，半径改变只发送�
     h.controller.updateRect({ ...RECT, x: 25, cornerRadius: 12 });
     assert.equal(panel.setParams.mock.callCount(), 1);
     h.controller.shutdown();
+});
+
+test('过渡只切换原生显隐且不销毁，逐帧几何不重启淡化，空矩形仍立即释放', () => {
+    const h = createHarness();
+    const panel = enable(h);
+    panel.config.onLuma(FRAME);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 80 });
+    h.controller.updateRect({ ...RECT, width: 120 }, { visible: false, durationMs: 80 });
+    h.window.emit('move');
+    assert.deepEqual(calls(panel.hide), [[80]]);
+    assert.equal(panel.destroy.mock.callCount(), 0);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.equal(h.controller.active, true);
+    h.controller.updateRect(RECT, { visible: true, durationMs: 100 });
+    h.controller.updateRect(RECT, { visible: true, durationMs: 100 });
+    assert.deepEqual(calls(panel.show), [[0], [100]]);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 200 });
+    h.controller.updateRect(null);
+    assert.equal(panel.destroy.mock.callCount(), 1);
+    assert.deepEqual(calls(panel.hide), [[80], [200], [0]]);
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    assert.equal(h.timers.size, 0);
+    h.controller.shutdown();
+});
+
+test('动画准备仍等待有效首帧，关闭目标在首帧后隐藏且普通更新可立即恢复', () => {
+    const h = createHarness();
+    h.controller.setEnabled(true);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 0 });
+    const panel = h.panels[0];
+    assert.deepEqual(calls(panel.show), [[0]]);
+    assert.equal(panel.hide.mock.callCount(), 0);
+    panel.config.onLuma(FRAME);
+    assert.equal(h.controller.active, true);
+    assert.equal(h.timers.size, 0);
+    assert.deepEqual(calls(panel.hide), [[0]]);
+    h.controller.updateRect(RECT);
+    assert.deepEqual(calls(panel.show), [[0], [0]]);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 401 });
+    assert.equal(panel.hide.mock.callCount(), 1);
+    assert.equal(h.controller.enabled, true);
+    h.controller.shutdown();
+});
+
+test('首帧未到时收拢面板同步采样中心，避免旧采样区超出新尺寸', () => {
+    const h = createHarness();
+    const panel = enable(h, { ...RECT, width: 600 });
+    h.controller.updateRect({ ...RECT, width: 60 });
+    assert.deepEqual(calls(panel.setLumaBands).at(-1), [[{ id: 0, x: 29, y: 19, width: 2, height: 2 }]]);
+    panel.config.onLuma(FRAME);
+    const bandUpdates = panel.setLumaBands.mock.callCount();
+    h.controller.updateRect({ ...RECT, width: 80 });
+    assert.equal(panel.setLumaBands.mock.callCount(), bandUpdates);
+    assert.equal(h.controller.active, true);
+    assert.equal(h.timers.size, 0);
+    h.controller.shutdown();
+});
+
+test('首帧前多次反转只执行最新显隐目标，二维缩放按物理像素更新采样', t => {
+    const h = createHarness({ scale: 1.5 });
+    t.after(() => h.controller.shutdown());
+    h.controller.setEnabled(true);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 80 });
+    const panel = h.panels[0];
+    h.controller.updateRect({ ...RECT, width: 60, height: 20 }, { visible: true, durationMs: 100 });
+    h.controller.updateRect({ ...RECT, width: 40, height: 12 }, { visible: false, durationMs: 200 });
+    assert.deepEqual(calls(panel.setLumaBands).at(-1), [[{ id: 0, x: 29, y: 8, width: 2, height: 2 }]]);
+    panel.config.onLuma({});
+    assert.equal(panel.hide.mock.callCount(), 0);
+    assert.equal(h.controller.active, false);
+    assert.equal(h.timers.size, 1);
+    panel.config.onLuma(FRAME);
+    assert.deepEqual(calls(panel.show), [[0]]);
+    assert.deepEqual(calls(panel.hide), [[200]]);
+    assert.equal(h.controller.active, true);
+    assert.equal(h.timers.size, 0);
+    assert.equal(h.onError.mock.callCount(), 0);
+});
+
+test('首帧前普通矩形清除隐藏目标，不执行过期的淡出', t => {
+    const h = createHarness();
+    t.after(() => h.controller.shutdown());
+    h.controller.setEnabled(true);
+    h.controller.updateRect(RECT, { visible: false, durationMs: 200 });
+    const panel = h.panels[0];
+    h.controller.updateRect(RECT);
+    panel.config.onLuma(FRAME);
+    assert.deepEqual(calls(panel.show), [[0]]);
+    assert.equal(panel.hide.mock.callCount(), 0);
+    assert.equal(h.controller.active, true);
+});
+
+test('淡化与首帧前采样更新失败均释放资源，迟到首帧不能重新激活', t => {
+    for (const operation of ['firstHide', 'hide', 'show', 'resizeSample']) {
+        const h = createHarness();
+        t.after(() => h.controller.shutdown());
+        h.controller.setEnabled(true);
+        h.controller.updateRect(RECT, { visible: operation !== 'firstHide', durationMs: 80 });
+        const panel = h.panels[0];
+        if (operation === 'resizeSample') {
+            panel.setLumaBands.mock.mockImplementation(() => { throw new Error(operation); });
+            h.controller.updateRect({ ...RECT, width: 60 }, { visible: false, durationMs: 80 });
+        } else {
+            if (operation !== 'firstHide') panel.config.onLuma(FRAME);
+            if (operation === 'show') h.controller.updateRect(RECT, { visible: false, durationMs: 80 });
+            panel[operation === 'show' ? 'show' : 'hide'].mock.mockImplementation(() => { throw new Error(operation); });
+            if (operation === 'firstHide') panel.config.onLuma(FRAME);
+            else h.controller.updateRect(RECT, { visible: operation === 'show', durationMs: 100 });
+        }
+        assert.equal(h.controller.enabled, false, operation);
+        assert.equal(h.controller.active, false, operation);
+        assert.equal(h.controller.panel, null, operation);
+        assert.equal(panel.destroy.mock.callCount(), 1, operation);
+        assert.equal(h.native.shutdown.mock.callCount(), 1, operation);
+        assert.equal(calls(h.native.setWindowCapturePolicy).at(-1)[1], 'none', operation);
+        assert.equal(h.timers.size, 0, operation);
+        panel.config.onLuma(FRAME);
+        assert.equal(h.controller.active, false, operation);
+        assert.equal(h.onError.mock.callCount(), 1, operation);
+    }
+});
+
+test('等待首帧或已淡出的面板在窗口生命周期结束时仍立即销毁', t => {
+    for (const ready of [false, true]) {
+        for (const operation of ['null', 'hide', 'minimize', 'reload', 'shutdown']) {
+            const h = createHarness();
+            t.after(() => h.controller.shutdown());
+            h.controller.setEnabled(true);
+            h.controller.updateRect(RECT, { visible: false, durationMs: 400 });
+            const panel = h.panels[0];
+            if (ready) panel.config.onLuma(FRAME);
+            if (operation === 'null') h.controller.updateRect(null, { visible: false, durationMs: 400 });
+            if (operation === 'hide') h.window.hide();
+            if (operation === 'minimize') {
+                h.window.minimized = true;
+                h.window.emit('minimize');
+            }
+            if (operation === 'reload') h.window.webContents.emit('did-start-loading');
+            if (operation === 'shutdown') h.controller.shutdown();
+            assert.deepEqual(calls(panel.hide).at(-1), [0], operation);
+            assert.equal(panel.destroy.mock.callCount(), 1, operation);
+            assert.equal(h.native.shutdown.mock.callCount(), 1, operation);
+            assert.equal(h.timers.size, 0, operation);
+            panel.config.onLuma(FRAME);
+            assert.equal(h.controller.active, false, operation);
+            assert.equal(h.onError.mock.callCount(), 0, operation);
+        }
+    }
 });
 
 test('使用显示器局部 DIP 到物理角点转换，并限制物理圆角', () => {
@@ -655,6 +804,69 @@ test('WindowManager 启动、重载、重建和重新启动恢复持久化样式
     restarted.manager.updateMiniCountdownGlass(RECT);
     assert.equal(restarted.panels.at(-1).config.blurSigma, 4);
     restarted.app.emit('before-quit');
+});
+
+test('真实 IPC 经 WindowManager 控制五个面板淡化，全部释放前保留共享捕获且不持久化', t => {
+    const h = createWindowManagerHarness({ persisted: true, globalPersisted: true });
+    t.after(() => h.app.emit('before-quit'));
+    const main = h.manager.createMainWindow();
+    const handlers = new Map();
+    registerWindowIpc({
+        ipcMain: { on: (channel, handler) => handlers.set(channel, handler) },
+        windowManager: h.manager,
+        screen: h.screen,
+        log() {}
+    });
+    const mini = handlers.get('mini-countdown-glass-rect');
+    const toolbar = handlers.get('toolbar-glass-rect');
+    const event = { sender: main.webContents };
+    const hidden = { visible: false, durationMs: 180 };
+    mini({ sender: {} }, RECT, hidden);
+    toolbar({ sender: {} }, { id: 'classContainer', rect: RECT, presentation: hidden });
+    assert.equal(h.panels.length, 0);
+    const surfaces = [
+        { send: (rect, presentation) => mini(event, rect, presentation),
+            controller: h.manager.miniCountdownGlassController },
+        ...['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint'].map(id => ({
+            send: (rect, presentation) => toolbar(event, { id, rect, presentation }),
+            controller: h.manager.toolbarGlassControllers[id]
+        }))
+    ];
+    for (const surface of surfaces) {
+        surface.send(RECT, hidden);
+        const panel = surface.controller.panel;
+        panel.config.onLuma(FRAME);
+        assert.deepEqual(calls(panel.hide), [[180]]);
+        assert.equal(surface.controller.active, true);
+    }
+    const stateCount = main.webContents.send.mock.callCount();
+    for (const surface of surfaces) {
+        const panel = surface.controller.panel;
+        surface.send(RECT, { visible: true, durationMs: 120 });
+        surface.send({ ...RECT, width: 120 }, { visible: true, durationMs: 120 });
+        assert.deepEqual(calls(panel.show), [[0], [120]]);
+        surface.send(RECT, { visible: false, durationMs: 90 });
+        surface.send({ ...RECT, width: 60 }, { visible: false, durationMs: 90 });
+        assert.deepEqual(calls(panel.hide), [[180], [90]]);
+        surface.send(RECT);
+        assert.deepEqual(calls(panel.show).at(-1), [0]);
+        assert.equal(surface.controller.panel, panel);
+        assert.equal(surface.controller.active, true);
+        assert.equal(panel.destroy.mock.callCount(), 0);
+    }
+    assert.equal(h.panels.length, 5);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all']]);
+    assert.equal(main.webContents.send.mock.callCount(), stateCount);
+    assert.equal(h.config.set.mock.callCount(), 0);
+    assert.equal(h.manager.getWindow('touchDragOverlay').setBounds.mock.callCount(), 0);
+    for (const surface of surfaces.slice(0, -1)) surface.send(null);
+    assert.equal(h.native.shutdown.mock.callCount(), 0);
+    surfaces.at(-1).send(null);
+    assert.equal(h.native.shutdown.mock.callCount(), 1);
+    assert.deepEqual(calls(h.native.setWindowCapturePolicy), [[main, 'all'], [main, 'none']]);
+    assert.ok(h.panels.every(panel => panel.destroy.mock.callCount() === 1));
+    assert.equal(h.timers.size, 0);
 });
 
 test('主课表独立启停，下节提示跟随迷你倒计时，最后一个面板关闭才释放共享捕获', t => {

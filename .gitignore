@@ -126,6 +126,8 @@ agent.md
 !/tests/scheduleStyleSliders.test.js
 !/tests/shutdownWarning.test.js
 !/tests/shutdownScheduler.test.js
+!/tests/toolbarTransition.test.js
+!/tests/glassTransition.test.js
 /docs
 /.agents
 /.codex

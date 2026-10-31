@@ -69,6 +69,8 @@ function createPageFixture() {
     const fixture = createFixture();
     const frames = new Map();
     let frameId = 0;
+    let transitionOptions;
+    let transitioning = false;
     const { element, bounds, counts } = fixture;
     element.getBoundingClientRect = () => {
         counts.measurements += 1;
@@ -91,6 +93,10 @@ function createPageFixture() {
         },
         createMiniCountdownGlass: () => fixture.sync,
         createToolbarGlass: () => ({ reportRects() {}, destroy() {} }),
+        createToolbarTransition: options => {
+            transitionOptions = options;
+            return { setState() {}, isRunning: () => transitioning, destroy() {} };
+        },
         requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
         cancelAnimationFrame: id => frames.delete(id),
         setTimeout: () => 1,
@@ -104,6 +110,8 @@ function createPageFixture() {
     fixture.messages.length = 0;
     return {
         ...fixture, page: context,
+        beginTransition() { transitionOptions.beforeTransition(); transitioning = true; },
+        endTransition() { transitioning = false; },
         flushFrames() {
             const pending = [...frames.values()];
             frames.clear();
@@ -229,15 +237,51 @@ test('page cleanup removes native state listener and size observer', () => {
     assert.equal(fixture.counts.unsubscribed, 1);
 });
 
-test('a queued drag frame cannot recreate glass after fade-out', () => {
+test('mini过渡覆盖保留presentation并去重，避让立即发送null且恢复后只更新背景', () => {
+    const h = createFixture();
+    h.sync.reportInteractiveRect();
+    h.state({ active: true });
+    h.messages.length = 0;
+    const rect = { x: 240, y: 8, width: 300, height: 40, cornerRadius: 8 };
+    const surface = { rect, presentation: { visible: false, durationMs: 70 } };
+    h.sync.setTransitionSurface(surface);
+    assert.deepEqual(h.messages, [{ channel: 'mini-countdown-glass-rect', value: rect, args: [surface.presentation] }]);
+    h.sync.setTransitionSurface(surface);
+    h.sync.reportInteractiveRect();
+    h.resize();
+    assert.equal(h.messages.length, 1);
+    h.element.ownerDocument.documentElement.style.opacity = '0';
+    h.sync.reportInteractiveRect();
+    assert.deepEqual(h.messages.at(-1), { channel: 'mini-countdown-glass-rect', value: null });
+    h.sync.setTransitionSurface(surface);
+    assert.equal(h.messages.length, 2);
+    h.element.ownerDocument.documentElement.style.opacity = '1';
+    h.sync.reportInteractiveRect();
+    assert.deepEqual(h.messages.at(-1).args, [surface.presentation]);
+    h.sync.setTransitionSurface(null);
+    assert.deepEqual(h.messages.at(-1), {
+        channel: 'mini-countdown-glass-rect', value: { ...h.bounds, cornerRadius: 16 }
+    });
+    assert.equal(h.messages.filter(message => message.channel === 'updateInteractiveRect').length, 0);
+    h.sync.destroy();
+});
+
+test('形态切换先结束拖动并取消排队帧，动画期间锁定手势，退场后不重建玻璃', () => {
     const fixture = createPageFixture();
     fixture.page.startMiniCountdownDrag(1, 100, 8);
     fixture.page.updateMiniCountdownDragPosition(140, 20);
-    fixture.page.toggleElement(fixture.element, false);
+    fixture.beginTransition();
+    assert.equal(fixture.messages.filter(message => message.channel === 'setDragState').at(-1).value, false);
+    assert.equal(fixture.page.startMiniCountdownDrag(2, 140, 20), false);
+    fixture.element.style.display = 'none';
+    fixture.sync.reportInteractiveRect();
+    const beforeFlush = fixture.messages.length;
     fixture.flushFrames();
-    assert.equal(fixture.messages.filter(message => message.channel === 'mini-countdown-glass-rect').length, 0);
+    assert.equal(fixture.messages.length, beforeFlush);
     assert.equal(fixture.messages.filter(message => message.channel === 'updateInteractiveRect').at(-1).value, null);
-    fixture.page.toggleElement(fixture.element, true);
+    fixture.endTransition();
+    fixture.element.style.display = 'block';
+    fixture.sync.reportInteractiveRect();
     assert.equal(fixture.page.startMiniCountdownDrag(2, 140, 20), true);
     fixture.page.finishMiniCountdownDrag(2);
 });
@@ -506,6 +550,49 @@ test('区域移出窗口左侧或上侧时上报空矩形，避免 IPC 拒绝负
         h.sync.reportRects();
         assert.equal(h.messages.at(-1).payload.rect[axis], 8);
     }
+    h.sync.destroy();
+});
+
+test('课表显式过渡覆盖不受源节点隐藏干扰，presentation变化独立上报，避让仍即时释放', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    h.elements.classContainer.computed.visibility = 'hidden';
+    const rect = { x: 300, y: 8, width: 320, height: 40, cornerRadius: 8 };
+    const surface = { rect, presentation: { visible: false, durationMs: 70 } };
+    h.sync.setTransitionSurface('classContainer', surface);
+    assert.deepEqual(h.messages.at(-1).payload, { id: 'classContainer', ...surface });
+    const baseline = h.messages.length;
+    h.sync.setTransitionSurface('classContainer', surface);
+    assert.equal(h.messages.length, baseline);
+    const shown = { rect, presentation: { visible: true, durationMs: 60 } };
+    h.sync.setTransitionSurface('classContainer', shown);
+    assert.deepEqual(h.messages.at(-1).payload, { id: 'classContainer', ...shown });
+    h.document.documentElement.style.opacity = '0';
+    h.sync.reportRects();
+    assert.ok(h.messages.slice(baseline + 1).every(message => message.payload.rect === null));
+    h.document.documentElement.style.opacity = '1';
+    h.sync.reportRects();
+    const restored = h.messages.findLast(message => message.payload.id === 'classContainer');
+    assert.deepEqual(restored.payload, { id: 'classContainer', ...shown });
+    h.sync.setTransitionSurface('classContainer', null);
+    assert.deepEqual(h.messages.at(-1).payload, { id: 'classContainer', rect: null });
+    h.sync.destroy();
+});
+
+test('同帧先安装所有区域覆盖再上报，未就绪侧栏不能被中间测量提前创建', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    const baseline = h.messages.length;
+    const surface = { rect: { x: 300, y: 8, width: 300, height: 40, cornerRadius: 8 },
+        presentation: { visible: true, durationMs: 0 } };
+    h.sync.setTransitionSurface('classContainer', surface, false);
+    h.sync.setTransitionSurface('countdownSidebar', { rect: null, presentation: { visible: false, durationMs: 70 } }, false);
+    h.sync.setTransitionSurface('countdowner', { rect: null, presentation: { visible: false, durationMs: 70 } }, false);
+    assert.equal(h.messages.length, baseline);
+    h.sync.reportRects();
+    assert.deepEqual(h.messages.slice(baseline).map(message => [message.payload.id, message.payload.rect]), [
+        ['classContainer', surface.rect], ['countdownSidebar', null], ['countdowner', null]
+    ]);
     h.sync.destroy();
 });
 

@@ -32,6 +32,9 @@
     let lastRect;
     let lastGlassRect;
     let glassVisible = true;
+    let transitionSurface = null;
+    let lastPresentation;
+    let destroyed = false;
 
     /** 根节点的指针避让只抑制原生背景，不改变交互矩形。 */
     function isGlassVisible() {
@@ -59,15 +62,25 @@
     }
 
     /** 仅移动原生背景，拖动期间保持触摸覆盖窗口的位置不变。 */
-    function reportGlassRect(rect) {
+    function reportGlassRect(rect, presentation, force = false) {
       if (!isGlassVisible()) rect = null;
-      if (!active || sameRect(lastGlassRect, rect)) return;
+      if (!rect) presentation = undefined;
+      if (destroyed || (!active && !force) || (sameRect(lastGlassRect, rect) &&
+        lastPresentation?.visible === presentation?.visible &&
+        lastPresentation?.durationMs === presentation?.durationMs)) return;
       lastGlassRect = rect;
-      api.send('mini-countdown-glass-rect', rect);
+      lastPresentation = presentation;
+      if (presentation) api.send('mini-countdown-glass-rect', rect, presentation);
+      else api.send('mini-countdown-glass-rect', rect);
     }
 
     /** 尺寸或位置实际变化后才更新交互区，拖动结束时恢复完整同步。 */
     function reportInteractiveRect() {
+      if (destroyed) return;
+      if (transitionSurface) {
+        reportGlassRect(transitionSurface.rect, transitionSurface.presentation, true);
+        return;
+      }
       const rect = readRect();
       const visible = isGlassVisible();
       if (glassVisible !== visible) {
@@ -82,13 +95,14 @@
       if (sameRect(lastRect, rect)) return;
       lastRect = rect;
       lastGlassRect = visible ? rect : null;
+      lastPresentation = undefined;
       if (visible) api.send('updateInteractiveRect', rect);
       else api.send('updateInteractiveRect', rect, false);
     }
 
     /** 复用拖动帧已有的坐标与尺寸，避免为玻璃额外测量布局。 */
     function reportDragPosition({ x, y, width, height }) {
-      if (!active || !dragging || element.style.display !== 'block' || element.classList.contains('fade-hidden')) return;
+      if (transitionSurface || !active || !dragging || element.style.display !== 'block' || element.classList.contains('fade-hidden')) return;
       reportGlassRect({ x, y, width, height, cornerRadius: lastRect?.cornerRadius ?? 0 });
     }
 
@@ -100,7 +114,19 @@
       active = nextActive;
       lastGlassRect = undefined;
       element.classList.toggle('liquidGlass', active);
-      if (active) reportGlassRect(readRect());
+      if (transitionSurface) reportInteractiveRect();
+      else if (active) reportGlassRect(readRect());
+    }
+
+    /** 过渡期间保留原生资源并暂停交互矩形写入，防止旧交互消息重置背景。 */
+    function setTransitionSurface(surface) {
+      if (destroyed) return;
+      transitionSurface = surface;
+      if (surface) reportInteractiveRect();
+      else {
+        reportGlassRect(readRect(), undefined, true);
+        reportInteractiveRect();
+      }
     }
 
     /** 记录拖动状态，避免输入覆盖窗口在手指下移动。 */
@@ -114,11 +140,12 @@
 
     /** 页面销毁时移除订阅与尺寸观察，避免重载后残留同步。 */
     function destroy() {
+      destroyed = true;
       observer.disconnect();
       unsubscribe();
     }
 
-    return { reportInteractiveRect, reportDragPosition, setDragging, destroy };
+    return { reportInteractiveRect, reportDragPosition, setDragging, setTransitionSurface, destroy };
   }
 
   if (typeof module === 'object' && module.exports) {

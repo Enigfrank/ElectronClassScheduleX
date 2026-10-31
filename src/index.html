@@ -11,7 +11,9 @@
   <script type="text/javascript" src="js/scheduleBootstrap.js"></script>
   <script type="text/javascript" src="js/miniCountdownGlass.js"></script>
   <script type="text/javascript" src="js/toolbarGlass.js"></script>
+  <script type="text/javascript" src="js/toolbarTransition.js"></script>
   <link rel="stylesheet" type="text/css" href="css/style.css">
+  <link rel="stylesheet" type="text/css" href="css/toolbarTransition.css">
 </head>
 
 <body>
@@ -35,7 +37,7 @@
       <div class="corner">天</div>
     </div>
   </div>
-  <div class="miniCountdown" id="miniCountdown">00:00</div>
+  <div class="miniCountdown" id="miniCountdown"><div class="currentClass" id="miniCurrentFullName"></div><div class="countdown miniCountdownText" id="miniCountdownText">00:00</div></div>
   <div class="dragBoundaryHint" id="dragBoundaryHint" aria-hidden="true"></div>
   <div class="nextClassHint" id="nextClassHint"></div>
   </div>
@@ -56,6 +58,8 @@
   let countdownText = document.getElementById('countdownText')
   let countdownDays = document.getElementById('countdownDays')
   let miniCountdown = document.getElementById('miniCountdown')
+  const miniCurrentFullName = document.getElementById('miniCurrentFullName')
+  const miniCountdownText = document.getElementById('miniCountdownText')
   let countdownSidebar = document.getElementById('countdownSidebar')
   let root = document.querySelector(':root');
   const globalContainerHitTargets = [globalContainer, ...globalContainer.children];
@@ -93,10 +97,18 @@
   let hintTimer = null; 
   const visibilityTransitionDurationMs = 200;
   const toolbarRestoreDelayMs = 2500;
-  const visibilityHideTimers = new WeakMap();
   const miniCountdownGlass = createMiniCountdownGlass({ api: ipcRenderer, element: miniCountdown });
   const toolbarGlass = createToolbarGlass({ api: ipcRenderer, container: globalContainer,
     elements: { classContainer, countdownSidebar, countdowner, nextClassHint } });
+  const toolbarTransition = createToolbarTransition({ container: globalContainer, classContainer,
+    countdownContainer, countdowner, countdownSidebar, miniCountdown, toolbarGlass, miniCountdownGlass,
+    beforeTransition() {
+      if (isDragging) finishMiniCountdownDrag(dragPointerId);
+    },
+    onSettled(state) {
+      if (state.mode !== 'mini' && miniCountdownHasMoved) resetMiniCountdownPosition();
+    } });
+  window.addEventListener('beforeunload', toolbarTransition.destroy, { once: true });
   window.addEventListener('beforeunload', miniCountdownGlass.destroy, { once: true });
   window.addEventListener('beforeunload', toolbarGlass.destroy, { once: true });
 
@@ -125,64 +137,26 @@
     classContainer.innerHTML = classHtml
   }
 
+  /** 根据课程状态统一切换形态，让每秒内容刷新不重播动画。 */
   function setBackgroundDisplay() {
-    let elements = document.getElementsByClassName('background')
-    for (element of elements) {
-      element.style.visibility = (scheduleData.currentHighlight.type === 'current' && isClassHidden) ? 'hidden' : 'visible'
-    }
+    const current = scheduleData.currentHighlight.type === 'current';
+    const hidden = current && isClassHidden;
+    toolbarTransition.setState({
+      mode: hidden ? (isClassCountdown ? 'mini' : 'hidden') : 'full',
+      showCountdown: !current || isClassCountdown,
+      moved: miniCountdownHasMoved
+    });
   }
 
-  /**
-   * 使用统一透明度过渡切换倒计时元素，并跳过重复状态更新。
-   * @param {HTMLElement} element - 要切换的元素
-   * @param {boolean} show - 是否显示元素
-   */
-  function toggleElement(element, show) {
-      const isVisible = element.classList.contains('fade-element');
-      const isHidden = element.classList.contains('fade-hidden');
-
-      if ((show && isVisible) || (!show && (isHidden || element.style.display === 'none'))) {
-          return;
-      }
-
-      const pendingHideTimer = visibilityHideTimers.get(element);
-      if (pendingHideTimer) {
-          clearTimeout(pendingHideTimer);
-          visibilityHideTimers.delete(element);
-      }
-
-      if (show) {
-          element.style.display = 'block';
-          void element.offsetWidth;
-          element.classList.remove('fade-hidden');
-          element.classList.add('fade-element');
-          
-          if (element.id === 'miniCountdown') {
-              updateInteractiveRect();
-          }
-      } else {
-          element.classList.add('fade-hidden');
-          element.classList.remove('fade-element');
-          
-          if (element.id === 'miniCountdown') {
-              if (isDragging) finishMiniCountdownDrag(dragPointerId);
-              updateInteractiveRect();
-          }
-          
-          const hideTimer = setTimeout(() => {
-              if (element.classList.contains('fade-hidden')) {
-                  element.style.display = 'none';
-              }
-              visibilityHideTimers.delete(element);
-          }, visibilityTransitionDurationMs);
-          visibilityHideTimers.set(element, hideTimer);
-      }
-  }
-
+  /** 仅更新发生变化的文本，保留动画中的节点与每秒计时节拍。 */
   function setCountdownerContent() {
-    currentFullName.innerText = scheduleData.currentHighlight.fullName;
-    currentFullName.style.color = scheduleData.currentHighlight.type === 'current' ? 'rgba(0, 255, 10, 1)' : 'rgba(255, 255, 5, 1)'
-    countdownText.innerText = scheduleData.currentHighlight.countdownText;
+    const { fullName, countdownText: text } = scheduleData.currentHighlight;
+    if (currentFullName.innerText !== fullName) currentFullName.innerText = fullName;
+    const color = scheduleData.currentHighlight.type === 'current' ? 'rgb(0, 255, 10)' : 'rgb(255, 255, 5)';
+    if (currentFullName.style.color !== color) currentFullName.style.color = color;
+    if (countdownText.innerText !== text) countdownText.innerText = text;
+    if (miniCurrentFullName.innerText !== fullName) miniCurrentFullName.innerText = fullName;
+    if (miniCountdownText.innerText !== text) miniCountdownText.innerText = text;
 
     // 核心：检查是否距离下课还有10分钟（600秒）
     if (scheduleData.currentHighlight.type === 'current' && scheduleData.currentHighlight.countdown === 600 && !isHintShown) {
@@ -225,40 +199,6 @@
       }
     }
 
-    if (scheduleData.currentHighlight.type === 'current') {
-      if (isClassCountdown) {
-        if (isClassHidden) { // 上课 并且开启了倒计时 并且 隐藏主体 -> 显示小窗口 
-          miniCountdown.innerHTML = `<div class="currentClass">${currentFullName.innerText = scheduleData.currentHighlight.fullName}</div><div class="countdown miniCountdownText">${scheduleData.currentHighlight.countdownText}</div>`
-          
-          toggleElement(countdownContainer, false);
-          toggleElement(miniCountdown, true);
-          
-          // 如果迷你倒计时之前没有移动过，确保它在初始位置
-          if (!miniCountdownHasMoved) {
-            resetMiniCountdownPosition();
-          }
-        } else { // 上课 并且开启了倒计时 并且 不隐藏主体 -> 正常计时
-          toggleElement(countdownContainer, true);
-          toggleElement(miniCountdown, false);
-
-          // 重置迷你倒计时位置
-          resetMiniCountdownPosition();
-        }
-      } else { // 上课 并且关闭了倒计时 -> 都不显示
-        toggleElement(countdownContainer, false);
-        toggleElement(miniCountdown, false);
-
-        // 重置迷你倒计时位置
-        resetMiniCountdownPosition();
-      }
-    }
-    else { // 下课正常显示
-      toggleElement(countdownContainer, true);
-      toggleElement(miniCountdown, false);
-
-      // 重置迷你倒计时位置
-      resetMiniCountdownPosition();
-    }
   }
 
   function setCountdownerPosition() {
@@ -368,7 +308,7 @@
    */
   function startMiniCountdownDrag(pointerId, clientX, clientY, captureTarget = null) {
     const miniCountdown = document.getElementById('miniCountdown');
-    if (miniCountdown.style.display !== 'block' || isDragging) return false;
+    if (miniCountdown.style.display !== 'block' || isDragging || toolbarTransition.isRunning()) return false;
 
     isDragging = true;
     dragPointerId = pointerId;
@@ -559,6 +499,7 @@
   }
 
 
+  /** mini 完全退场后才清除拖动位置，避免下课时先瞬移到顶部。 */
   function resetMiniCountdownPosition() {
     const miniCountdown = document.getElementById('miniCountdown');
     setDragBoundaryHintVisible(false);
@@ -594,8 +535,8 @@
       setScheduleClass()
       setCountdownerPosition()
       setSidebar()
-      setBackgroundDisplay()
     }
+    setBackgroundDisplay()
     lastScheduleData = JSON.parse(JSON.stringify(scheduleData))
   }
 
@@ -637,7 +578,7 @@
    * @param {MouseEvent} event - 窗口转发的鼠标移动事件
    */
   function handlePointerMove(event) {
-    if (miniCountdown.style.display === 'block') {
+    if (miniCountdown.style.display === 'block' && !toolbarTransition.isRunning()) {
       return;
     }
 

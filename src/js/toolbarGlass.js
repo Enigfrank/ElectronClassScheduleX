@@ -16,6 +16,8 @@
     cancelFrame = id => scope.cancelAnimationFrame(id) }) {
     const previousRects = new Map();
     const active = new Set();
+    const transitionSurfaces = new Map();
+    const previousPresentations = new Map();
     let frame = null;
     let destroyed = false;
 
@@ -37,11 +39,25 @@
     function reportRects() {
       if (destroyed) return;
       for (const [id, element] of Object.entries(elements)) {
-        const rect = readRect(element);
-        if (sameRect(previousRects.get(id), rect)) continue;
+        const surface = transitionSurfaces.get(id);
+        const avoided = container.ownerDocument.documentElement.style.opacity === '0';
+        const rect = surface ? (avoided ? null : surface.rect) : readRect(element);
+        const presentation = rect ? surface?.presentation : undefined;
+        const previous = previousPresentations.get(id);
+        if (sameRect(previousRects.get(id), rect) && previous?.visible === presentation?.visible &&
+          previous?.durationMs === presentation?.durationMs) continue;
         previousRects.set(id, rect);
-        api.send('toolbar-glass-rect', { id, rect });
+        previousPresentations.set(id, presentation);
+        api.send('toolbar-glass-rect', { id, rect, ...(presentation ? { presentation } : {}) });
       }
+    }
+
+    /** 动画显式覆盖背景几何；批量覆盖完成后可统一 report，避免提前显示其他区域。 */
+    function setTransitionSurface(id, surface, report = true) {
+      if (destroyed || !Object.hasOwn(elements, id)) return;
+      if (surface) transitionSurfaces.set(id, surface);
+      else transitionSurfaces.delete(id);
+      if (report) reportRects();
     }
 
     /** 将同一帧的内容、尺寸和显示变化合并成一次测量。 */
@@ -98,7 +114,7 @@
       scope.removeEventListener?.('resize', scheduleReport);
     }
 
-    return { reportRects, destroy };
+    return { reportRects, setTransitionSurface, destroy };
   }
 
   if (typeof module === 'object' && module.exports) module.exports = { createToolbarGlass };

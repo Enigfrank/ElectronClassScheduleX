@@ -1,3 +1,5 @@
+const { isValidGlassPresentation } = require('../../shared/glassPresentation');
+
 /**
  * 注册窗口控制与鼠标穿透相关 IPC 事件。
  * @param {{ipcMain: Electron.IpcMain, windowManager: Object, screen: Electron.Screen, log: Function}} dependencies 注册依赖
@@ -171,13 +173,14 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
      * @param {Electron.IpcMainEvent} event IPC 事件
      * @param {{x: number, y: number, width: number, height: number, cornerRadius: number}|null} rect 玻璃矩形
      */
-    function updateGlassDragRect(event, rect) {
+    function updateGlassDragRect(event, rect, presentation) {
         const mainWindow = windowManager.getWindow('main');
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+        if (!isValidGlassPresentation(presentation)) return;
         if (rect !== null && (!rect ||
             ![rect.x, rect.y, rect.width, rect.height, rect.cornerRadius].every(Number.isFinite) ||
             rect.width <= 0 || rect.height <= 0 || rect.cornerRadius < 0)) return;
-        windowManager.updateMiniCountdownGlass?.(rect);
+        windowManager.updateMiniCountdownGlass?.(rect, presentation);
     }
 
     ipcMain.on('mini-countdown-glass-rect', updateGlassDragRect);
@@ -187,11 +190,12 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         const mainWindow = windowManager.getWindow('main');
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
         if (!payload || !['classContainer', 'countdownSidebar', 'countdowner', 'nextClassHint'].includes(payload.id)) return;
+        if (!isValidGlassPresentation(payload.presentation)) return;
         const rect = payload.rect;
         if (rect !== null && (!rect ||
             ![rect.x, rect.y, rect.width, rect.height, rect.cornerRadius].every(Number.isFinite) ||
             rect.x < 0 || rect.y < 0 || rect.width <= 0 || rect.height <= 0 || rect.cornerRadius < 0)) return;
-        windowManager.updateToolbarGlass(payload.id, rect);
+        windowManager.updateToolbarGlass(payload.id, rect, payload.presentation);
     });
 
     ipcMain.on('setDragState', (event, state) => {

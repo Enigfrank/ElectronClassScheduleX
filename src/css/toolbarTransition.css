@@ -1,0 +1,72 @@
+:root {
+    --toolbar-original-background: rgba(0, 0, 0, var(--global-bg-opacity));
+    --toolbar-mini-border: #4caf50;
+    --toolbar-main-opacity: 1;
+    --toolbar-mini-opacity: 1;
+    --toolbar-surface-x: 0px;
+    --toolbar-surface-y: 0px;
+    --toolbar-surface-width: 0px;
+    --toolbar-surface-height: 0px;
+    --toolbar-surface-radius: var(--global-border-radius);
+    --toolbar-surface-opacity: 0;
+    --toolbar-surface-color: var(--toolbar-original-background);
+    --toolbar-surface-border-color: transparent;
+    --toolbar-surface-border-width: 0px;
+    --toolbar-surface-blur: var(--countdown-original-blur);
+    --toolbar-surface-layer: 0;
+    --toolbar-content-layer: 1;
+}
+
+.globalContainer.toolbar-main-hidden {
+    visibility: hidden;
+}
+
+#toolbarTransitionSurface {
+    display: none;
+    position: fixed;
+    left: var(--toolbar-surface-x);
+    top: var(--toolbar-surface-y);
+    width: var(--toolbar-surface-width);
+    height: var(--toolbar-surface-height);
+    border-radius: var(--toolbar-surface-radius);
+    opacity: var(--toolbar-surface-opacity);
+    background-color: var(--toolbar-surface-color);
+    border: var(--toolbar-surface-border-width) solid var(--toolbar-surface-border-color);
+    backdrop-filter: blur(var(--toolbar-surface-blur));
+    pointer-events: none;
+    z-index: var(--toolbar-surface-layer);
+}
+
+.toolbar-transition-running #toolbarTransitionSurface {
+    display: block;
+}
+
+.toolbar-transition-running #classContainer,
+.toolbar-transition-running #miniCountdown {
+    background-color: transparent;
+    border-color: transparent;
+    backdrop-filter: none;
+    transition: none;
+}
+
+.toolbar-transition-running #classContainer > *,
+.toolbar-transition-running #countdownSidebar,
+.toolbar-transition-running #countdowner {
+    opacity: var(--toolbar-main-opacity);
+    transition: none;
+}
+
+.toolbar-transition-running #miniCountdown > * {
+    opacity: var(--toolbar-mini-opacity);
+}
+
+.toolbar-transition-running #globalContainer,
+.toolbar-transition-running #miniCountdown {
+    z-index: var(--toolbar-content-layer);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #toolbarTransitionSurface {
+        backdrop-filter: none;
+    }
+}
