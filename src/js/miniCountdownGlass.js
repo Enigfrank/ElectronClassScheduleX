@@ -106,9 +106,10 @@
       reportGlassRect({ x, y, width, height, cornerRadius: lastRect?.cornerRadius ?? 0 });
     }
 
-    /** 首帧就绪后再移除黑底，失败或关闭时恢复原有样式。 */
+    /** 外观跟随启用偏好，active 仅控制原生首帧后的几何同步。 */
     function handleState(_event, state) {
       if (state?.style) applyGlassStyle(element.ownerDocument, state.style);
+      element.classList.toggle('liquidGlassEnabled', state?.enabled === true);
       const nextActive = state?.active === true;
       if (active === nextActive) return;
       active = nextActive;

@@ -254,9 +254,13 @@
 }
 
 .miniCountdown.liquidGlass,
+.miniCountdown.liquidGlassEnabled,
 .nextClassHint.liquidGlass,
+.nextClassHint.liquidGlassEnabled,
 .globalContainer .background.liquidGlass,
-.globalContainer .countdowner.liquidGlass {
+.globalContainer .background.liquidGlassEnabled,
+.globalContainer .countdowner.liquidGlass,
+.globalContainer .countdowner.liquidGlassEnabled {
     background-color: var(--color-mini-glass-tint);
     border: var(--glass-border-width) solid var(--color-mini-glass-edge);
     backdrop-filter: none;

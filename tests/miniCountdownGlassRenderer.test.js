@@ -150,6 +150,27 @@ test('native readiness controls appearance and failed state restores black', () 
     assert.equal(fixture.messages.filter(message => message.channel === 'updateInteractiveRect').length, 1);
 });
 
+test('mini 隐藏及重建首帧期间保留玻璃外观，只有关闭或失败才回退', () => {
+    const h = createFixture();
+    h.state({ enabled: true, active: false });
+    assert.equal(h.classes.has('liquidGlassEnabled'), true);
+    assert.equal(h.classes.has('liquidGlass'), false);
+    h.state({ enabled: true, active: true });
+    h.element.ownerDocument.documentElement.style.opacity = '0';
+    h.sync.reportInteractiveRect();
+    h.state({ enabled: true, active: false });
+    h.element.ownerDocument.documentElement.style.opacity = '1';
+    h.sync.reportInteractiveRect();
+    assert.equal(h.classes.has('liquidGlassEnabled'), true);
+    assert.equal(h.classes.has('liquidGlass'), false);
+    h.state({ enabled: true, active: true });
+    assert.equal(h.classes.has('liquidGlass'), true);
+    h.state({ enabled: false, active: false });
+    assert.equal(h.classes.has('liquidGlassEnabled'), false);
+    assert.equal(h.classes.has('liquidGlass'), false);
+    h.sync.destroy();
+});
+
 test('custom glass color updates one scoped stylesheet without inline styles or repeated geometry IPC', () => {
     const fixture = createFixture();
     const style = { backgroundColor: '#1234Ab', blurSigma: 1, opacity: 0.45 };
@@ -512,6 +533,31 @@ test('区域首帧和颜色推送独立处理，样式事件不测量布局或�
     assert.equal(h.counts.measurements, baseline);
     assert.equal(h.messages.length, 4);
     assert.equal(h.counts.styles, 2);
+    h.sync.destroy();
+});
+
+test('课表各区域及下节提示在首帧等待期间独立保留玻璃外观', () => {
+    const h = createToolbarFixture();
+    h.flush();
+    for (const [id, element] of Object.entries(h.elements)) {
+        h.state({ id, enabled: true, active: false });
+        assert.equal(element.classList.contains('liquidGlassEnabled'), true);
+        assert.equal(element.classList.contains('liquidGlass'), false);
+        h.state({ id, enabled: true, active: true });
+    }
+    h.document.documentElement.style.opacity = '0';
+    h.sync.reportRects();
+    for (const id of Object.keys(h.elements)) h.state({ id, enabled: true, active: false });
+    h.document.documentElement.style.opacity = '1';
+    h.sync.reportRects();
+    for (const element of Object.values(h.elements)) {
+        assert.equal(element.classList.contains('liquidGlassEnabled'), true);
+        assert.equal(element.classList.contains('liquidGlass'), false);
+    }
+    for (const id of Object.keys(h.elements)) h.state({ id, enabled: false, active: false });
+    for (const element of Object.values(h.elements)) {
+        assert.equal(element.classList.contains('liquidGlassEnabled'), false);
+    }
     h.sync.destroy();
 });
 

@@ -105,8 +105,11 @@ class MiniCountdownGlassController {
     setEnabled(enabled) {
         if (this.disposed) return false;
         if (enabled !== true) {
+            const wasEnabled = this.enabled;
+            const wasActive = this.active;
             this.enabled = false;
             const error = this.destroyPanel();
+            if (wasEnabled && !wasActive) this.notifyState();
             if (error) this.onError(error);
             return false;
         }
@@ -116,6 +119,7 @@ class MiniCountdownGlassController {
             if (!this.native) this.native = this.loadNative();
             if (!this.native?.isSupported()) throw new Error('当前设备不支持原生液态玻璃');
             this.sync();
+            if (this.enabled) this.notifyState();
         } catch (error) {
             this.fail(error);
         }
@@ -147,9 +151,9 @@ class MiniCountdownGlassController {
         return true;
     }
 
-    /** 推送独立样式快照，允许 active 不变时同步色值和透明度。 */
+    /** 分别推送玻璃偏好和首帧状态，临时销毁面板不切回普通外观。 */
     notifyState() {
-        this.onState({ active: this.active, style: { ...this.style } });
+        this.onState({ enabled: this.enabled, active: this.active, style: { ...this.style } });
     }
 
     /** 缓存 renderer 提供的内容区域 DIP 矩形；空值立即停止捕获。 */
@@ -292,7 +296,7 @@ class MiniCountdownGlassController {
         this.panelVisible = this.presentation.visible;
     }
 
-    /** 使回调失效，恢复黑底并释放面板、捕获线程及主窗口保护。 */
+    /** 使首帧回调失效并释放资源；外观偏好由 enabled 独立保留。 */
     destroyPanel() {
         ++this.generation;
         if (this.startupTimer !== null) this.clearTimer(this.startupTimer);

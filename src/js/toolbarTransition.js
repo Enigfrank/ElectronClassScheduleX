@@ -78,9 +78,9 @@
       releaseSurfaces();
     }
 
-    /** 按首帧状态选择原版黑底或共享 tint，兼容两个独立玻璃开关。 */
+    /** 按外观偏好选择材质，目标等待首帧时不混入原版黑底。 */
     function appearance(element) {
-      const glass = element.classList.contains('liquidGlass');
+      const glass = element.classList.contains('liquidGlassEnabled') || element.classList.contains('liquidGlass');
       const mini = element === miniCountdown;
       return {
         color: glass ? 'var(--color-mini-glass-tint)' : 'var(--toolbar-original-background)',

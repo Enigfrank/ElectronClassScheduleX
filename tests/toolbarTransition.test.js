@@ -178,6 +178,23 @@ test('未就绪目标不做隐藏预热，源玻璃保留首帧资源，到位�
     assert.deepEqual(h.reports.get('miniCountdown').presentation, { visible: true, durationMs: 60 });
 });
 
+test('双向切换使用已启用的玻璃材质，不因目标尚未首帧就绪混入普通背景', () => {
+    for (const [from, to] of [['full', 'mini'], ['mini', 'full']]) {
+        const h = createFixture();
+        h.classContainer.classList.add('liquidGlassEnabled');
+        h.miniCountdown.classList.add('liquidGlassEnabled');
+        h.state(from);
+        h.state(to);
+        for (const time of [0, 70, 150, 240, 270]) {
+            h.step(time);
+            assert.equal(h.sheet().includes('var(--toolbar-original-background)'), false);
+            assert.equal(h.sheet().includes('var(--toolbar-mini-border)'), false);
+            assert.equal(h.sheet().includes('var(--color-mini-glass-tint)'), true);
+        }
+        h.transition.destroy();
+    }
+});
+
 test('展开中关闭倒计时立即移除文字与原生区域，再打开不重启动画', () => {
     const h = createFixture();
     h.state('mini');

@@ -383,23 +383,25 @@ class WindowManager {
         if (Object.hasOwn(this.toolbarGlassControllers, id)) this.toolbarGlassControllers[id].updateRect(rect, presentation);
     }
 
-    /** 为每个区域分别推送首帧状态，只有就绪的区域才移除原版背景。 */
+    /** 分区域推送玻璃偏好与首帧状态，隐藏后恢复时沿用玻璃外观。 */
     sendToolbarGlassState(id, state) {
         const win = this.windows.main;
         if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-            win.webContents.send('toolbar-glass-state', { id, active: state.active, style: state.style });
+            win.webContents.send('toolbar-glass-state', {
+                id, enabled: state.enabled, active: state.active, style: state.style
+            });
         }
     }
 
     /**
-     * 将当前原生首帧状态发送给主窗口。
-     * @param {{active: boolean}} state 玻璃状态，样式取当前控制器快照
+     * 将玻璃偏好与当前原生首帧状态发送给主窗口。
+     * @param {{enabled: boolean, active: boolean}} state 玻璃状态，样式取当前控制器快照
      */
     sendMiniCountdownGlassState(state) {
         const win = this.windows.main;
         if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
             win.webContents.send('mini-countdown-glass-state', {
-                active: state.active, style: this.getMiniCountdownGlassStyle()
+                enabled: state.enabled, active: state.active, style: this.getMiniCountdownGlassStyle()
             });
         }
     }

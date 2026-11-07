@@ -69,11 +69,12 @@
       });
     }
 
-    /** 忽略原生首帧添加的外观标记，样式推送不会触发额外布局 IPC。 */
+    /** 忽略玻璃外观和首帧标记，尺寸变化仍由 ResizeObserver 上报。 */
     function handleMutations(records) {
       const hasLayoutChange = records.some(record => {
         if (record.type === 'attributes' && record.attributeName === 'class') {
-          const stripGlass = value => (value || '').split(/\s+/).filter(name => name && name !== 'liquidGlass').join(' ');
+          const stripGlass = value => (value || '').split(/\s+/)
+            .filter(name => name && name !== 'liquidGlass' && name !== 'liquidGlassEnabled').join(' ');
           return stripGlass(record.oldValue) !== stripGlass(record.target.className);
         }
         return true;
@@ -81,11 +82,12 @@
       if (hasLayoutChange) scheduleReport();
     }
 
-    /** 颜色修改无须重新测量；每个区域只在原生首帧就绪后进入玻璃外观。 */
+    /** 隐藏和首帧等待保留玻璃外观，就绪标记继续独立控制原生过渡。 */
     function handleState(_event, state) {
       if (!state || !Object.hasOwn(elements, state.id)) return;
       const element = elements[state.id];
       if (state.style) applyStyle(element.ownerDocument, state.style);
+      element.classList.toggle('liquidGlassEnabled', state.enabled === true);
       if (state.active === true) active.add(state.id);
       else active.delete(state.id);
       element.classList.toggle('liquidGlass', state.active === true);

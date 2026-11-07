@@ -116,6 +116,23 @@ function calls(fn) {
     return fn.mock.calls.map(call => call.arguments);
 }
 
+test('玻璃启用状态跨越隐藏和首帧等待，等待期间关闭也通知 renderer', () => {
+    const h = createHarness();
+    assert.equal(calls(h.onState).at(-1)[0].enabled, false);
+    const panel = enable(h);
+    assert.deepEqual(calls(h.onState).at(-1)[0], { enabled: true, active: false, style: defaults });
+    panel.config.onLuma(FRAME);
+    h.controller.updateRect(null);
+    assert.deepEqual(calls(h.onState).at(-1)[0], { enabled: true, active: false, style: defaults });
+    h.controller.updateRect(RECT);
+    assert.equal(h.panels.length, 2);
+    h.controller.setEnabled(false);
+    assert.deepEqual(calls(h.onState).at(-1)[0], { enabled: false, active: false, style: defaults });
+    h.panels.at(-1).config.onLuma(FRAME);
+    assert.equal(calls(h.onState).at(-1)[0].enabled, false);
+    h.controller.shutdown();
+});
+
 test('默认关闭、上报矩形及退出均不加载原生模块', () => {
     const h = createHarness();
     h.controller.updateRect(RECT);
@@ -193,7 +210,11 @@ test('只有有效原生首帧可激活玻璃，之后立即停止亮度回读',
     assert.deepEqual(calls(panel.onLuma), [[null]]);
     assert.equal(h.timers.size, 0);
     panel.config.onLuma(FRAME);
-    assert.deepEqual(calls(h.onState), [[{ active: false, style: defaults }], [{ active: true, style: defaults }]]);
+    assert.deepEqual(calls(h.onState), [
+        [{ enabled: false, active: false, style: defaults }],
+        [{ enabled: true, active: false, style: defaults }],
+        [{ enabled: true, active: true, style: defaults }]
+    ]);
     assert.equal(panel.setLumaBands.mock.callCount(), 2);
     h.controller.shutdown();
 });
@@ -209,7 +230,11 @@ test('有效面板句柄仍需首帧确认，超时关闭且忽略迟到的回�
     assert.equal(panel.destroy.mock.callCount(), 1);
     assert.equal(h.onError.mock.callCount(), 1);
     assert.equal(h.timers.size, 0);
-    assert.deepEqual(calls(h.onState), [[{ active: false, style: defaults }], [{ active: false, style: defaults }]]);
+    assert.deepEqual(calls(h.onState), [
+        [{ enabled: false, active: false, style: defaults }],
+        [{ enabled: true, active: false, style: defaults }],
+        [{ enabled: false, active: false, style: defaults }]
+    ]);
     panel.config.onLuma(FRAME);
     assert.equal(h.controller.active, false);
     const replacement = enable(h);
@@ -649,6 +674,30 @@ function createWindowManagerHarness(options = {}) {
     return { ...h, app, settings, config, logger, manager };
 }
 
+test('WindowManager 将各组启用偏好透传给等待首帧的 renderer，关闭后同步清除', () => {
+    const h = createWindowManagerHarness();
+    const main = h.manager.createMainWindow();
+    h.manager.setMiniCountdownLiquidGlass(true);
+    h.manager.setGlobalContainerLiquidGlass(true);
+    const states = new Map();
+    for (const [channel, state] of calls(main.webContents.send)) {
+        if (channel === 'mini-countdown-glass-state') states.set('miniCountdown', state);
+        if (channel === 'toolbar-glass-state') states.set(state.id, state);
+    }
+    for (const id of ['miniCountdown', 'nextClassHint', 'classContainer', 'countdownSidebar', 'countdowner']) {
+        assert.equal(states.get(id).enabled, true);
+        assert.equal(states.get(id).active, false);
+    }
+    h.manager.setMiniCountdownLiquidGlass(false);
+    h.manager.setGlobalContainerLiquidGlass(false);
+    for (const [channel, state] of calls(main.webContents.send)) {
+        if (channel === 'mini-countdown-glass-state') states.set('miniCountdown', state);
+        if (channel === 'toolbar-glass-state') states.set(state.id, state);
+    }
+    assert.ok([...states.values()].every(state => state.enabled === false && state.active === false));
+    h.app.emit('before-quit');
+});
+
 test('WindowManager 默认关闭、GUI 初始值、失败回退及退出清理接线完整', () => {
     const h = createWindowManagerHarness();
     const main = h.manager.createMainWindow();
@@ -717,7 +766,7 @@ test('关闭模式修改样式推送状态，不加载原生模块且首次加�
     assert.equal(h.controller.setStyle(style), true);
     assert.equal(h.loadNative.mock.callCount(), 0);
     assert.deepEqual(calls(h.onState).at(-1)[0], {
-        active: false, style: { ...style, backgroundColor: '#abcdef' }
+        enabled: false, active: false, style: { ...style, backgroundColor: '#abcdef' }
     });
     h.window.webContents.emit('did-finish-load');
     assert.deepEqual(calls(h.onState).at(-1)[0].style, h.controller.style);
@@ -741,7 +790,7 @@ test('相同样式和仅颜色透明度修改不调用原生 setter，active 不
     assert.equal(h.loadNative.mock.callCount(), 1);
     assert.equal(h.onState.mock.callCount(), initialStates + 2);
     assert.deepEqual(calls(h.onState).at(-1)[0], {
-        active: true, style: { ...style, backgroundColor: '#abcdef' }
+        enabled: true, active: true, style: { ...style, backgroundColor: '#abcdef' }
     });
     h.controller.shutdown();
 });
@@ -788,7 +837,7 @@ test('WindowManager 启动、重载、重建和重新启动恢复持久化样式
     const main = h.manager.createMainWindow();
     assert.deepEqual(h.manager.getMiniCountdownGlassStyle(), normalized);
     assert.deepEqual({ ...calls(main.webContents.send).find(([channel]) => channel === 'mini-countdown-glass-state')[1] }, {
-        active: false, style: normalized
+        enabled: false, active: false, style: normalized
     });
     h.manager.updateMiniCountdownGlass(RECT);
     assert.equal(h.panels.at(-1).config.blurSigma, 4);
