@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AlertIcon,
@@ -47,6 +47,7 @@ import {
 import {
   DeleteButton,
   EditorCard,
+  EditorField,
   ScheduleTypeEditor,
   SubjectMultiSelect,
   SummaryCard,
@@ -77,6 +78,11 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedTimetableType, setSelectedTimetableType] = useState('');
   const [selectedDividerType, setSelectedDividerType] = useState('');
+  const editorId = useId();
+  const editorRef = useRef(null);
+  const pendingFocusRef = useRef(null);
+  const rowIdsRef = useRef(new Map());
+  const nextRowIdRef = useRef(0);
 
   const mutedTextColor = useColorModeValue('gray.600', 'gray.400');
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -90,6 +96,59 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
     return { key, label: normalizedFullName || key };
   }), [config.subject_name]);
 
+  /** 删除提交到 DOM 后聚焦相邻行；未挂载的 VM 渲染不访问文档。 */
+  useLayoutEffect(() => {
+    if (!editorRef.current || !pendingFocusRef.current) return;
+    const target = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    if (target.isConnected) target.focus();
+  }, [config]);
+
+  /**
+   * 为数组行分配仅限本次编辑会话的稳定标识，不写入配置。
+   * @param {string} collection 数组所属分区
+   * @param {number} index 数组位置
+   * @returns {string} 行标识
+   */
+  function getRowId(collection, index) {
+    if (!rowIdsRef.current.has(collection)) rowIdsRef.current.set(collection, []);
+    const ids = rowIdsRef.current.get(collection);
+    if (!ids[index]) {
+      nextRowIdRef.current += 1;
+      ids[index] = `${editorId}-row-${nextRowIdRef.current}`;
+    }
+    return ids[index];
+  }
+
+  /**
+   * 删除前记录下一行、上一行或对应添加按钮，等待本次更新完成再聚焦。
+   * @param {React.MouseEvent<HTMLButtonElement>} event 删除按钮事件
+   * @param {string} addButtonId 所属列表的添加按钮 ID
+   */
+  function queueDeletionFocus(event, addButtonId) {
+    if (!editorRef.current) return;
+    const row = event.currentTarget.closest('[data-editor-row]');
+    const siblings = Array.from(row.parentElement.children).filter((node) => node.hasAttribute('data-editor-row'));
+    const index = siblings.indexOf(row);
+    const adjacent = siblings[index + 1] || siblings[index - 1];
+    pendingFocusRef.current = adjacent?.querySelector('input, select, button')
+      || editorRef.current.ownerDocument.getElementById(addButtonId);
+  }
+
+  /**
+   * 同步删除数组行的会话身份和配置，保留相邻行原有 DOM 与焦点目标。
+   * @param {React.MouseEvent<HTMLButtonElement>} event 删除按钮事件
+   * @param {string} collection 数组所属分区
+   * @param {number} index 删除位置
+   * @param {string} addButtonId 所属列表的添加按钮 ID
+   * @param {(draft: Object) => void} updater 配置删除操作
+   */
+  function deleteIndexedRow(event, collection, index, addButtonId, updater) {
+    queueDeletionFocus(event, addButtonId);
+    rowIdsRef.current.get(collection)?.splice(index, 1);
+    updateConfig(updater);
+  }
+
   /**
    * 使用配置源码刷新编辑器状态
    * @param {string} source JS 配置源码
@@ -101,6 +160,8 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
     const normalized = normalizeScheduleConfigForEditor(parsed);
     const structure = detectSourceStructure(parsed);
 
+    rowIdsRef.current.clear();
+    pendingFocusRef.current = null;
     setConfig(normalized);
     setSourceStructure(structure);
     setSourceText(generateScheduleConfigSource(normalized, structure));
@@ -295,13 +356,15 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
   /**
    * 删除未被每日课表使用的科目。
    * @param {string} key 科目简称
+   * @param {React.MouseEvent<HTMLButtonElement>} event 删除按钮事件
    */
-  const deleteSubject = (key) => {
+  const deleteSubject = (key, event) => {
     const references = findSubjectReferences(config, key);
     if (references.length > 0) {
       setStatus({ type: 'error', message: `科目“${key}”仍被${references.join('、')}引用，不能删除` });
       return;
     }
+    queueDeletionFocus(event, `${editorId}-add-subject`);
     updateConfig((draft) => { delete draft.subject_name[key]; });
   };
 
@@ -319,6 +382,11 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
     }
     updateConfig((draft) => {
       if (renameScheduleTypeReferences(draft, oldType, type)) {
+        const dividerRowIds = rowIdsRef.current.get(`divider:${oldType}`);
+        if (dividerRowIds) {
+          rowIdsRef.current.set(`divider:${type}`, dividerRowIds);
+          rowIdsRef.current.delete(`divider:${oldType}`);
+        }
         setSelectedTimetableType(type);
         setSelectedDividerType(type);
       }
@@ -399,10 +467,10 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
   };
 
   return (
-    <Box maxW="1280px">
+    <Box ref={editorRef} maxW="1280px">
       <Flex align="flex-start" justify="space-between" gap={4} mb={5} flexWrap="wrap">
         <Box>
-          <Text fontSize="xl" fontWeight="semibold">课表配置编辑器(Beta)</Text>
+          <Text as="h2" fontSize="xl" fontWeight="semibold">课表配置编辑器(Beta)</Text>
           <Text fontSize="sm" color={mutedTextColor}>
             直接编辑当前应用使用的 scheduleConfig.js，支持导入和导出
           </Text>
@@ -425,7 +493,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
       </Flex>
 
       {status.message && (
-        <Alert status={status.type} borderRadius="md" mb={4}>
+        <Alert status={status.type} role={status.type === 'error' ? 'alert' : 'status'} aria-live={status.type === 'error' ? 'assertive' : 'polite'} borderRadius="md" mb={4}>
           <AlertIcon />
           <Box whiteSpace="pre-line">{status.message}</Box>
         </Alert>
@@ -477,13 +545,17 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           </TabPanel>
 
           <TabPanel px={0}>
-            <EditorCard title="科目名称" desc="维护课程简称与完整名称的映射关系" action={<Button size="sm" leftIcon={<Plus size={16} />} onClick={addSubject}>添加科目</Button>}>
+            <EditorCard title="科目名称" desc="维护课程简称与完整名称的映射关系" action={<Button id={`${editorId}-add-subject`} size="sm" leftIcon={<Plus size={16} />} onClick={addSubject}>添加科目</Button>}>
               <Flex direction="column" gap={3}>
                 {Object.entries(config.subject_name || {}).map(([key, value]) => (
-                  <SimpleGrid key={key} columns={[1, 1, 3]} gap={3} alignItems="center">
-                    <Input defaultValue={key} onBlur={(event) => renameSubject(key, event.target.value)} placeholder="科目简写" />
-                    <Input value={value} onChange={(event) => updateConfig((draft) => { draft.subject_name[key] = event.target.value; })} placeholder="科目全称" />
-                    <DeleteButton label="删除科目" onClick={() => deleteSubject(key)} />
+                  <SimpleGrid key={key} data-editor-row columns={[1, 1, 3]} gap={3} alignItems="center">
+                    <EditorField label="科目简写" context={key}>
+                      <Input defaultValue={key} onBlur={(event) => renameSubject(key, event.target.value)} placeholder="科目简写" />
+                    </EditorField>
+                    <EditorField label="科目全称" context={key}>
+                      <Input value={value} onChange={(event) => updateConfig((draft) => { draft.subject_name[key] = event.target.value; })} placeholder="科目全称" />
+                    </EditorField>
+                    <DeleteButton label={`删除科目：${key}`} onClick={(event) => deleteSubject(key, event)} />
                   </SimpleGrid>
                 ))}
               </Flex>
@@ -493,6 +565,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           <TabPanel px={0}>
             <EditorCard title="时间表" desc="配置不同类型日程的时间段与课程编号" action={<Button size="sm" leftIcon={<Plus size={16} />} onClick={addTimetableType}>添加类型</Button>}>
               <ScheduleTypeEditor
+                label="时间表"
                 selectedType={selectedTimetableType}
                 types={timetableTypes}
                 onSelect={setSelectedTimetableType}
@@ -502,13 +575,20 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
               {selectedTimetableType && (
                 <Flex direction="column" gap={3} mt={4}>
                   {Object.entries(config.timetable[selectedTimetableType] || {}).map(([timeRange, content]) => (
-                    <SimpleGrid key={timeRange} columns={[1, 1, 3]} gap={3} alignItems="center">
-                      <Input defaultValue={timeRange} onBlur={(event) => updateConfig((draft) => renameObjectKey(draft.timetable[selectedTimetableType], timeRange, normalizeTimeRange(event.target.value), null))} placeholder="08:00-08:39" />
-                      <Input value={String(content)} onChange={(event) => updateConfig((draft) => { draft.timetable[selectedTimetableType][timeRange] = parseTypedValue(event.target.value); })} placeholder="课程序号或文本" />
-                      <DeleteButton label="删除时间段" onClick={() => updateConfig((draft) => { delete draft.timetable[selectedTimetableType][timeRange]; })} />
+                    <SimpleGrid key={timeRange} data-editor-row columns={[1, 1, 3]} gap={3} alignItems="center">
+                      <EditorField label="时间段" context={`${selectedTimetableType}：${timeRange}`}>
+                        <Input defaultValue={timeRange} onBlur={(event) => updateConfig((draft) => renameObjectKey(draft.timetable[selectedTimetableType], timeRange, normalizeTimeRange(event.target.value), null))} placeholder="08:00-08:39" />
+                      </EditorField>
+                      <EditorField label="课程序号或文本" context={`${selectedTimetableType}：${timeRange}`}>
+                        <Input value={String(content)} onChange={(event) => updateConfig((draft) => { draft.timetable[selectedTimetableType][timeRange] = parseTypedValue(event.target.value); })} placeholder="课程序号或文本" />
+                      </EditorField>
+                      <DeleteButton label={`删除时间段：${selectedTimetableType} ${timeRange}`} onClick={(event) => {
+                        queueDeletionFocus(event, `${editorId}-add-time-range`);
+                        updateConfig((draft) => { delete draft.timetable[selectedTimetableType][timeRange]; });
+                      }} />
                     </SimpleGrid>
                   ))}
-                  <Button size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} onClick={() => updateConfig((draft) => { draft.timetable[selectedTimetableType][nextTimeRangeKey(draft.timetable[selectedTimetableType])] = 0; })}>
+                  <Button id={`${editorId}-add-time-range`} size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} onClick={() => updateConfig((draft) => { draft.timetable[selectedTimetableType][nextTimeRangeKey(draft.timetable[selectedTimetableType])] = 0; })}>
                     添加时间段
                   </Button>
                 </Flex>
@@ -517,41 +597,53 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           </TabPanel>
 
           <TabPanel px={0}>
-            <EditorCard title="每日课表" desc="配置每天的名称、课程列表以及绑定的时间表类型" action={<Button size="sm" leftIcon={<Plus size={16} />} onClick={addDailyClass}>添加新天</Button>}>
+            <EditorCard title="每日课表" desc="配置每天的名称、课程列表以及绑定的时间表类型" action={<Button id={`${editorId}-add-day`} size="sm" leftIcon={<Plus size={16} />} onClick={addDailyClass}>添加新天</Button>}>
               <Flex direction="column" gap={4}>
-                {(config.daily_class || []).map((day, dayIndex) => (
-                  <Card key={dayIndex} bg={panelBg} border="1px" borderColor={borderColor}>
-                    <CardBody>
-                      <Flex justify="space-between" gap={3} mb={4}>
-                        <Text fontWeight="semibold">第 {dayIndex + 1} 天</Text>
-                        <DeleteButton label="删除此天" onClick={() => updateConfig((draft) => { draft.daily_class.splice(dayIndex, 1); })} />
-                      </Flex>
-                      <SimpleGrid columns={[1, 3]} gap={3} mb={4}>
-                        <Input value={day.Chinese} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].Chinese = event.target.value; })} placeholder="中文名，如：一" />
-                        <Input value={day.English} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].English = event.target.value; })} placeholder="英文名，如：MON" />
-                        <Select value={day.timetable} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].timetable = event.target.value; })}>
-                          <option value="">请选择时间表类型</option>
-                          {timetableTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                        </Select>
-                      </SimpleGrid>
-                      <Flex direction="column" gap={2}>
-                        {(day.classList || []).map((item, itemIndex) => (
-                          <HStack key={itemIndex}>
-                            <SubjectMultiSelect
-                              value={item}
-                              options={subjectOptions}
-                              onChange={(nextValue) => updateConfig((draft) => { draft.daily_class[dayIndex].classList[itemIndex] = nextValue; })}
-                            />
-                            <DeleteButton label="删除课程" onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.splice(itemIndex, 1); })} />
-                          </HStack>
-                        ))}
-                        <Button size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} isDisabled={subjectOptions.length === 0} onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.push(''); })}>
-                          添加课程
-                        </Button>
-                      </Flex>
-                    </CardBody>
-                  </Card>
-                ))}
+                {(config.daily_class || []).map((day, dayIndex) => {
+                  const dayId = getRowId('days', dayIndex);
+                  const dayContext = `第 ${dayIndex + 1} 天${day.Chinese ? `（${day.Chinese}）` : ''}`;
+                  return (
+                    <Card key={dayId} data-editor-row bg={panelBg} border="1px" borderColor={borderColor}>
+                      <CardBody>
+                        <Flex justify="space-between" gap={3} mb={4}>
+                          <Text as="h4" fontWeight="semibold">第 {dayIndex + 1} 天</Text>
+                          <DeleteButton label={`删除此天：${dayContext}`} onClick={(event) => deleteIndexedRow(event, 'days', dayIndex, `${editorId}-add-day`, (draft) => { draft.daily_class.splice(dayIndex, 1); })} />
+                        </Flex>
+                        <SimpleGrid columns={[1, 3]} gap={3} mb={4}>
+                          <EditorField label="中文名" context={dayContext}>
+                            <Input value={day.Chinese} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].Chinese = event.target.value; })} placeholder="中文名，如：一" />
+                          </EditorField>
+                          <EditorField label="英文名" context={dayContext}>
+                            <Input value={day.English} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].English = event.target.value; })} placeholder="英文名，如：MON" />
+                          </EditorField>
+                          <EditorField label="时间表类型" context={dayContext}>
+                            <Select value={day.timetable} onChange={(event) => updateConfig((draft) => { draft.daily_class[dayIndex].timetable = event.target.value; })}>
+                              <option value="">请选择时间表类型</option>
+                              {timetableTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                            </Select>
+                          </EditorField>
+                        </SimpleGrid>
+                        <Flex direction="column" gap={2}>
+                          {(day.classList || []).map((item, itemIndex) => (
+                            <HStack key={getRowId(`courses:${dayId}`, itemIndex)} data-editor-row>
+                              <SubjectMultiSelect
+                                label={`第 ${itemIndex + 1} 节课程`}
+                                context={dayContext}
+                                value={item}
+                                options={subjectOptions}
+                                onChange={(nextValue) => updateConfig((draft) => { draft.daily_class[dayIndex].classList[itemIndex] = nextValue; })}
+                              />
+                              <DeleteButton label={`删除课程：${dayContext}第 ${itemIndex + 1} 节`} onClick={(event) => deleteIndexedRow(event, `courses:${dayId}`, itemIndex, `${dayId}-add-course`, (draft) => { draft.daily_class[dayIndex].classList.splice(itemIndex, 1); })} />
+                            </HStack>
+                          ))}
+                          <Button id={`${dayId}-add-course`} aria-label={`添加课程：${dayContext}`} size="sm" alignSelf="flex-start" leftIcon={<Plus size={16} />} isDisabled={subjectOptions.length === 0} onClick={() => updateConfig((draft) => { draft.daily_class[dayIndex].classList.push(''); })}>
+                            添加课程
+                          </Button>
+                        </Flex>
+                      </CardBody>
+                    </Card>
+                  );
+                })}
               </Flex>
             </EditorCard>
           </TabPanel>
@@ -559,6 +651,7 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
           <TabPanel px={0}>
             <EditorCard title="分隔线" desc="编辑不同日程类型下的分隔线课程序号" action={<Button size="sm" leftIcon={<Plus size={16} />} onClick={addDividerType}>添加类型</Button>}>
               <ScheduleTypeEditor
+                label="分隔线"
                 selectedType={selectedDividerType}
                 types={dividerTypes}
                 onSelect={setSelectedDividerType}
@@ -568,12 +661,14 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
               {selectedDividerType && (
                 <HStack mt={4} align="flex-start" flexWrap="wrap">
                   {(config.divider[selectedDividerType] || []).map((value, index) => (
-                    <HStack key={index}>
-                      <Input type="number" w="120px" value={value} onChange={(event) => updateConfig((draft) => { draft.divider[selectedDividerType][index] = Number(event.target.value); })} />
-                      <DeleteButton label="删除分隔线" onClick={() => updateConfig((draft) => { draft.divider[selectedDividerType].splice(index, 1); })} />
+                    <HStack key={getRowId(`divider:${selectedDividerType}`, index)} data-editor-row>
+                      <EditorField label="课程序号" context={`${selectedDividerType} 第 ${index + 1} 条分隔线`}>
+                        <Input type="number" w="120px" value={value} onChange={(event) => updateConfig((draft) => { draft.divider[selectedDividerType][index] = Number(event.target.value); })} />
+                      </EditorField>
+                      <DeleteButton label={`删除分隔线：${selectedDividerType} 第 ${index + 1} 条`} onClick={(event) => deleteIndexedRow(event, `divider:${selectedDividerType}`, index, `${editorId}-add-divider`, (draft) => { draft.divider[selectedDividerType].splice(index, 1); })} />
                     </HStack>
                   ))}
-                  <Button size="sm" leftIcon={<Plus size={16} />} onClick={() => updateConfig((draft) => { draft.divider[selectedDividerType].push(0); })}>
+                  <Button id={`${editorId}-add-divider`} size="sm" leftIcon={<Plus size={16} />} onClick={() => updateConfig((draft) => { draft.divider[selectedDividerType].push(0); })}>
                     添加分隔线
                   </Button>
                 </HStack>
@@ -599,7 +694,11 @@ const ScheduleEditorView = ({ ipcRenderer, onConfigApplied }) => {
 
           <TabPanel px={0}>
             <EditorCard title="源码" desc="查看或粘贴 scheduleConfig.js 源码">
-              <Textarea minH="460px" fontFamily="monospace" value={sourceText} onChange={(event) => setSourceText(event.target.value)} />
+              <FormControl>
+                <FormLabel>课表配置源码</FormLabel>
+                <Textarea minH="460px" fontFamily="monospace" value={sourceText} onChange={(event) => setSourceText(event.target.value)} />
+                <FormHelperText color={mutedTextColor}>重新解析只更新表单；保存配置并应用后才会覆盖当前应用配置。</FormHelperText>
+              </FormControl>
               <Button mt={3} leftIcon={<FileInput size={16} />} onClick={applySourceText} isDisabled={isBusy}>从源码重新解析到表单</Button>
             </EditorCard>
           </TabPanel>

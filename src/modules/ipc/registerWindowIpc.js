@@ -9,6 +9,56 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
     let checkTimer = null;
     let isDragging = false;
     let lastIgnoreMouseEvents = null;
+    let dragListeners = [];
+    let overlayPointer = null;
+
+    /** 移除当前拖动会话的原生监听，避免窗口重建后保留旧 renderer。 */
+    function clearDragListeners() {
+        for (const [target, event, listener] of dragListeners) target.removeListener(event, listener);
+        dragListeners = [];
+    }
+
+    /** renderer 无法发送结束消息时，释放拖动所有权并恢复鼠标穿透。 */
+    function interruptDrag(invalidateRect) {
+        const pointer = overlayPointer;
+        overlayPointer = null;
+        isDragging = false;
+        clearDragListeners();
+        if (invalidateRect) {
+            interactiveRect = null;
+            if (checkTimer) clearInterval(checkTimer);
+            checkTimer = null;
+        }
+        const mainWindow = windowManager.getWindow('main');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.setIgnoreMouseEvents(true, { forward: true });
+            if (pointer && !mainWindow.webContents.isDestroyed()) {
+                mainWindow.webContents.send('mini-countdown-overlay-pointer', { ...pointer, type: 'cancel' });
+            }
+        }
+        lastIgnoreMouseEvents = true;
+        if (invalidateRect) windowManager.updateTouchDragOverlay?.(null);
+        else checkMousePosition();
+    }
+
+    /** 仅在拖动期间监听拥有输入状态的窗口及 renderer 生命周期。 */
+    function watchDragLifecycle(mainWindow) {
+        clearDragListeners();
+        const overlay = windowManager.getWindow('touchDragOverlay');
+        for (const window of [mainWindow, overlay]) {
+            if (!window || window.isDestroyed()) continue;
+            /** 只有主页面失效才丢弃几何；覆盖窗口恢复时仍复用主页面的有效矩形。 */
+            const interrupt = () => interruptDrag(window === mainWindow);
+            for (const event of ['hide', 'minimize', 'closed']) {
+                window.on(event, interrupt);
+                dragListeners.push([window, event, interrupt]);
+            }
+            for (const event of ['did-start-loading', 'render-process-gone', 'destroyed']) {
+                window.webContents.on(event, interrupt);
+                dragListeners.push([window.webContents, event, interrupt]);
+            }
+        }
+    }
 
     /**
      * 根据当前鼠标位置更新主窗口的穿透状态。
@@ -105,6 +155,9 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         if (!overlay || overlay.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) return;
         if (event.sender !== overlay.webContents || !isValidTouchDragPointerEvent(payload)) return;
 
+        if (payload.type === 'down') overlayPointer = { ...payload };
+        else if (payload.type === 'up' || payload.type === 'cancel') overlayPointer = null;
+
         const overlayBounds = overlay.getBounds();
         const mainBounds = mainWindow.getBounds();
         mainWindow.webContents.send('mini-countdown-overlay-pointer', {
@@ -148,13 +201,17 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         lastIgnoreMouseEvents = ignoreMouseEvents;
     });
 
-    ipcMain.on('updateInteractiveRect', (event, rect, glassVisible = true) => {
+    ipcMain.on('updateInteractiveRect', (event, rect, glassVisible = true, preserveGlass = false) => {
         const mainWindow = windowManager.getWindow('main');
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
 
+        // 原生 hide 先于文档可见性事件时，晚到的拖动结束消息不得恢复隐藏的输入窗口。
+        if (!mainWindow.isVisible()) rect = null;
         interactiveRect = rect;
         // 指针避让期间仍按原矩形处理交互，仅阻止不可见文字下的原生背景。
-        windowManager.updateMiniCountdownGlass?.(glassVisible === false ? null : rect);
+        if (preserveGlass !== true) {
+            windowManager.updateMiniCountdownGlass?.(glassVisible === false ? null : rect);
+        }
         windowManager.updateTouchDragOverlay?.(rect);
         if (rect) {
             if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);
@@ -199,14 +256,20 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
     });
 
     ipcMain.on('setDragState', (event, state) => {
-        isDragging = state;
         const mainWindow = windowManager.getWindow('main');
+        if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+        isDragging = state === true;
         if (mainWindow && !mainWindow.isDestroyed()) {
             if (isDragging) {
+                watchDragLifecycle(mainWindow);
                 mainWindow.setIgnoreMouseEvents(false);
                 lastIgnoreMouseEvents = false;
             }
-            else checkMousePosition();
+            else {
+                overlayPointer = null;
+                clearDragListeners();
+                checkMousePosition();
+            }
         }
     });
 

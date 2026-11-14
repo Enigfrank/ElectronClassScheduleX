@@ -65,6 +65,7 @@ function createDashboardHarness(targetSetting = settingId) {
     const context = {
         module: { exports: {} },
         window: { dashboardApi: api },
+        document: { title: '' },
         require(name) {
             if (name === 'react') return react;
             if (name === '@chakra-ui/react') return chakra;
@@ -82,7 +83,7 @@ function createDashboardHarness(targetSetting = settingId) {
     }
     render();
     mounted = true;
-    const cleanups = effects.map(effect => effect());
+    const cleanups = effects.map(effect => effect()).filter(cleanup => typeof cleanup === 'function');
     return {
         toasts, sent,
         receive(name, data) { listeners.get(name)(undefined, data); render(); },
@@ -124,6 +125,7 @@ function createSettingsHarness(accepted = true) {
     const sender = {};
     const guiWindow = { webContents: sender };
     let style = { ...defaults };
+    let performance = { tier: 'balanced', transitionFrameIntervalMs: 33, blurSigmaMultiplier: 0.75 };
     const windowManager = {
         getWindow: (name) => name === 'gui' ? guiWindow : null,
         getMiniCountdownGlassStyle: () => ({ ...style }),
@@ -139,6 +141,12 @@ function createSettingsHarness(accepted = true) {
         setGlobalContainerLiquidGlass: enabled => {
             calls.push(['applyGlobal', enabled]);
             return accepted;
+        },
+        getGlassPerformance: () => ({ ...performance }),
+        setGlassPerformance: value => {
+            performance = { ...value };
+            calls.push(['applyPerformance', performance]);
+            return { ...performance };
         }
     };
     const event = {
@@ -416,6 +424,19 @@ test('样式读取默认值，写入先规范化并应用再保存，重开读�
     assert.deepEqual(set(h.event, value), { success: true, style });
     assert.deepEqual(h.calls, [['applyStyle', style], ['persist', 'miniCountdownGlassStyle', style]]);
     assert.deepEqual(get(h.event), { success: true, style });
+});
+
+test('设备性能档位只允许 GUI 读取和保存，并返回规范化结果', () => {
+    const h = createSettingsHarness();
+    const get = h.handlers.get('get-glass-performance');
+    const set = h.handlers.get('set-glass-performance');
+    assert.deepEqual(get(h.event), {
+        success: true,
+        profile: { tier: 'balanced', transitionFrameIntervalMs: 33, blurSigmaMultiplier: 0.75 }
+    });
+    const profile = { tier: 'slow', transitionFrameIntervalMs: 50, blurSigmaMultiplier: 0.5 };
+    assert.deepEqual(set(h.event, profile), { success: true, profile });
+    assert.deepEqual(h.calls, [['applyPerformance', profile]]);
 });
 
 test('样式 IPC 无效输入不触发应用或存储', () => {

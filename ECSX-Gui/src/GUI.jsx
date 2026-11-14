@@ -4,6 +4,7 @@ import ScheduleEditorView from './features/schedule-editor/ScheduleEditorView.js
 import UpdateManagerView from './features/update/UpdateManagerView.jsx';
 import ExamModeView from './features/exam-mode/ExamModeView.jsx';
 import AppearanceView from './features/appearance/AppearanceView.jsx';
+import PerformanceView from './features/performance/PerformanceView.jsx';
 import WindowControls from './WindowControls.jsx';
 import {
   Box, Flex, Text, Heading, Button, Switch, Card, CardBody,
@@ -11,9 +12,9 @@ import {
   extendTheme // <-- 修复点：加回 extendTheme
 } from '@chakra-ui/react';
 import {
-  Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin,
+  Calendar, Settings, Wrench, Clock, RefreshCw, Timer, Pin, Gauge,
   EyeOff, Rocket, Power, RotateCcw, Info, X,
-  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck, Layers, Palette
+  Sun, Moon, Globe, FolderOpen, FilePenLine, DownloadCloud, ClipboardCheck, Palette
 } from 'lucide-react';
 
 const ipcRenderer = window.dashboardApi;
@@ -113,7 +114,7 @@ const MainView = ({ handleButtonClick, semesterStartDate }) => {
 
   return (
     <>
-      <Text fontSize="xl" fontWeight="semibold" mb={4}>功能选项</Text>
+      <Text as="h2" fontSize="xl" fontWeight="semibold" mb={4}>功能选项</Text>
       <SimpleGrid columns={[1, 2, 3]} gap={5} maxW="1200px">
         {actions.map((act) => {
           const content = <>
@@ -162,8 +163,6 @@ const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending
 
   const settingItems = [
     { id: 'isDuringClassCountdown', icon: <Timer size={20} />, label: '课上计时', desc: '在课程进行中显示倒计时' },
-    { id: 'isMiniCountdownLiquidGlass', icon: <Layers size={20} />, label: '迷你倒计时液态玻璃', desc: '关闭时使用黑色半透明背景' },
-    { id: 'isGlobalContainerLiquidGlass', icon: <Layers size={20} />, label: '主课表液态玻璃', desc: '主课表、侧栏及课程计时共用界面配置中的颜色' },
     { id: 'isWindowAlwaysOnTop', icon: <Pin size={20} />, label: '窗口置顶', desc: '保持窗口始终在最前端' },
     { id: 'isDuringClassHidden', icon: <EyeOff size={20} />, label: '上课隐藏', desc: '上课期间自动隐藏窗口' },
     { id: 'isAutoLaunch', icon: <Rocket size={20} />, label: '开机启动', desc: '系统启动时自动运行' },
@@ -171,7 +170,7 @@ const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending
 
   return (
     <>
-      <Text fontSize="xl" fontWeight="semibold" mb={4}>设置选项</Text>
+      <Text as="h2" fontSize="xl" fontWeight="semibold" mb={4}>设置选项</Text>
       <Card>
         <CardBody>
           {settingItems.map((item, index) => (
@@ -185,15 +184,13 @@ const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending
                 </Box>
               </Flex>
               <Switch aria-label={item.label} isChecked={settings[item.id]}
-                isDisabled={(item.id === 'isMiniCountdownLiquidGlass' && miniCountdownGlassPending)
-                  || (item.id === 'isGlobalContainerLiquidGlass' && globalContainerGlassPending)}
                 onChange={() => handleSettingChange(item.id)} colorScheme="blue" />
             </Flex>
           ))}
         </CardBody>
       </Card>
 
-      <Text fontSize="xl" fontWeight="semibold" mt={6} mb={4}>高级设置</Text>
+      <Text as="h2" fontSize="xl" fontWeight="semibold" mt={6} mb={4}>高级设置</Text>
       <Card>
         <CardBody>
           <Flex align="center" justify="space-between" py={4} borderBottom="1px" borderColor={borderColor}>
@@ -212,17 +209,18 @@ const SettingsView = ({ settings, handleSettingChange, miniCountdownGlassPending
   );
 };
 
-const ToolsView = ({ logs, isLoadingLogs, loadLogs, openLogsFolder }) => {
+/** 展示诊断日志与独立的加载结果，避免逐条播报日志正文。 */
+const ToolsView = ({ logs, isLoadingLogs, logsStatus, logsError, loadLogs, openLogsFolder }) => {
   const borderColor = useColorModeValue('gray.200', 'gray.600');
   const textMuted = useColorModeValue('gray.600', 'gray.400');
   const logBoxBg = useColorModeValue('gray.50', 'gray.900');
 
   return (
     <>
-      <Text fontSize="xl" fontWeight="semibold" mt={6} mb={4}>系统诊断</Text>
+      <Text as="h2" fontSize="xl" fontWeight="semibold" mt={6} mb={4}>系统诊断</Text>
       <Card>
         <CardBody>
-          <Text fontSize="lg" fontWeight="medium" mb={3}>应用运行日志</Text>
+          <Text as="h3" fontSize="lg" fontWeight="medium" mb={3}>应用运行日志</Text>
           {logs.length === 0 && !isLoadingLogs ? (
             <Text color={textMuted} fontSize="sm">暂无日志内容，点击"加载日志"按钮查看最新日志</Text>
           ) : (
@@ -237,6 +235,8 @@ const ToolsView = ({ logs, isLoadingLogs, loadLogs, openLogsFolder }) => {
             <Button leftIcon={<Wrench size={16} />} onClick={loadLogs} isLoading={isLoadingLogs} loadingText="加载中...">加载日志</Button>
             <Button leftIcon={<FolderOpen size={16} />} onClick={openLogsFolder} variant="outline">打开日志文件夹</Button>
           </Box>
+          <Text role="status" aria-atomic="true" fontSize="sm" color={textMuted}>{logsStatus}</Text>
+          <Text role="alert" fontSize="sm" color="red.500">{logsError}</Text>
         </CardBody>
       </Card>
     </>
@@ -258,7 +258,11 @@ const ReactGUI = () => {
   const requestedGlobalContainerGlassEnable = useRef(false);
   const [logs, setLogs] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logsStatus, setLogsStatus] = useState('');
+  const [logsError, setLogsError] = useState('');
   const [semesterStartDate, setSemesterStartDate] = useState('');
+  const viewHeadingRef = useRef(null);
+  const pendingNavigationFocus = useRef(false);
 
   const isDarkMode = colorMode === 'dark';
   const bgColor = useColorModeValue('gray.50', 'gray.900');
@@ -272,11 +276,31 @@ const ReactGUI = () => {
     main: { title: '仪表盘', subtitle: 'Dashboard' },
     settings: { title: '设置选项', subtitle: 'Settings' },
     appearance: { title: '界面配置', subtitle: 'Appearance' },
+    performance: { title: '设备性能测试', subtitle: 'Performance' },
     editor: { title: '课表编辑器', subtitle: 'Schedule Editor' },
     exam: { title: '考试模式', subtitle: 'Exam Mode' },
     update: { title: '在线更新', subtitle: '在线更新' },
     tools: { title: '其他工具', subtitle: 'Tools' },
     shutdown: { title: '定时关机管理', subtitle: 'Shutdown Manager' },
+  };
+  const currentViewTitle = viewTitles[currentView]?.title || '仪表盘';
+
+  /** 更新页面标题，仅在主动导航后移动焦点；关机管理保留输入框的自动聚焦。 */
+  useEffect(() => {
+    document.title = `${currentViewTitle} - 课表管理`;
+    if (!pendingNavigationFocus.current) return;
+    pendingNavigationFocus.current = false;
+    if (currentView !== 'shutdown') viewHeadingRef.current?.focus();
+  }, [currentView, currentViewTitle]);
+
+  /**
+   * 记录用户导航意图，让新页面在渲染完成后获得焦点。
+   * @param {string} nextView 目标页面
+   */
+  const navigateToView = (nextView) => {
+    if (nextView === currentView) return;
+    pendingNavigationFocus.current = true;
+    setCurrentView(nextView);
   };
 
   useEffect(() => {
@@ -388,9 +412,10 @@ const ReactGUI = () => {
     ipcRenderer.send(ipcMessages[settingName], newValue);
   };
 
+  /** 分发首页操作；页面跳转通过统一导航入口处理焦点。 */
   const handleButtonClick = (action) => {
     if (action === 'manageShutdown') {
-      setCurrentView('shutdown');
+      navigateToView('shutdown');
       return;
     }
 
@@ -405,22 +430,33 @@ const ReactGUI = () => {
     ipcRenderer.send(message, ...(args.length ? args : []));
   };
 
+  /** 加载诊断日志，只播报完成摘要或实际读取错误。 */
   const loadLogs = async () => {
     setIsLoadingLogs(true);
+    setLogsStatus('');
+    setLogsError('');
     try {
       const result = await ipcRenderer.invoke('get-logs');
-      setLogs(result?.success ? (result.logs || []) : ['无法读取日志文件']);
+      if (result?.success) {
+        const nextLogs = result.logs || [];
+        setLogs(nextLogs);
+        setLogsStatus(`日志加载完成，共 ${nextLogs.length} 条。`);
+      } else {
+        setLogs([]);
+        setLogsError(result?.error || '无法读取日志文件');
+      }
     } catch (error) {
-      setLogs([`读取日志失败: ${error.message}`]);
+      setLogs([]);
+      setLogsError(`读取日志失败: ${error.message}`);
     } finally {
       setIsLoadingLogs(false);
     }
   };
 
   return (
-    <Box display="flex" h="100vh" bg={bgColor} color={textColor} fontFamily="Segoe UI, system-ui, sans-serif">
+    <Box className="dashboard-shell" display="flex" h="100vh" bg={bgColor} color={textColor} fontFamily="Segoe UI, system-ui, sans-serif">
       {/* 侧边栏 */}
-      <Box w="280px" bg={sidebarBg} display="flex" flexDirection="column" boxShadow="lg" zIndex={100}>
+      <Box as="aside" w="280px" bg={sidebarBg} display="flex" flexDirection="column" boxShadow="lg" zIndex={100}>
         <Box className="gui-drag-region" display="flex" alignItems="center" gap={3} p={5} borderBottom="1px" borderColor={borderColor}>
           <Calendar size={32} color="#3182ce" />
           <Box>
@@ -429,11 +465,12 @@ const ReactGUI = () => {
           </Box>
         </Box>
 
-        <Box flex={1} p={3} display="flex" flexDirection="column" gap={1}>
+        <Box as="nav" aria-label="主要页面" flex={1} p={3} display="flex" flexDirection="column" gap={1}>
           {[
             { view: 'main', icon: <Calendar size={20} />, text: '功能选项' },
             { view: 'settings', icon: <Settings size={20} />, text: '设置选项' },
             { view: 'appearance', icon: <Palette size={20} />, text: '界面配置' },
+            { view: 'performance', icon: <Gauge size={20} />, text: '设备性能测试' },
             { view: 'editor', icon: <FilePenLine size={20} />, text: '课表编辑器' },
             { view: 'exam', icon: <ClipboardCheck size={20} />, text: '考试模式' },
             { view: 'update', icon: <DownloadCloud size={20} />, text: '在线更新' },
@@ -442,23 +479,24 @@ const ReactGUI = () => {
             <Button key={nav.view} w="100%" justifyContent="flex-start" gap={3} h="44px"
               variant={currentView === nav.view ? 'solid' : 'ghost'}
               colorScheme={currentView === nav.view ? 'blue' : 'gray'}
-              onClick={() => setCurrentView(nav.view)} leftIcon={nav.icon}>
+              aria-current={currentView === nav.view ? 'page' : undefined}
+              onClick={() => navigateToView(nav.view)} leftIcon={nav.icon}>
               {nav.text}
             </Button>
           ))}
         </Box>
 
-        <Box p={4} borderTop="1px" borderColor={borderColor} textAlign="center">
+        <Box as="footer" p={4} borderTop="1px" borderColor={borderColor} textAlign="center">
           <Text fontSize="sm" color={mutedTextColor}>© {new Date().getFullYear()} Enigfrank 版权所有</Text>
         </Box>
       </Box>
 
       {/* 主内容区 */}
       <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
-        <Box className="gui-drag-region" display="flex" alignItems="center" justifyContent="space-between" px={8} py={5}
+        <Box as="header" className="gui-drag-region" display="flex" alignItems="center" justifyContent="space-between" px={8} py={5}
           bg={headerBg} borderBottom="1px" borderColor={borderColor}>
           <Box>
-            <Heading size="md">{viewTitles[currentView]?.title || '仪表盘'}</Heading>
+            <Heading as="h1" id="dashboard-view-title" ref={viewHeadingRef} tabIndex={-1} size="md">{currentViewTitle}</Heading>
             <Text fontSize="sm" color={mutedTextColor}>{viewTitles[currentView]?.subtitle || 'Dashboard'}</Text>
           </Box>
           <Flex align="center" gap={2} className="gui-no-drag">
@@ -470,7 +508,7 @@ const ReactGUI = () => {
           </Flex>
         </Box>
 
-        <Box flex={1} p={8} overflowY="auto" bg={bgColor}>
+        <Box as="main" aria-labelledby="dashboard-view-title" flex={1} p={8} overflowY="auto" bg={bgColor}>
           {currentView === 'main' && <MainView handleButtonClick={handleButtonClick} semesterStartDate={semesterStartDate} />}
           {currentView === 'settings' && <SettingsView settings={settings} handleSettingChange={handleSettingChange}
             miniCountdownGlassPending={pendingMiniCountdownGlassEnable.current !== null}
@@ -483,6 +521,7 @@ const ReactGUI = () => {
               isGlobalTogglePending={pendingGlobalContainerGlassEnable.current !== null}
               onGlobalToggle={() => handleSettingChange('isGlobalContainerLiquidGlass')} />
           )}
+          {currentView === 'performance' && <PerformanceView ipcRenderer={ipcRenderer} />}
           {currentView === 'editor' && (
             <ScheduleEditorView
               ipcRenderer={ipcRenderer}
@@ -491,8 +530,8 @@ const ReactGUI = () => {
           )}
           {currentView === 'exam' && <ExamModeView ipcRenderer={ipcRenderer} />}
           {currentView === 'update' && <UpdateManagerView ipcRenderer={ipcRenderer} />}
-          {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => setCurrentView('main')} />}
-          {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}
+          {currentView === 'shutdown' && <ShutdownManagerView ipcRenderer={ipcRenderer} onBack={() => navigateToView('main')} />}
+          {currentView === 'tools' && <ToolsView logs={logs} isLoadingLogs={isLoadingLogs} logsStatus={logsStatus} logsError={logsError} loadLogs={loadLogs} openLogsFolder={() => ipcRenderer.send('open-logs-folder')} />}
         </Box>
       </Box>
     </Box>

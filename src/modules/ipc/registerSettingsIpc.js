@@ -87,6 +87,22 @@ function registerSettingsIpc({
         }
     });
 
+    /** 读取当前设备性能档位，供性能测试页面展示。 */
+    ipcMain.handle('get-glass-performance', event => {
+        if (!isGuiSender(event)) return { success: false, error: '仅允许设置窗口读取设备性能' };
+        return { success: true, profile: windowManager.getGlassPerformance() };
+    });
+
+    /** 保存性能测试结果选择的档位，并立即通知主课表 renderer。 */
+    ipcMain.handle('set-glass-performance', (event, profile) => {
+        if (!isGuiSender(event)) return { success: false, error: '仅允许设置窗口修改设备性能' };
+        try {
+            return { success: true, profile: windowManager.setGlassPerformance(profile) };
+        } catch (error) {
+            return { success: false, error: error?.message || String(error) };
+        }
+    });
+
     ipcMain.on('setWindowAlwaysOnTop', (event, checked) => {
         configManager.setWindowAlwaysOnTop(checked);
         const mainWindow = windowManager.getWindow('main');

@@ -31,6 +31,7 @@ const INVOKE_CHANNELS = new Set([
     'download-update',
     'export-schedule-config-source',
     'get-exam-mode-config',
+    'get-glass-performance',
     'get-logs',
     'get-mini-countdown-glass-style',
     'get-update-settings',
@@ -43,6 +44,7 @@ const INVOKE_CHANNELS = new Set([
     'save-schedule-config-source',
     'set-update-settings',
     'set-mini-countdown-glass-style',
+    'set-glass-performance',
     'test-update-sources'
 ]);
 

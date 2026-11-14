@@ -4,6 +4,7 @@ const path = require('path');
 const ExamModeWindowController = require('./examModeWindowController');
 const MiniCountdownGlassController = require('./miniCountdownGlassController');
 const { normalizeMiniCountdownGlassStyle } = require('../shared/miniCountdownGlassStyle');
+const { normalizeGlassPerformance } = require('../shared/glassPerformance');
 
 const GLOBAL_GLASS_IDS = ['classContainer', 'countdownSidebar', 'countdowner'];
 
@@ -44,6 +45,7 @@ class WindowManager {
         this.touchDragOverlayRect = null;
         this.mainAlwaysOnTopRestoreTimer = null;
         this.handlingGlassErrors = new Set();
+        this.glassPerformance = normalizeGlassPerformance(this.configManager.get('glassPerformance'));
         this.toolbarGlassControllers = {};
         this.miniCountdownGlassController = new MiniCountdownGlassController({
             screen,
@@ -305,7 +307,7 @@ class WindowManager {
 
         if (overlay.webContents.isLoading()) return;
 
-        const touchHitPadding = 10;
+        const touchHitPadding = 3;
         const minimumTouchTargetSize = 44;
         const width = Math.max(minimumTouchTargetSize, Math.ceil(rect.width + touchHitPadding * 2));
         const height = Math.max(minimumTouchTargetSize, Math.ceil(rect.height + touchHitPadding * 2));
@@ -337,6 +339,22 @@ class WindowManager {
         return setGlassControllersEnabled([
             this.miniCountdownGlassController, this.toolbarGlassControllers.nextClassHint
         ], enabled);
+    }
+
+    /** 返回当前设备性能档位，供主窗口调整玻璃动画更新频率。 */
+    getGlassPerformance() {
+        return { ...this.glassPerformance };
+    }
+
+    /** 保存并广播设备性能档位；样式模糊度由设置页面按当前样式单独提交。 */
+    setGlassPerformance(value) {
+        this.glassPerformance = normalizeGlassPerformance(value);
+        this.configManager.set('glassPerformance', this.glassPerformance);
+        const main = this.windows.main;
+        if (main && !main.isDestroyed() && !main.webContents.isDestroyed()) {
+            main.webContents.send('mini-countdown-glass-performance', this.getGlassPerformance());
+        }
+        return this.getGlassPerformance();
     }
 
     /** 主课表及其侧栏、课程计时使用独立开关，不改变迷你倒计时偏好。 */
@@ -400,9 +418,18 @@ class WindowManager {
     sendMiniCountdownGlassState(state) {
         const win = this.windows.main;
         if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+            this.sendMiniCountdownGlassPerformance();
             win.webContents.send('mini-countdown-glass-state', {
                 enabled: state.enabled, active: state.active, style: this.getMiniCountdownGlassStyle()
             });
+        }
+    }
+
+    /** 将设备性能档位发送给主课表 renderer。 */
+    sendMiniCountdownGlassPerformance() {
+        const win = this.windows.main;
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+            win.webContents.send('mini-countdown-glass-performance', this.getGlassPerformance());
         }
     }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   Alert,
   AlertIcon,
@@ -71,11 +71,27 @@ export default function ExamModeView({ ipcRenderer }) {
   const [notice, setNotice] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isApplying, setIsApplying] = useState(false);
+  const formId = useId();
+  const formRef = useRef(null);
+  const formErrorRef = useRef(null);
+  const noticeRef = useRef(null);
+  const pendingFocusRef = useRef(null);
 
   const rowBackground = useColorModeValue('white', 'gray.800');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const mutedTextColor = useColorModeValue('gray.600', 'gray.400');
   const errorTextColor = useColorModeValue('red.600', 'red.300');
+
+  /** 在错误已显示且输入已重新启用后，完成提交失败或删除操作的焦点转移。 */
+  useLayoutEffect(() => {
+    if (!formRef.current || isApplying || !pendingFocusRef.current) return;
+    const targetId = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    const target = targetId === 'validation'
+      ? formRef.current.querySelector('input[aria-invalid="true"]') || formErrorRef.current || noticeRef.current
+      : formRef.current.ownerDocument.getElementById(targetId);
+    target?.focus();
+  }, [isApplying, rows, fieldErrors, formError, notice]);
 
   useEffect(() => {
     let isMounted = true;
@@ -155,6 +171,9 @@ export default function ExamModeView({ ipcRenderer }) {
    * @param {string} rowId 草稿 ID
    */
   function deleteRow(rowId) {
+    const index = rows.findIndex((row) => row.id === rowId);
+    const adjacent = rows[index + 1] || rows[index - 1];
+    pendingFocusRef.current = adjacent ? `${adjacent.id}-subject` : `${formId}-add`;
     setRows((currentRows) => currentRows.filter((row) => row.id !== rowId));
     setFieldErrors((currentErrors) => Object.fromEntries(
       Object.entries(currentErrors).filter(([key]) => !key.startsWith(`${rowId}:`))
@@ -196,6 +215,7 @@ export default function ExamModeView({ ipcRenderer }) {
       const mappedErrors = mapValidationErrors(result?.errors, submittedRows);
       setFieldErrors(mappedErrors.fields);
       setFormError(mappedErrors.form);
+      pendingFocusRef.current = 'validation';
 
       if (result?.saved && Array.isArray(result.entries)) {
         setRows(result.entries.map(createDraftEntry));
@@ -204,6 +224,7 @@ export default function ExamModeView({ ipcRenderer }) {
         setNotice({ status: 'error', message: result.error });
       }
     } catch (error) {
+      pendingFocusRef.current = 'validation';
       setNotice({
         status: 'error',
         message: `应用考试模式失败：${error instanceof Error ? error.message : String(error)}`,
@@ -222,14 +243,14 @@ export default function ExamModeView({ ipcRenderer }) {
   }
 
   return (
-    <Box as="form" onSubmit={applyConfiguration} maxW="1000px" mx="auto">
+    <Box ref={formRef} as="form" onSubmit={applyConfiguration} maxW="1000px" mx="auto">
       <Flex align="center" justify="space-between" gap={4} mb={6} flexWrap="wrap">
         <Box>
-          <Text fontSize="xl" fontWeight="semibold">考试安排</Text>
+          <Text as="h2" fontSize="xl" fontWeight="semibold">考试安排</Text>
           <Text fontSize="sm" color={mutedTextColor}>科目与起止时间</Text>
         </Box>
         <Flex gap={3}>
-          <Button type="button" variant="outline" leftIcon={<Plus size={18} />} onClick={addRow} isDisabled={isApplying}>
+          <Button id={`${formId}-add`} type="button" variant="outline" leftIcon={<Plus size={18} />} onClick={addRow} isDisabled={isApplying}>
             添加科目
           </Button>
           <Button type="submit" colorScheme="blue" leftIcon={<Check size={18} />} isLoading={isApplying} loadingText="正在应用">
@@ -239,14 +260,14 @@ export default function ExamModeView({ ipcRenderer }) {
       </Flex>
 
       {notice && (
-        <Alert status={notice.status} mb={4} borderRadius="md">
+        <Alert ref={noticeRef} tabIndex={-1} status={notice.status} role={notice.status === 'error' ? 'alert' : 'status'} aria-live={notice.status === 'error' ? 'assertive' : 'polite'} mb={4} borderRadius="md">
           <AlertIcon />
           {notice.message}
         </Alert>
       )}
 
       {formError && (
-        <Alert status="error" mb={4} borderRadius="md">
+        <Alert ref={formErrorRef} tabIndex={-1} status="error" mb={4} borderRadius="md">
           <AlertIcon />
           {formError}
         </Alert>
@@ -279,12 +300,13 @@ export default function ExamModeView({ ipcRenderer }) {
                   <FormLabel htmlFor={`${row.id}-subject`} fontSize="sm">科目 {index + 1}</FormLabel>
                   <Input
                     id={`${row.id}-subject`}
+                    aria-describedby={subjectError ? `${row.id}-subject-error` : undefined}
                     value={row.subject}
                     onChange={(event) => updateRow(row.id, 'subject', event.target.value)}
                     placeholder="考试科目"
                     isDisabled={isApplying}
                   />
-                  <Text minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={subjectError ? 'visible' : 'hidden'}>
+                  <Text id={`${row.id}-subject-error`} minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={subjectError ? 'visible' : 'hidden'}>
                     {subjectError || '无错误'}
                   </Text>
                 </FormControl>
@@ -293,13 +315,14 @@ export default function ExamModeView({ ipcRenderer }) {
                   <FormLabel htmlFor={`${row.id}-start`} fontSize="sm">开始时间</FormLabel>
                   <Input
                     id={`${row.id}-start`}
+                    aria-describedby={startError ? `${row.id}-start-error` : undefined}
                     type="time"
                     step={60}
                     value={row.startTime}
                     onChange={(event) => updateRow(row.id, 'startTime', event.target.value)}
                     isDisabled={isApplying}
                   />
-                  <Text minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={startError ? 'visible' : 'hidden'}>
+                  <Text id={`${row.id}-start-error`} minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={startError ? 'visible' : 'hidden'}>
                     {startError || '无错误'}
                   </Text>
                 </FormControl>
@@ -308,13 +331,14 @@ export default function ExamModeView({ ipcRenderer }) {
                   <FormLabel htmlFor={`${row.id}-end`} fontSize="sm">结束时间</FormLabel>
                   <Input
                     id={`${row.id}-end`}
+                    aria-describedby={endError ? `${row.id}-end-error` : undefined}
                     type="time"
                     step={60}
                     value={row.endTime}
                     onChange={(event) => updateRow(row.id, 'endTime', event.target.value)}
                     isDisabled={isApplying}
                   />
-                  <Text minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={endError ? 'visible' : 'hidden'}>
+                  <Text id={`${row.id}-end-error`} minH="20px" mt={1} fontSize="xs" color={errorTextColor} visibility={endError ? 'visible' : 'hidden'}>
                     {endError || '无错误'}
                   </Text>
                 </FormControl>

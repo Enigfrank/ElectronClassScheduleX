@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, FormControl, FormHelperText, Input, SimpleGrid, Text } from '@chakra-ui/react';
+import { Box, FormControl, FormHelperText, FormLabel, Input, SimpleGrid, Text, VisuallyHidden } from '@chakra-ui/react';
 import CommitSlider from '../../components/CommitSlider.jsx';
 import { getStyleFieldComment } from './configParser.mjs';
 import { commitStyleSliderValue, getStyleSliders } from './styleSliderHelpers.mjs';
@@ -20,8 +20,12 @@ export function StyleFieldControl({ styleKey, value, onChange, mutedTextColor })
 
   return (
     <SimpleGrid columns={[1, 2]} gap={3}>
-      <Input value={styleKey} isReadOnly />
       <FormControl minW={0}>
+        <FormLabel fontSize="sm">样式变量<VisuallyHidden>：{styleKey}</VisuallyHidden></FormLabel>
+        <Input value={styleKey} isReadOnly />
+      </FormControl>
+      <FormControl minW={0}>
+        <FormLabel fontSize="sm"><VisuallyHidden>{styleKey} 的</VisuallyHidden>值</FormLabel>
         <Input aria-label={`${styleKey} 的值`} value={value} onChange={(event) => onChange(event.target.value)} />
         <FormHelperText color={mutedTextColor} fontSize="xs">{getStyleFieldComment(styleKey)}</FormHelperText>
         {sliders.map(({ index, label, value: sliderValue, min, max, step }) => (

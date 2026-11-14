@@ -110,6 +110,7 @@ export default function AppearanceView({ ipcRenderer, enabled, isTogglePending, 
 
   /** 回车仅完成当前字段校验，应用必须通过保存按钮。 */
   function handleEnter(event, key) {
+    if (event.nativeEvent?.isComposing) return;
     if (event.key !== 'Enter') return;
     event.preventDefault();
     validateField(key, event.currentTarget.value);

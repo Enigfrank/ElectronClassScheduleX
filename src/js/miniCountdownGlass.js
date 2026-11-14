@@ -48,9 +48,9 @@
       return ['x', 'y', 'width', 'height', 'cornerRadius'].every(key => first[key] === second[key]);
     }
 
-    /** 读取可见倒计时的实际布局；淡出开始时即释放玻璃背景。 */
+    /** 仅读取可见文档中的倒计时布局，隐藏或淡出时释放交互区和玻璃背景。 */
     function readRect() {
-      if (element.style.display !== 'block' || element.classList.contains('fade-hidden')) return null;
+      if (element.ownerDocument?.hidden || element.style.display !== 'block' || element.classList.contains('fade-hidden')) return null;
       const rect = element.getBoundingClientRect();
       return {
         x: rect.x,
@@ -75,7 +75,7 @@
     }
 
     /** 尺寸或位置实际变化后才更新交互区，拖动结束时恢复完整同步。 */
-    function reportInteractiveRect() {
+    function reportInteractiveRect(preserveGlass = false) {
       if (destroyed) return;
       if (transitionSurface) {
         reportGlassRect(transitionSurface.rect, transitionSurface.presentation, true);
@@ -96,8 +96,13 @@
       lastRect = rect;
       lastGlassRect = visible ? rect : null;
       lastPresentation = undefined;
-      if (visible) api.send('updateInteractiveRect', rect);
-      else api.send('updateInteractiveRect', rect, false);
+      if (visible) {
+        if (preserveGlass) api.send('updateInteractiveRect', rect, true, true);
+        else api.send('updateInteractiveRect', rect);
+      } else {
+        if (preserveGlass) api.send('updateInteractiveRect', rect, false, true);
+        else api.send('updateInteractiveRect', rect, false);
+      }
     }
 
     /** 复用拖动帧已有的坐标与尺寸，避免为玻璃额外测量布局。 */
@@ -125,8 +130,11 @@
       transitionSurface = surface;
       if (surface) reportInteractiveRect();
       else {
-        reportGlassRect(readRect(), undefined, true);
-        reportInteractiveRect();
+        const rect = readRect();
+        // 模式切换结束后只隐藏面板并保留句柄，下一次进入 mini 可直接复用首帧资源。
+        // 页面真正隐藏或避让时，reportGlassRect 仍会发送空矩形并由主进程释放资源。
+        reportGlassRect(rect || lastRect, rect ? undefined : { visible: false, durationMs: 0 }, true);
+        reportInteractiveRect(!rect);
       }
     }
 

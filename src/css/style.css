@@ -351,32 +351,42 @@
     backdrop-filter: blur(var(--countdown-original-blur));
     /* 绿色边框突出提示 */
     opacity: 0;
-    animation: fadeIn var(--motion-duration-standard) var(--motion-easing-standard) forwards;
+    transition: opacity var(--motion-duration-standard) var(--motion-easing-standard),
+        transform var(--motion-duration-standard) var(--motion-easing-standard);
+    pointer-events: none;
+}
+
+.nextClassHint.nextClassHint-right {
+    transform: translate3d(calc(-1 * var(--space-2)), 0, 0);
+}
+
+.nextClassHint.nextClassHint-center {
+    transform: translate3d(-50%, calc(-1 * var(--space-2)), 0);
+}
+
+.nextClassHint.is-visible {
+    opacity: 1;
+}
+
+.nextClassHint.nextClassHint-right.is-visible {
+    transform: translate3d(0, 0, 0);
+}
+
+.nextClassHint.nextClassHint-center.is-visible {
+    transform: translate3d(-50%, 0, 0);
 }
 
 .nextClassHint.fadeOut {
     opacity: 0;
-    animation: fadeOut var(--motion-duration-standard) var(--motion-easing-exit) forwards;
+    transition-timing-function: var(--motion-easing-exit);
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+.nextClassHint.nextClassHint-right.fadeOut {
+    transform: translate3d(calc(-1 * var(--space-2)), 0, 0);
 }
 
-@keyframes fadeOut {
-    from {
-        opacity: 1;
-    }
-
-    to {
-        opacity: 0;
-    }
+.nextClassHint.nextClassHint-center.fadeOut {
+    transform: translate3d(-50%, calc(-1 * var(--space-2)), 0);
 }
 
 @keyframes dragBoundaryColorFlow {
@@ -398,5 +408,18 @@
     .dragBoundaryHint::before {
         animation: none;
         will-change: auto;
+    }
+
+    .nextClassHint {
+        transition-duration: 100ms;
+    }
+
+    .nextClassHint.nextClassHint-right,
+    .nextClassHint.nextClassHint-right.is-visible,
+    .nextClassHint.nextClassHint-right.fadeOut,
+    .nextClassHint.nextClassHint-center,
+    .nextClassHint.nextClassHint-center.is-visible,
+    .nextClassHint.nextClassHint-center.fadeOut {
+        transform: none;
     }
 }

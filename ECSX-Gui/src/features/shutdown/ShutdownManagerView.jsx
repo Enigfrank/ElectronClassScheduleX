@@ -15,6 +15,7 @@ import {
   Flex,
   FormControl,
   FormHelperText,
+  FormLabel,
   HStack,
   IconButton,
   Input,
@@ -57,10 +58,12 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
   const [shutdownTimes, setShutdownTimes] = useState([]);
   const [newTime, setNewTime] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [fieldError, setFieldError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [pendingDeleteIndex, setPendingDeleteIndex] = useState(null);
   const inputRef = useRef(null);
   const cancelDeleteRef = useRef(null);
+  const pendingAddRef = useRef(null);
 
   const mutedTextColor = useColorModeValue('gray.600', 'gray.400');
   const subtleTextColor = useColorModeValue('gray.500', 'gray.500');
@@ -75,6 +78,7 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
    */
   const loadShutdownTimes = useCallback(async () => {
     setIsLoading(true);
+    setErrorMessage('');
 
     try {
       const times = await ipcRenderer.invoke('getShutdownTimes');
@@ -93,15 +97,23 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
      * @param {Array<string | {time: string, enabled?: boolean}>} times 更新时间列表
      */
     const handleShutdownTimesUpdated = (_event, times) => {
-      setShutdownTimes(normalizeShutdownTimes(times));
-      setNewTime('');
-      window.setTimeout(() => inputRef.current?.focus(), 0);
+      const nextTimes = normalizeShutdownTimes(times);
+      setShutdownTimes(nextTimes);
+      const pendingAdd = pendingAddRef.current;
+      if (!pendingAdd || nextTimes.filter(item => item.time === pendingAdd.time).length <= pendingAdd.count) return;
+
+      pendingAddRef.current = null;
+      if (inputRef.current?.value === pendingAdd.draft) {
+        setNewTime('');
+        inputRef.current.focus();
+      }
     };
 
     loadShutdownTimes();
     const unsubscribe = ipcRenderer.on('shutdownTimesUpdated', handleShutdownTimesUpdated);
 
     return () => {
+      pendingAddRef.current = null;
       unsubscribe();
     };
   }, [ipcRenderer, loadShutdownTimes]);
@@ -114,12 +126,26 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
     const validation = validateShutdownTime(newTime);
 
     if (!validation.valid) {
-      setErrorMessage(validation.message);
+      setFieldError(validation.message);
       return;
     }
 
-    setErrorMessage('');
+    setFieldError('');
+    // 共享列表事件没有操作类型；用同一时间的新增数量确认本地添加，兼容重复时间。
+    const pendingAdd = pendingAddRef.current;
+    const existingCount = shutdownTimes.filter(item => item.time === validation.value).length;
+    pendingAddRef.current = {
+      time: validation.value,
+      count: pendingAdd?.time === validation.value ? Math.max(existingCount, pendingAdd.count + 1) : existingCount,
+      draft: newTime,
+    };
     ipcRenderer.send('addShutdownTime', { time: validation.value, enabled: true });
+  };
+
+  /** 更新本地时间草稿，并清除已经过时的字段校验错误。 */
+  const handleTimeChange = (event) => {
+    setNewTime(event.target.value);
+    setFieldError('');
   };
 
   /**
@@ -138,7 +164,6 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
    */
   const closeDeleteDialog = () => {
     setPendingDeleteIndex(null);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   /**
@@ -167,7 +192,9 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
    * @returns {void}
    */
   const handleInputKeyDown = (event) => {
+    if (event.nativeEvent?.isComposing) return;
     if (event.key === 'Enter') {
+      event.preventDefault();
       handleAddTime();
     }
   };
@@ -195,7 +222,7 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
               <Power size={20} />
             </Flex>
             <Box>
-              <Text fontSize="xl" fontWeight="semibold">
+              <Text as="h2" fontSize="xl" fontWeight="semibold">
                 定时关机管理
               </Text>
               <Text fontSize="sm" color={mutedTextColor}>
@@ -208,13 +235,15 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
 
       <Card bg={cardBg} borderRadius="lg">
         <CardBody>
-          <FormControl mb={4}>
+          <FormControl id="shutdown-time" isInvalid={Boolean(fieldError)} mb={4}>
+            <FormLabel htmlFor="shutdown-time">关机时间</FormLabel>
             <Flex gap={3} flexWrap={{ base: 'wrap', md: 'nowrap' }}>
               <Input
                 ref={inputRef}
                 value={newTime}
-                onChange={(event) => setNewTime(event.target.value)}
+                onChange={handleTimeChange}
                 onKeyDown={handleInputKeyDown}
+                aria-describedby={fieldError ? 'shutdown-time-error' : undefined}
                 placeholder="输入时间，例如 12:11"
                 autoFocus
                 maxW={{ base: '100%', md: '240px' }}
@@ -232,6 +261,13 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
               时间格式为 HH:mm，例如 12:10 下课可设置为 12:11
             </FormHelperText>
           </FormControl>
+
+          {fieldError && (
+            <Alert id="shutdown-time-error" status="error" borderRadius="md" mb={4}>
+              <AlertIcon />
+              {fieldError}
+            </Alert>
+          )}
 
           {errorMessage && (
             <Alert status="error" borderRadius="md" mb={4}>
@@ -319,6 +355,7 @@ const ShutdownManagerView = ({ ipcRenderer, onBack }) => {
       <AlertDialog
         isOpen={pendingDeleteIndex !== null}
         leastDestructiveRef={cancelDeleteRef}
+        finalFocusRef={inputRef}
         onClose={closeDeleteDialog}
       >
         <AlertDialogOverlay>

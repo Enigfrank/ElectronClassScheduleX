@@ -22,6 +22,7 @@ async function createEditorHarness(cssStyle = {}) {
   const requests = [];
   let current;
   let tree;
+  let nextId = 0;
   const react = {
     __esModule: true,
     default: {
@@ -43,6 +44,14 @@ async function createEditorHarness(cssStyle = {}) {
       if (!(index in current.state)) current.state[index] = { current: initial };
       return current.state[index];
     },
+    /** 为每个组件 Hook 位置生成稳定的实例 ID。 */
+    useId() {
+      const index = current.cursor++;
+      current.state[index] ??= `harness-${nextId += 1}`;
+      return current.state[index];
+    },
+    /** 无 DOM 的装置沿用提交阶段队列；真实焦点由独立 UI 验证覆盖。 */
+    useLayoutEffect(effect, dependencies) { react.useEffect(effect, dependencies); },
     /** 仅在依赖变化时安排提交后的 Effect。 */
     useEffect(effect, dependencies) {
       const index = current.cursor++;

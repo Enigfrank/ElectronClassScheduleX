@@ -36,17 +36,17 @@
             <span aria-hidden="true">&times;</span>
         </button>
 
-        <div id="exam-exit-layer" class="exam-exit-layer" role="dialog" aria-modal="true" aria-labelledby="exam-exit-title" hidden>
+        <dialog id="exam-exit-layer" class="exam-exit-layer" aria-labelledby="exam-exit-title">
             <section class="exam-exit-dialog">
                 <h1 id="exam-exit-title">退出考试模式？</h1>
                 <p>退出后将恢复顶部课表和考试配置窗口。</p>
                 <div class="exam-exit-actions">
-                    <button id="exam-exit-cancel" class="exam-dialog-button exam-dialog-button-secondary" type="button">继续考试</button>
+                    <button id="exam-exit-cancel" class="exam-dialog-button exam-dialog-button-secondary" type="button" autofocus>继续考试</button>
                     <button id="exam-exit-confirm" class="exam-dialog-button exam-dialog-button-primary" type="button">退出考试模式</button>
                 </div>
                 <p id="exam-exit-error" class="exam-exit-error" role="alert" hidden></p>
             </section>
-        </div>
+        </dialog>
     </main>
 
     <script src="./shared/examMode.js"></script>

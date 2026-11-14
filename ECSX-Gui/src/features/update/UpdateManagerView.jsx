@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -22,6 +22,7 @@ import {
   Thead,
   Tr,
   Tooltip,
+  VisuallyHidden,
   useColorModeValue
 } from '@chakra-ui/react';
 import { Download, DownloadCloud, Gauge, RefreshCw, RotateCw } from 'lucide-react';
@@ -101,6 +102,7 @@ function getCurrentSourceLabel(settings, status, sourceOptions) {
  * @returns {JSX.Element} 在线更新页面
  */
 function UpdateManagerView({ ipcRenderer }) {
+  const viewId = useId();
   const mutedTextColor = useColorModeValue('gray.500', 'gray.400');
   const borderColor = useColorModeValue('gray.200', 'gray.700');
   const cardBg = useColorModeValue('white', 'gray.800');
@@ -119,6 +121,7 @@ function UpdateManagerView({ ipcRenderer }) {
   const [isInstalling, setIsInstalling] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [settingsError, setSettingsError] = useState('');
+  const [resultMessage, setResultMessage] = useState('');
 
   const sourceOptions = useMemo(() => buildSourceOptions(settings.sources), [settings.sources]);
   const currentSourceLabel = useMemo(
@@ -126,6 +129,15 @@ function UpdateManagerView({ ipcRenderer }) {
     [settings, status, sourceOptions]
   );
   const isUpdateBusy = Boolean(status.busy || isChecking || isDownloading || isInstalling);
+
+  /** 仅播报有意义的更新结果，下载百分比与中间加载状态不进入实时区域。 */
+  useEffect(() => {
+    if (['available', 'not-available', 'downloaded'].includes(status.state)) {
+      setResultMessage(status.message);
+    } else {
+      setResultMessage('');
+    }
+  }, [status.state, status.message]);
 
   /**
    * 将后端返回的设置合并到本地状态。
@@ -202,10 +214,13 @@ function UpdateManagerView({ ipcRenderer }) {
    * @returns {Promise<void>} 保存结果
    */
   const saveSettings = useCallback(async (patch) => {
+    setResultMessage('');
+    setSettingsError('');
     try {
       const nextSettings = await ipcRenderer.invoke('set-update-settings', patch);
       applySettings({ ...patch, ...(nextSettings || {}) });
       setSettingsError('');
+      setResultMessage('更新设置已保存');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       setSettingsError(errorMessage);
@@ -217,6 +232,7 @@ function UpdateManagerView({ ipcRenderer }) {
    * @returns {Promise<void>} 检查结果
    */
   const handleCheckForUpdates = useCallback(async () => {
+    setResultMessage('');
     setIsChecking(true);
     try {
       await ipcRenderer.invoke('check-for-updates');
@@ -275,10 +291,13 @@ function UpdateManagerView({ ipcRenderer }) {
    * @returns {Promise<void>} 测速结果
    */
   const handleTestSources = useCallback(async () => {
+    setResultMessage('');
     setIsTesting(true);
     try {
       const results = await ipcRenderer.invoke('test-update-sources');
-      setProbeResults(Array.isArray(results) ? results : []);
+      const nextResults = Array.isArray(results) ? results : [];
+      setProbeResults(nextResults);
+      setResultMessage(`代理测速完成，共 ${nextResults.length} 个更新源，${nextResults.filter((result) => result.available).length} 个可用。`);
     } catch (error) {
       setStatus((prev) => ({
         ...prev,
@@ -306,6 +325,7 @@ function UpdateManagerView({ ipcRenderer }) {
 
   return (
     <>
+      <VisuallyHidden role="status" aria-atomic="true">{resultMessage}</VisuallyHidden>
       <SimpleGrid columns={[1, 2, 4]} gap={4} mb={6}>
         <Card bg={cardBg}>
           <CardBody>
@@ -380,6 +400,7 @@ function UpdateManagerView({ ipcRenderer }) {
             <Box mt={4}>
               <Flex align="center" gap={3}>
                 <Progress
+                  aria-label="更新下载进度"
                   value={status.progress.percent}
                   size="sm"
                   borderRadius="md"
@@ -400,7 +421,7 @@ function UpdateManagerView({ ipcRenderer }) {
           ) : null}
 
           {status.error ? (
-            <Text mt={3} fontSize="sm" color="red.500">{status.error}</Text>
+            <Text role="alert" mt={3} fontSize="sm" color="red.500">{status.error}</Text>
           ) : null}
         </CardBody>
       </Card>
@@ -409,7 +430,7 @@ function UpdateManagerView({ ipcRenderer }) {
         <CardBody>
           <Flex align="center" gap={2} mb={4}>
             <DownloadCloud size={18} />
-            <Text fontSize="lg" fontWeight="medium">更新设置</Text>
+            <Text as="h2" fontSize="lg" fontWeight="medium">更新设置</Text>
           </Flex>
 
           <Flex direction="column" gap={4}>
@@ -422,10 +443,12 @@ function UpdateManagerView({ ipcRenderer }) {
               borderColor={borderColor}
             >
               <Box>
-                <Text fontWeight="semibold">启动后自动检查更新</Text>
-                <Text fontSize="sm" color={mutedTextColor}>应用启动后后台检查一次，不会自动下载更新</Text>
+                <Text as="label" htmlFor={`${viewId}-auto-check`} fontWeight="semibold">启动后自动检查更新</Text>
+                <Text id={`${viewId}-auto-check-description`} fontSize="sm" color={mutedTextColor}>应用启动后后台检查一次，不会自动下载更新</Text>
               </Box>
               <Switch
+                id={`${viewId}-auto-check`}
+                aria-describedby={`${viewId}-auto-check-description`}
                 colorScheme="blue"
                 isChecked={settings.autoCheckUpdates}
                 isDisabled={isUpdateBusy}
@@ -442,10 +465,12 @@ function UpdateManagerView({ ipcRenderer }) {
               borderColor={borderColor}
             >
               <Box>
-                <Text fontWeight="semibold">使用代理源</Text>
-                <Text fontSize="sm" color={mutedTextColor}>关闭后将直接访问 GitHub 官方发布地址</Text>
+                <Text as="label" htmlFor={`${viewId}-use-proxy`} fontWeight="semibold">使用代理源</Text>
+                <Text id={`${viewId}-use-proxy-description`} fontSize="sm" color={mutedTextColor}>关闭后将直接访问 GitHub 官方发布地址</Text>
               </Box>
               <Switch
+                id={`${viewId}-use-proxy`}
+                aria-describedby={`${viewId}-use-proxy-description`}
                 colorScheme="blue"
                 isChecked={settings.useUpdateProxy}
                 isDisabled={isUpdateBusy}
@@ -488,7 +513,7 @@ function UpdateManagerView({ ipcRenderer }) {
             </FormControl>
 
             {settingsError ? (
-              <Text fontSize="sm" color="red.500">{settingsError}</Text>
+              <Text role="alert" fontSize="sm" color="red.500">{settingsError}</Text>
             ) : null}
           </Flex>
         </CardBody>
@@ -497,20 +522,20 @@ function UpdateManagerView({ ipcRenderer }) {
       <Card bg={cardBg}>
         <CardBody>
           <Flex align="center" justify="space-between" gap={3} mb={4} flexWrap="wrap">
-            <Text fontSize="lg" fontWeight="medium">代理测速结果</Text>
+            <Text as="h2" id={`${viewId}-probe-title`} fontSize="lg" fontWeight="medium">代理测速结果</Text>
             <Text fontSize="sm" color={mutedTextColor}>按照可用性和总耗时排序</Text>
           </Flex>
 
           {probeResults.length > 0 ? (
             <Box className="update-probe-results">
-              <Table size="sm">
+              <Table size="sm" aria-labelledby={`${viewId}-probe-title`}>
                 <Thead>
                   <Tr>
-                    <Th>源</Th>
-                    <Th>状态</Th>
-                    <Th>首字节</Th>
-                    <Th>总耗时</Th>
-                    <Th>操作</Th>
+                    <Th scope="col">源</Th>
+                    <Th scope="col">状态</Th>
+                    <Th scope="col">首字节</Th>
+                    <Th scope="col">总耗时</Th>
+                    <Th scope="col">操作</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
@@ -526,6 +551,7 @@ function UpdateManagerView({ ipcRenderer }) {
                       <Td>{result.totalMs == null ? '-' : `${result.totalMs} ms`}</Td>
                       <Td>
                         <Button
+                          aria-label={`使用此源：${result.name}`}
                           size="xs"
                           variant="outline"
                           isDisabled={!result.available || isUpdateBusy}

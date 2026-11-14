@@ -3,9 +3,110 @@ const test = require('node:test');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
 const { createMiniCountdownGlass } = require('../src/js/miniCountdownGlass');
 const { createToolbarGlass } = require('../src/js/toolbarGlass');
 const registerWindowIpc = require('../src/modules/ipc/registerWindowIpc');
+
+/** 装配真实窗口 IPC，使用受控时间和独立事件源验证中断后的穿透恢复。 */
+function createDragLifecycleFixture(t) {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const handlers = new Map();
+    const mouseStates = [];
+    const forwarded = [];
+    const overlays = [];
+    const main = Object.assign(new EventEmitter(), {
+        visible: true,
+        isDestroyed: () => false,
+        isVisible() { return this.visible; },
+        getBounds: () => ({ x: 0, y: 0 }),
+        setIgnoreMouseEvents: (...args) => mouseStates.push(args),
+        webContents: Object.assign(new EventEmitter(), {
+            isDestroyed: () => false,
+            send: (...args) => forwarded.push(args)
+        })
+    });
+    const overlay = Object.assign(new EventEmitter(), {
+        isDestroyed: () => false,
+        getBounds: () => ({ x: 0, y: 0 }),
+        webContents: new EventEmitter()
+    });
+    const windows = { main, touchDragOverlay: overlay };
+    registerWindowIpc({
+        ipcMain: { on: (channel, handler) => handlers.set(channel, handler) },
+        windowManager: {
+            getWindow: name => windows[name],
+            updateTouchDragOverlay: rect => overlays.push(rect)
+        },
+        screen: { getCursorScreenPoint: () => ({ x: 500, y: 500 }) },
+        log() {}
+    });
+    const sender = { sender: main.webContents };
+    t.after(() => handlers.get('updateInteractiveRect')(sender, null));
+    return { handlers, main, overlay, mouseStates, forwarded, overlays, sender,
+        rect: { x: 20, y: 8, width: 100, height: 40 } };
+}
+
+test('renderer崩溃释放原生拖动状态，下次拖动仍能恢复穿透检测', t => {
+    const h = createDragLifecycleFixture(t);
+    h.handlers.get('updateInteractiveRect')(h.sender, h.rect);
+    h.handlers.get('setDragState')(h.sender, true);
+    h.main.webContents.emit('render-process-gone');
+    assert.deepEqual(h.mouseStates.at(-1), [true, { forward: true }]);
+    assert.equal(h.overlays.at(-1), null);
+    assert.equal(h.main.listenerCount('hide'), 0);
+    h.handlers.get('updateInteractiveRect')(h.sender, h.rect);
+    h.handlers.get('setDragState')(h.sender, true);
+    h.handlers.get('setDragState')(h.sender, false);
+    assert.deepEqual(h.mouseStates.at(-1), [true, { forward: true }]);
+    assert.equal(h.main.webContents.listenerCount('render-process-gone'), 0);
+});
+
+test('覆盖窗口重载取消当前指针且清理其原生拖动所有权', t => {
+    const h = createDragLifecycleFixture(t);
+    h.handlers.get('updateInteractiveRect')(h.sender, h.rect);
+    h.handlers.get('touch-drag-overlay-pointer')({ sender: h.overlay.webContents },
+        { type: 'down', pointerId: 7, clientX: 30, clientY: 10 });
+    h.handlers.get('setDragState')(h.sender, true);
+    h.overlay.webContents.emit('did-start-loading');
+    assert.deepEqual(h.forwarded.at(-1), ['mini-countdown-overlay-pointer',
+        { type: 'cancel', pointerId: 7, clientX: 30, clientY: 10 }]);
+    assert.deepEqual(h.mouseStates.at(-1), [true, { forward: true }]);
+    assert.deepEqual(h.overlays.at(-1), h.rect);
+    assert.equal(h.overlay.listenerCount('hide'), 0);
+});
+
+test('正常结束解绑生命周期监听，后续隐藏不再重复取消已结束手势', t => {
+    const h = createDragLifecycleFixture(t);
+    h.handlers.get('updateInteractiveRect')(h.sender, h.rect);
+    h.handlers.get('setDragState')(h.sender, true);
+    h.handlers.get('setDragState')(h.sender, false);
+    const changes = h.mouseStates.length;
+    h.main.emit('hide');
+    h.overlay.emit('closed');
+    t.mock.timers.tick(25);
+    assert.equal(h.mouseStates.length, changes);
+    assert.equal(h.main.listenerCount('hide'), 0);
+    assert.equal(h.overlay.webContents.listenerCount('did-start-loading'), 0);
+});
+
+test('主窗口隐藏后的晚到拖动结束矩形不能恢复覆盖窗口，重新显示后接受新矩形', t => {
+    const h = createDragLifecycleFixture(t);
+    h.handlers.get('updateInteractiveRect')(h.sender, h.rect);
+    h.handlers.get('touch-drag-overlay-pointer')({ sender: h.overlay.webContents },
+        { type: 'down', pointerId: 7, clientX: 30, clientY: 10 });
+    h.handlers.get('setDragState')(h.sender, true);
+    h.main.visible = false;
+    h.main.emit('hide');
+    assert.equal(h.forwarded.at(-1)[1].type, 'cancel');
+    h.handlers.get('setDragState')(h.sender, false);
+    h.handlers.get('updateInteractiveRect')(h.sender, { ...h.rect, x: 40 });
+    assert.equal(h.overlays.at(-1), null);
+    assert.deepEqual(h.mouseStates.at(-1), [true, { forward: true }]);
+    h.main.visible = true;
+    h.handlers.get('updateInteractiveRect')(h.sender, { ...h.rect, x: 40 });
+    assert.deepEqual(h.overlays.at(-1), { ...h.rect, x: 40 });
+});
 
 /** 构造最小页面依赖，观察布局测量、IPC 和监听清理行为。 */
 function createFixture() {
@@ -87,10 +188,11 @@ function createPageFixture() {
     const window = { mainWindowApi: fixture.api, innerWidth: 1920, innerHeight: 120, addEventListener() {} };
     const context = vm.createContext({
         window,
-        document: {
+        document: Object.assign(element.ownerDocument, {
+            addEventListener() {},
             getElementById: id => id === 'miniCountdown' ? element : id === 'globalContainer' ? { children: [] } : boundary,
             querySelector: () => boundary
-        },
+        }),
         createMiniCountdownGlass: () => fixture.sync,
         createToolbarGlass: () => ({ reportRects() {}, destroy() {} }),
         createToolbarTransition: options => {
@@ -130,6 +232,25 @@ test('unchanged countdown geometry does not send repeated IPC', () => {
         channel: 'updateInteractiveRect',
         value: { x: 100, y: 8, width: 200, height: 40, cornerRadius: 16 }
     });
+});
+
+test('真实页面隐藏结束拖动且不测量矩形，显示时重新上报最终位置及静止交互区', () => {
+    const h = createPageFixture();
+    h.page.startMiniCountdownDrag(7, 110, 10);
+    h.page.updateMiniCountdownDragPosition(210, 30);
+    h.page.document.hidden = true;
+    const measurements = h.counts.measurements;
+    h.page.handleToolbarVisibilityChange();
+    assert.equal(h.counts.measurements, measurements);
+    assert.deepEqual(h.messages.at(-1), { channel: 'updateInteractiveRect', value: null });
+    h.page.document.hidden = false;
+    h.page.handleToolbarVisibilityChange();
+    assert.deepEqual(h.messages.at(-1), { channel: 'updateInteractiveRect',
+        value: { x: 200, y: 28, width: 200, height: 40, cornerRadius: 16 } });
+    h.page.document.hidden = true;
+    h.page.handleToolbarVisibilityChange();
+    assert.deepEqual(h.messages.at(-1), { channel: 'updateInteractiveRect', value: null });
+    h.sync.destroy();
 });
 
 test('black mode has no native drag IPC or extra layout measurement', () => {
@@ -287,6 +408,27 @@ test('mini过渡覆盖保留presentation并去重，避让立即发送null且恢
     h.sync.destroy();
 });
 
+test('mini从全屏模式退场时隐藏并保留原生矩形，下一次进入无需重新创建面板', () => {
+    const h = createFixture();
+    h.element.style.display = 'block';
+    h.sync.reportInteractiveRect();
+    h.state({ active: true });
+    h.messages.length = 0;
+    const rect = { ...h.bounds, cornerRadius: 16 };
+    h.sync.setTransitionSurface({ rect, presentation: { visible: true, durationMs: 60 } });
+    h.element.style.display = 'none';
+    h.sync.setTransitionSurface(null);
+    assert.deepEqual(h.messages.findLast(message => message.channel === 'mini-countdown-glass-rect'), {
+        channel: 'mini-countdown-glass-rect', value: rect, args: [{ visible: false, durationMs: 0 }]
+    });
+    h.element.style.display = 'block';
+    h.sync.setTransitionSurface({ rect, presentation: { visible: true, durationMs: 60 } });
+    assert.deepEqual(h.messages.at(-1), {
+        channel: 'mini-countdown-glass-rect', value: rect, args: [{ visible: true, durationMs: 60 }]
+    });
+    h.sync.destroy();
+});
+
 test('形态切换先结束拖动并取消排队帧，动画期间锁定手势，退场后不重建玻璃', () => {
     const fixture = createPageFixture();
     fixture.page.startMiniCountdownDrag(1, 100, 8);
@@ -406,7 +548,7 @@ test('根节点避让期间切入 mini 保留交互矩形但禁止原生创建�
     registerWindowIpc({
         ipcMain: { on: (channel, handler) => handlers.set(channel, handler) },
         windowManager: {
-            getWindow: () => ({ isDestroyed: () => false, webContents: sender, setIgnoreMouseEvents() {} }),
+            getWindow: () => ({ isDestroyed: () => false, isVisible: () => true, webContents: sender, setIgnoreMouseEvents() {} }),
             updateMiniCountdownGlass: rect => glassRects.push(rect),
             updateTouchDragOverlay: rect => overlayRects.push(rect),
         }, screen: {}, log() {},

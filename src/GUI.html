@@ -128,9 +128,9 @@
 
     <!-- 错误提示 -->
     <div class="error-container" id="error">
-        <div class="error-icon">&#x26A0;</div>
-        <div class="error-title">加载失败</div>
-        <div class="error-message" id="error-message">
+        <div class="error-icon" aria-hidden="true">&#x26A0;</div>
+        <h1 class="error-title" id="error-title" tabindex="-1" aria-describedby="error-message">加载失败</h1>
+        <div class="error-message" id="error-message" role="alert" aria-atomic="true">
             无法加载应用程序，请重新启动应用。
         </div>
     </div>
@@ -144,6 +144,22 @@
 
 
     <script>
+        /** 显示致命加载错误，隔离已挂载应用并将焦点移到可见标题。 */
+        function showShellError(message) {
+            var loading = document.getElementById('loading');
+            var error = document.getElementById('error');
+            var errorMessage = document.getElementById('error-message');
+            var root = document.getElementById('root');
+            var title = document.getElementById('error-title');
+            var moveFocus = root && (root.contains(document.activeElement) || document.activeElement === document.body);
+
+            if (loading) loading.classList.add('hidden');
+            if (root) root.inert = true;
+            if (errorMessage && message) errorMessage.textContent = message;
+            if (error) error.classList.add('visible');
+            if (moveFocus && title) title.focus();
+        }
+
         // 隐藏加载动画
         window.addEventListener('load', function() {
             setTimeout(function() {
@@ -157,34 +173,14 @@
         // 错误处理
         window.addEventListener('error', function (e) {
             console.error('应用加载错误:', e);
-            var loading = document.getElementById('loading');
-            var error = document.getElementById('error');
-            var errorMessage = document.getElementById('error-message');
-
-            if (loading) {
-                loading.classList.add('hidden');
-            }
-            if (error) {
-                error.classList.add('visible');
-            }
-            if (errorMessage && e.message) {
-                errorMessage.textContent = '错误: ' + e.message;
-            }
+            showShellError(e.message ? '错误: ' + e.message : '');
         });
 
         // 检查 React 是否正确加载
         setTimeout(function () {
             var root = document.getElementById('root');
             if (root && root.children.length === 0) {
-                var loading = document.getElementById('loading');
-                var error = document.getElementById('error');
-
-                if (loading) {
-                    loading.classList.add('hidden');
-                }
-                if (error) {
-                    error.classList.add('visible');
-                }
+                showShellError('');
             }
         }, 10000);
     </script>

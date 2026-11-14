@@ -2,6 +2,7 @@
   const DURATION_MS = 300;
   const EXIT_MS = 70;
   const ARRIVE_MS = 240;
+  const DEFAULT_GLASS_UPDATE_INTERVAL_MS = 33;
 
   /** 将阶段时间夹取到透明度和插值使用的范围。 */
   function clamp(value) { return Math.max(0, Math.min(1, value)); }
@@ -23,7 +24,8 @@
     getStyle = target => scope.getComputedStyle(target),
     reducedMotion = () => scope.matchMedia('(prefers-reduced-motion: reduce)').matches,
     requestFrame = callback => scope.requestAnimationFrame(callback),
-    cancelFrame = id => scope.cancelAnimationFrame(id), now = () => scope.performance.now() }) {
+    cancelFrame = id => scope.cancelAnimationFrame(id), now = () => scope.performance.now(),
+    glassUpdateIntervalMs = DEFAULT_GLASS_UPDATE_INTERVAL_MS }) {
     const document = container.ownerDocument;
     const root = document.documentElement;
     const surface = document.createElement('div');
@@ -37,6 +39,9 @@
     let run = null;
     let visual = null;
     let frame = null;
+    let glassInterval = glassUpdateIntervalMs;
+    let lastGlassReportAt = -Infinity;
+    let lastGlassPhase = '';
     let destroyed = false;
 
     /** 读取相对 renderer 的 DIP 矩形，原生和 CSS 使用同一份快照。 */
@@ -91,8 +96,12 @@
     }
 
     /** 显式驱动原生几何与展示；旁路 reporter 不依赖 WAAPI 的观察器回调。 */
-    function reportSurfaces(rect, elapsed) {
+    function reportSurfaces(rect, elapsed, force = false) {
       const arrived = elapsed >= ARRIVE_MS;
+      const phase = `${arrived}:${state.mode}:${run.detour}`;
+      if (!force && phase === lastGlassPhase && elapsed - lastGlassReportAt < glassInterval) return;
+      lastGlassPhase = phase;
+      lastGlassReportAt = elapsed;
       const destination = state.mode === 'mini' ? 'miniCountdown' : 'classContainer';
       for (const id of ['miniCountdown', 'classContainer']) {
         const visible = run.detour ? arrived && id === destination
@@ -167,7 +176,7 @@
         if (!run) applyStable(next);
         else {
           countdownContainer.style.display = next.showCountdown ? 'block' : 'none';
-          reportSurfaces(visual.rect, Math.max(0, now() - run.started));
+          reportSurfaces(visual.rect, Math.max(0, now() - run.started), true);
         }
         return;
       }
@@ -180,6 +189,8 @@
       }
       if (frame !== null) cancelFrame(frame);
       frame = null;
+      lastGlassReportAt = -Infinity;
+      lastGlassPhase = '';
       const source = previous.mode === 'mini' ? miniCountdown : classContainer;
       const from = visual?.rect || readRect(source);
       const owner = run?.owner || (previous.mode === 'mini' ? 'miniCountdown' : 'classContainer');
@@ -216,7 +227,14 @@
       surface.remove();
     }
 
-    return { setState, isRunning: () => run !== null, destroy };
+    /** 应用设备性能测试结果，降低慢设备上的原生玻璃更新频率。 */
+    function setPerformance(profile) {
+      if (Number.isFinite(profile?.transitionFrameIntervalMs)) {
+        glassInterval = Math.min(100, Math.max(16, Math.round(profile.transitionFrameIntervalMs)));
+      }
+    }
+
+    return { setState, setPerformance, isRunning: () => run !== null, destroy };
   }
 
   if (typeof module === 'object' && module.exports) module.exports = { createToolbarTransition };

@@ -106,7 +106,7 @@ function createMiniCountdownHarness(clock) {
     const window = { mainWindowApi: { on() {}, send() {} }, addEventListener() {} };
     const context = vm.createContext({
         window,
-        document: { getElementById: () => element, querySelector: () => element },
+        document: { addEventListener() {}, getElementById: () => element, querySelector: () => element },
         createMiniCountdownGlass: () => ({ destroy() {}, reportInteractiveRect() {} }),
         createToolbarGlass: () => ({ destroy() {}, reportRects() {} }),
         createToolbarTransition: () => ({ setState() {}, isRunning: () => false, destroy() {} }),

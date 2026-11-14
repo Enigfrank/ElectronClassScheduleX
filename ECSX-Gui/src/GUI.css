@@ -3,6 +3,20 @@
   --motion-duration-standard: 200ms;
   --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --motion-offset-subtle: 4px;
+  --performance-stage-height: 64px;
+  --performance-stage-space: 16px;
+  --performance-stage-border: #e5e7eb;
+  --performance-stage-radius: 8px;
+  --performance-stage-background: #f3f4f6;
+  --performance-sample-width: 64px;
+  --performance-sample-height: 32px;
+  --performance-sample-border: #d1d5db;
+  --performance-sample-background: rgba(255, 255, 255, 0.72);
+  --performance-sample-blur: 8px;
+  --performance-sample-opacity: 0.72;
+  --performance-animation-duration: 900ms;
+  --performance-animation-delay: -450ms;
+  --performance-animation-distance: 640px;
 }
 
 * {
@@ -43,6 +57,39 @@ body {
   transition: opacity var(--motion-duration-fast) var(--motion-ease-out), transform var(--motion-duration-fast) var(--motion-ease-out);
 }
 
+.glass-performance-stage {
+  position: relative;
+  height: var(--performance-stage-height);
+  margin-bottom: var(--performance-stage-space);
+  overflow: hidden;
+  border: 1px solid var(--performance-stage-border);
+  border-radius: var(--performance-stage-radius);
+  background: var(--performance-stage-background);
+}
+
+.glass-performance-sample {
+  position: absolute;
+  top: var(--performance-stage-space);
+  left: 0;
+  width: var(--performance-sample-width);
+  height: var(--performance-sample-height);
+  border: 1px solid var(--performance-sample-border);
+  border-radius: var(--performance-stage-radius);
+  background: var(--performance-sample-background);
+  backdrop-filter: blur(var(--performance-sample-blur));
+  animation: glass-performance-slide var(--performance-animation-duration) ease-in-out infinite alternate;
+}
+
+.glass-performance-sample-secondary {
+  animation-delay: var(--performance-animation-delay);
+  opacity: var(--performance-sample-opacity);
+}
+
+@keyframes glass-performance-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--performance-animation-distance)); }
+}
+
 @starting-style {
   .update-probe-results {
     opacity: 0;
@@ -51,6 +98,11 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* 提高作用域优先级以覆盖 Emotion 动态注入的 Spinner 与加载按钮旋转。 */
+  .dashboard-shell .chakra-spinner {
+    animation: none;
+  }
+
   .dashboard-action-card {
     transform: none !important;
     transition: none;

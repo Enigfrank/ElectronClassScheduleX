@@ -95,7 +95,9 @@
   let nextClassHint = document.getElementById('nextClassHint');
   let isHintShown = false; 
   let hintTimer = null; 
+  let hintFadeTimer = null;
   const visibilityTransitionDurationMs = 200;
+  const nextClassHintGap = 10;
   const toolbarRestoreDelayMs = 2500;
   const miniCountdownGlass = createMiniCountdownGlass({ api: ipcRenderer, element: miniCountdown });
   const toolbarGlass = createToolbarGlass({ api: ipcRenderer, container: globalContainer,
@@ -108,33 +110,97 @@
     onSettled(state) {
       if (state.mode !== 'mini' && miniCountdownHasMoved) resetMiniCountdownPosition();
     } });
+  const unsubscribeGlassPerformance = ipcRenderer.on('mini-countdown-glass-performance', (_event, profile) => {
+    toolbarTransition.setPerformance(profile);
+  });
+  window.addEventListener('beforeunload', cleanupToolbarInteraction, { once: true });
+  window.addEventListener('pagehide', cleanupToolbarInteraction);
+  document.addEventListener('visibilitychange', handleToolbarVisibilityChange);
   window.addEventListener('beforeunload', toolbarTransition.destroy, { once: true });
   window.addEventListener('beforeunload', miniCountdownGlass.destroy, { once: true });
   window.addEventListener('beforeunload', toolbarGlass.destroy, { once: true });
+  window.addEventListener('beforeunload', unsubscribeGlassPerformance, { once: true });
 
+  /** 用文本节点构造课程、分隔线与高亮，避免将配置内容解释为 HTML。 */
   function setScheduleClass() {
-    let classHtml = '';
+    const fragment = document.createDocumentFragment();
     for (let i = 0; i < scheduleData.scheduleArray.length; i++) {
-      let inner = scheduleData.scheduleArray[i]
-      if (scheduleData.scheduleArray[i].indexOf('@') != -1) {
-        inner = `<div><div class="classNamePart">${inner.split('@')[0]}</div><div class="subClass">${inner.split('@')[1]}</div></div>`
+      const name = scheduleData.scheduleArray[i];
+      const course = document.createElement('div');
+      course.className = 'class';
+      if (name.indexOf('@') != -1) {
+        const parts = name.split('@');
+        const wrapper = document.createElement('div');
+        const className = document.createElement('div');
+        className.className = 'classNamePart';
+        className.textContent = parts[0];
+        const subClass = document.createElement('div');
+        subClass.className = 'subClass';
+        subClass.textContent = parts[1];
+        wrapper.append(className, subClass);
+        course.append(wrapper);
+      } else {
+        course.textContent = name;
       }
       if (scheduleData.currentHighlight.index == i) {
-        if (scheduleData.currentHighlight.type === 'current')
-          classHtml += `<div class="class current" id="highlighted">${inner}</div>`
-        else if (scheduleData.currentHighlight.type === 'upcoming')
-          classHtml += `<div class="class upcoming" id="highlighted">${inner}</div>`
+        if (scheduleData.currentHighlight.type === 'current' || scheduleData.currentHighlight.type === 'upcoming') {
+          course.classList.add(scheduleData.currentHighlight.type);
+          course.id = 'highlighted';
+          fragment.append(course);
+        }
+      } else {
+        if (scheduleData.currentHighlight.index > i) course.classList.add('elapsed');
+        fragment.append(course);
       }
-      else {
-        if (scheduleData.currentHighlight.index > i)
-          classHtml += `<div class="class elapsed">${inner}</div>`
-        else
-          classHtml += `<div class="class">${inner}</div>`
+      if (scheduleData.divider.indexOf(i) != -1) {
+        const divider = document.createElement('div');
+        divider.className = 'divider';
+        fragment.append(divider);
       }
-      if (scheduleData.divider.indexOf(i) != -1)
-        classHtml += '<div class="divider"></div>'
     }
-    classContainer.innerHTML = classHtml
+    classContainer.replaceChildren(fragment);
+  }
+
+  /** 取消提示所属的显示和淡出计时器，并立即清除旧课程提示。 */
+  function resetNextClassHint() {
+    clearTimeout(hintTimer);
+    clearTimeout(hintFadeTimer);
+    hintTimer = null;
+    hintFadeTimer = null;
+    nextClassHint.style.display = 'none';
+    nextClassHint.style.transform = '';
+    nextClassHint.classList.remove('is-visible', 'nextClassHint-right', 'nextClassHint-center');
+    nextClassHint.classList.remove('fadeOut');
+    isHintShown = false;
+  }
+
+  /** 判断两个矩形是否实际重叠。 */
+  function rectanglesOverlap(first, second) {
+    return first.left < second.right && first.right > second.left &&
+      first.top < second.bottom && first.bottom > second.top;
+  }
+
+  /** 按 mini 是否移动及其与居中提示框的重叠关系选择提示框位置。 */
+  function positionNextClassHint() {
+    const miniRect = miniCountdown.getBoundingClientRect();
+    let showBesideMini = !miniCountdownHasMoved;
+    if (miniCountdownHasMoved) {
+      nextClassHint.classList.remove('nextClassHint-right');
+      nextClassHint.classList.add('nextClassHint-center');
+      nextClassHint.style.left = '50%';
+      nextClassHint.style.top = 'var(--top-space)';
+      showBesideMini = rectanglesOverlap(miniRect, nextClassHint.getBoundingClientRect());
+    }
+    nextClassHint.classList.toggle('nextClassHint-right', showBesideMini);
+    nextClassHint.classList.toggle('nextClassHint-center', !showBesideMini);
+
+    if (showBesideMini) {
+      nextClassHint.style.left = `${miniRect.right + nextClassHintGap}px`;
+      nextClassHint.style.top = `${miniRect.top}px`;
+    } else {
+      nextClassHint.style.left = '50%';
+      nextClassHint.style.top = 'var(--top-space)';
+    }
   }
 
   /** 根据课程状态统一切换形态，让每秒内容刷新不重播动画。 */
@@ -162,39 +228,28 @@
     if (scheduleData.currentHighlight.type === 'current' && scheduleData.currentHighlight.countdown === 600 && !isHintShown) {
       const nextClass = getNextClassInfo();
       if (nextClass) {
-        nextClassHint.innerHTML = `<span class="hint-label">下节</span>: ${nextClass.name}`;
+        resetNextClassHint();
+        const label = document.createElement('span');
+        label.className = 'hint-label';
+        label.textContent = '下节';
+        nextClassHint.replaceChildren(label, document.createTextNode(`: ${nextClass.name}`));
         
-        if (!miniCountdownHasMoved) {
-          // 1. 未移动过（在原位）：显示在 miniCountdown 右侧
-          const miniRect = miniCountdown.getBoundingClientRect();
-          nextClassHint.style.left = `${miniRect.right + 10}px`; 
-          nextClassHint.style.top = `${miniRect.top}px`; 
-          nextClassHint.style.transform = 'none'; // 清除居中变换
-        } else {
-          // 2. 被移动过：显示在屏幕顶部正中央
-          nextClassHint.style.left = '50%';
-          nextClassHint.style.top = 'var(--top-space)'; // 保持与初始状态一致的顶部间距
-          nextClassHint.style.transform = 'translateX(-50%)'; // 启用水平居中
-        }
-
         // 先移除淡出类，确保可以重新触发淡入动画
         nextClassHint.classList.remove('fadeOut');
         nextClassHint.style.display = 'block';
+        positionNextClassHint();
 
         // 强制重排，确保动画可以重新触发
         void nextClassHint.offsetHeight;
+        nextClassHint.classList.add('is-visible');
 
         isHintShown = true;
 
-        // 15秒后隐藏提示
-        clearTimeout(hintTimer);
+        // 保留 12.5 秒显示和 200 毫秒淡出时长。
         hintTimer = setTimeout(() => {
+          hintTimer = null;
           nextClassHint.classList.add('fadeOut'); // 淡出动画
-          setTimeout(() => {
-            nextClassHint.style.display = 'none';
-            nextClassHint.classList.remove('fadeOut');
-            isHintShown = false; // 重置状态，允许下次触发
-          }, visibilityTransitionDurationMs); // 等待淡出动画完成
+          hintFadeTimer = setTimeout(resetNextClassHint, visibilityTransitionDurationMs);
         }, 12500);
       }
     }
@@ -332,6 +387,7 @@
       captureTarget.addEventListener('pointermove', handlePointerMoveDrag);
       captureTarget.addEventListener('pointerup', handlePointerUp);
       captureTarget.addEventListener('pointercancel', handlePointerUp);
+      captureTarget.addEventListener('lostpointercapture', handlePointerUp);
     }
     return true;
   }
@@ -341,7 +397,7 @@
    * @param {PointerEvent} event 原生指针事件
    */
   function handlePointerDown(event) {
-    if (!event.isPrimary) return;
+    if (!event.isPrimary || event.button !== 0) return;
     if (startMiniCountdownDrag(event.pointerId, event.clientX, event.clientY, event.currentTarget)) {
       event.preventDefault();
     }
@@ -425,6 +481,10 @@
    */
   function handlePointerMoveDrag(event) {
     if (!event.isPrimary || event.pointerId !== dragPointerId) return;
+    if (event.pointerType === 'mouse' && (event.buttons & 1) === 0) {
+      finishMiniCountdownDrag(event.pointerId);
+      return;
+    }
     updateMiniCountdownDragPosition(event.clientX, event.clientY);
     event.preventDefault();
   }
@@ -461,6 +521,7 @@
       captureTarget.removeEventListener('pointermove', handlePointerMoveDrag);
       captureTarget.removeEventListener('pointerup', handlePointerUp);
       captureTarget.removeEventListener('pointercancel', handlePointerUp);
+      captureTarget.removeEventListener('lostpointercapture', handlePointerUp);
     }
   }
 
@@ -498,6 +559,18 @@
     }
   }
 
+  /** 页面隐藏时释放拖动和交互区，恢复显示后重报当前矩形。 */
+  function handleToolbarVisibilityChange() {
+    if (document.hidden) finishMiniCountdownDrag(dragPointerId);
+    updateInteractiveRect();
+  }
+
+  /** 页面离开前先结束原生拖动并清理课程提示计时器。 */
+  function cleanupToolbarInteraction() {
+    finishMiniCountdownDrag(dragPointerId);
+    resetNextClassHint();
+  }
+
 
   /** mini 完全退场后才清除拖动位置，避免下课时先瞬移到顶部。 */
   function resetMiniCountdownPosition() {
@@ -524,8 +597,7 @@
   function tick(reset = false) {
     scheduleData = getScheduleData();
     if (scheduleData.currentHighlight.fullName !== lastScheduleData.currentHighlight.fullName) {
-      isHintShown = false;
-      clearTimeout(hintTimer);
+      resetNextClassHint();
     }
     setCountdownerContent()
     if (JSON.stringify(scheduleData.scheduleArray) != JSON.stringify(lastScheduleData.scheduleArray) ||
@@ -578,7 +650,8 @@
    * @param {MouseEvent} event - 窗口转发的鼠标移动事件
    */
   function handlePointerMove(event) {
-    if (miniCountdown.style.display === 'block' && !toolbarTransition.isRunning()) {
+    // 形态切换期间必须保留整段过渡，避免指针避让把动画层整体设为透明。
+    if (toolbarTransition.isRunning() || miniCountdown.style.display === 'block') {
       return;
     }
 

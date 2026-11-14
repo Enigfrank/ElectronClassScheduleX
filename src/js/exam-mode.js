@@ -14,6 +14,8 @@
     let initializationFailed = false;
     let tickTimer = null;
     let exitLayerHideTimer = null;
+    let exitLayerOpenFrame = null;
+    let exitPending = false;
     let unsubscribeInit = () => {};
     let resizeObserver = null;
 
@@ -62,22 +64,26 @@
         clockElement.textContent = clockText;
         clockElement.dateTime = clockText;
 
+        let infoText;
         if (initializationFailed) {
-            infoElement.textContent = '考试安排加载失败';
+            infoText = '考试安排加载失败';
         } else if (!initialized) {
-            infoElement.textContent = '正在加载考试安排';
+            infoText = '正在加载考试安排';
         } else {
             const state = domain.resolveExamDisplayState(entries, now);
             if (state.status === 'current') {
-                infoElement.textContent = formatEntry(state.entry);
+                infoText = formatEntry(state.entry);
             } else if (state.status === 'next') {
-                infoElement.textContent = `下一场：${formatEntry(state.entry)}`;
+                infoText = `下一场：${formatEntry(state.entry)}`;
             } else {
-                infoElement.textContent = '今日考试已结束';
+                infoText = '今日考试已结束';
             }
         }
 
-        fitInfoText();
+        if (infoElement.textContent !== infoText) {
+            infoElement.textContent = infoText;
+            fitInfoText();
+        }
     }
 
     /**
@@ -114,16 +120,18 @@
      * 打开触控退出确认层。
      */
     function openExitLayer() {
+        if (exitPending || exitLayer.open) return;
         if (exitLayerHideTimer !== null) {
             window.clearTimeout(exitLayerHideTimer);
             exitLayerHideTimer = null;
         }
         exitError.hidden = true;
         exitError.textContent = '';
-        exitLayer.hidden = false;
-        window.requestAnimationFrame(() => {
-            exitLayer.classList.add('is-visible');
-            exitCancel.focus();
+        exitLayer.closedBy = 'closerequest';
+        exitLayer.showModal();
+        exitLayerOpenFrame = window.requestAnimationFrame(() => {
+            exitLayerOpenFrame = null;
+            if (exitLayer.open && exitLayerHideTimer === null) exitLayer.classList.add('is-visible');
         });
     }
 
@@ -131,15 +139,23 @@
      * 关闭退出确认层并回到考试展示。
      */
     function closeExitLayer() {
-        if (exitLayerHideTimer !== null) {
-            window.clearTimeout(exitLayerHideTimer);
+        if (exitPending || !exitLayer.open || exitLayerHideTimer !== null) return;
+        if (exitLayerOpenFrame !== null) {
+            window.cancelAnimationFrame(exitLayerOpenFrame);
+            exitLayerOpenFrame = null;
         }
+        exitLayer.closedBy = 'none';
         exitLayer.classList.remove('is-visible');
         exitLayerHideTimer = window.setTimeout(() => {
-            exitLayer.hidden = true;
             exitLayerHideTimer = null;
-            exitTrigger.focus();
+            exitLayer.close();
         }, 160);
+    }
+
+    /** 将原生 Escape 取消请求交给现有退场过渡，并守住请求中的退出状态。 */
+    function handleExitCancel(event) {
+        event.preventDefault();
+        closeExitLayer();
     }
 
     /**
@@ -147,6 +163,9 @@
      * @returns {Promise<void>} 退出请求完成
      */
     async function confirmExit() {
+        if (exitPending || !exitLayer.open || exitLayerHideTimer !== null) return;
+        exitPending = true;
+        exitLayer.closedBy = 'none';
         exitConfirm.disabled = true;
         exitCancel.disabled = true;
         exitError.hidden = true;
@@ -160,7 +179,10 @@
             exitError.hidden = false;
             exitConfirm.disabled = false;
             exitCancel.disabled = false;
+            exitPending = false;
+            exitLayer.closedBy = 'closerequest';
             exitLayer.removeAttribute('aria-busy');
+            exitConfirm.focus();
         }
     }
 
@@ -170,9 +192,11 @@
     function cleanup() {
         if (tickTimer !== null) window.clearTimeout(tickTimer);
         if (exitLayerHideTimer !== null) window.clearTimeout(exitLayerHideTimer);
+        if (exitLayerOpenFrame !== null) window.cancelAnimationFrame(exitLayerOpenFrame);
         unsubscribeInit();
         resizeObserver?.disconnect();
         window.removeEventListener('resize', fitInfoText);
+        document.fonts.removeEventListener('loadingdone', fitInfoText);
     }
 
     /**
@@ -189,16 +213,18 @@
         exitTrigger.addEventListener('click', openExitLayer);
         exitCancel.addEventListener('click', closeExitLayer);
         exitConfirm.addEventListener('click', confirmExit);
+        exitLayer.addEventListener('cancel', handleExitCancel);
         window.addEventListener('beforeunload', cleanup, { once: true });
 
         if (typeof ResizeObserver === 'function') {
             resizeObserver = new ResizeObserver(fitInfoText);
             resizeObserver.observe(infoElement);
-        } else {
-            window.addEventListener('resize', fitInfoText);
         }
+        window.addEventListener('resize', fitInfoText);
+        document.fonts.addEventListener('loadingdone', fitInfoText);
 
         render(new Date());
+        fitInfoText();
         scheduleNextTick();
     }
 
