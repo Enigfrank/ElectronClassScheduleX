@@ -22,7 +22,11 @@ function createFixture() {
         const classes = new Set();
         return {
             id, bounds, ownerDocument: document,
-            style: { transform: 'translateX(-50%)' }, textContent: '',
+            style: {
+                transform: 'translateX(-50%)',
+                setProperty(name, value) { this[name] = value; },
+                removeProperty(name) { delete this[name]; }
+            },
             classList: {
                 contains: name => classes.has(name),
                 add: (...names) => names.forEach(name => classes.add(name)),
@@ -52,9 +56,13 @@ function createFixture() {
         history.push({ id, surface });
     }
 
+    /** 模拟仍有原生首帧的区域最后上报的稳定矩形。 */
+    const reportedRect = el => el.classList.contains('liquidGlass') ? { ...el.bounds, cornerRadius: 8 } : null;
+
     const transition = createToolbarTransition({ ...elements,
-        toolbarGlass: { setTransitionSurface: report, reportRects() {} },
-        miniCountdownGlass: { setTransitionSurface: surface => report('miniCountdown', surface) },
+        toolbarGlass: { setTransitionSurface: report, reportRects() {}, getReportedRect: id => reportedRect(elements[id]) },
+        miniCountdownGlass: { setTransitionSurface: surface => report('miniCountdown', surface),
+            getReportedRect: () => reportedRect(miniCountdown) },
         getStyle: () => ({ borderTopLeftRadius: '8px', borderTopWidth: '2px',
             getPropertyValue: () => '5px' }),
         reducedMotion: () => reduced,
@@ -75,37 +83,35 @@ function createFixture() {
             frames.clear();
             pending.forEach(callback => callback(time));
         },
-        sheet: () => nodes.find(node => node.id === 'toolbar-transition-geometry').textContent
+        surface: nodes[0]
     };
-}
-
-/** 读取控制器写入样式表的数值 token，避免测试复制动画公式。 */
-function token(h, name) {
-    return Number(h.sheet().match(new RegExp(`--toolbar-${name}: ([\\d.-]+)`))[1]);
 }
 
 test('300ms收拢：侧边及课程先退场，几何连续变化，到位后目标文字淡入且不缩放', () => {
     const h = createFixture();
     h.state('full');
+    h.classContainer.classList.add('liquidGlass');
     assert.equal(h.frames.size, 0);
     h.state('mini');
     assert.equal(h.document.documentElement.classList.contains('toolbar-transition-running'), true);
-    assert.equal(token(h, 'main-opacity'), 1);
-    assert.equal(token(h, 'mini-opacity'), 0);
+    assert.equal(h.container.style['--toolbar-content-opacity'], 1);
+    assert.equal(h.miniCountdown.style['--toolbar-content-opacity'], 0);
+    const callsAtExit = h.history.length;
     h.step(70);
-    assert.equal(token(h, 'main-opacity'), 0);
+    assert.equal(h.container.style['--toolbar-content-opacity'], 0);
     assert.equal(h.reports.get('classContainer').rect.width, 500);
     h.step(150);
-    const midpoint = h.reports.get('classContainer').rect;
-    assert.ok(midpoint.width < 500 && midpoint.width > 180);
-    assert.ok(midpoint.x > 300 && midpoint.x < 460);
-    assert.equal(token(h, 'surface-width'), midpoint.width);
-    assert.equal(token(h, 'mini-opacity'), 0);
+    const midpointWidth = Number.parseFloat(h.surface.style.width);
+    assert.ok(midpointWidth < 500 && midpointWidth > 180);
+    assert.equal(h.history.length, callsAtExit);
+    assert.equal(h.reports.get('classContainer').rect.width, 500);
+    assert.deepEqual(h.reports.get('classContainer').presentation, { visible: false, durationMs: 70 });
+    assert.equal(h.miniCountdown.style['--toolbar-content-opacity'], 0);
     h.step(240);
     assert.equal(h.reports.get('miniCountdown').rect.width, 180);
     assert.deepEqual(h.reports.get('miniCountdown').presentation, { visible: true, durationMs: 60 });
     h.step(270);
-    assert.ok(token(h, 'mini-opacity') > 0 && token(h, 'mini-opacity') < 1);
+    assert.ok(h.miniCountdown.style['--toolbar-content-opacity'] > 0 && h.miniCountdown.style['--toolbar-content-opacity'] < 1);
     assert.equal(h.miniCountdown.style.transform, 'translateX(-50%)');
     h.step(300);
     assert.equal(h.transition.isRunning(), false);
@@ -120,13 +126,13 @@ test('每秒内容tick与重复设置不重播；快速反转从当前矩形继�
     h.state('full');
     h.state('mini');
     h.step(150);
-    const current = h.reports.get('classContainer').rect;
+    const current = h.surface.style.transform;
     const calls = h.history.length;
     h.state('mini');
     assert.equal(h.history.length, calls);
     assert.equal(h.frames.size, 1);
     h.state('full');
-    assert.deepEqual(h.reports.get('classContainer').rect, current);
+    assert.equal(h.surface.style.transform, current);
     assert.equal(h.frames.size, 1);
     h.step(450);
     assert.equal(h.container.classList.contains('toolbar-main-hidden'), false);
@@ -147,13 +153,12 @@ test('拖动后的mini先原位短退场，再在顶部展开，结束后才重�
     assert.equal(h.reports.get('miniCountdown').rect.x, 100);
     assert.equal(h.reports.get('miniCountdown').rect.y, 70);
     assert.deepEqual(h.reports.get('miniCountdown').presentation, { visible: false, durationMs: 70 });
-    assert.ok(token(h, 'surface-opacity') < 1);
+    assert.ok(h.surface.style.opacity < 1);
     assert.equal(h.miniCountdown.style.transform, 'translate3d(100px, 70px, 0)');
     h.step(70);
-    assert.equal(token(h, 'surface-opacity'), 0);
+    assert.equal(h.surface.style.opacity, 0);
     assert.equal(h.reports.get('classContainer').rect, null);
-    assert.equal(token(h, 'surface-x'), 460);
-    assert.equal(token(h, 'surface-y'), 8);
+    assert.equal(h.surface.style.transform, 'translate(460px, 8px)');
     h.step(300);
     assert.equal(h.miniCountdown.style.display, 'none');
     assert.equal(h.miniCountdown.style.transform, 'translateX(-50%)');
@@ -187,9 +192,8 @@ test('双向切换使用已启用的玻璃材质，不因目标尚未首帧就�
         h.state(to);
         for (const time of [0, 70, 150, 240, 270]) {
             h.step(time);
-            assert.equal(h.sheet().includes('var(--toolbar-original-background)'), false);
-            assert.equal(h.sheet().includes('var(--toolbar-mini-border)'), false);
-            assert.equal(h.sheet().includes('var(--color-mini-glass-tint)'), true);
+            assert.equal(h.surface.style.backgroundColor, 'var(--color-mini-glass-tint)');
+            assert.equal(h.surface.style.borderColor, 'var(--color-mini-glass-edge)');
         }
         h.transition.destroy();
     }
@@ -230,12 +234,12 @@ test('减少动态效果、避让中的切换及隐藏模式立即提交且不�
         h.state(reason === 'hidden' ? 'hidden' : 'mini');
         assert.equal(h.frames.size, 0);
         assert.equal(h.transition.isRunning(), false);
-        assert.equal(h.sheet(), '');
+        assert.equal(h.miniCountdown.style['--toolbar-content-opacity'], undefined);
         assert.equal(h.miniCountdown.style.display, reason === 'hidden' ? 'none' : 'block');
     }
 });
 
-test('卸载取消动画帧并移除surface与独立样式元素，后续状态更新无效', () => {
+test('卸载取消动画帧并移除过渡图层，后续状态更新无效', () => {
     const h = createFixture();
     h.state('full');
     h.state('mini');

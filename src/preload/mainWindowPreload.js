@@ -21,7 +21,6 @@ const RECEIVE_CHANNELS = new Set([
     'ClassCountdown',
     'ClassHidden',
     'mini-countdown-glass-state',
-    'mini-countdown-glass-performance',
     'toolbar-glass-state',
     'getDayOffset',
     'getSelectedChangingClass',

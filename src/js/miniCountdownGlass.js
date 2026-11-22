@@ -75,7 +75,7 @@
     }
 
     /** 尺寸或位置实际变化后才更新交互区，拖动结束时恢复完整同步。 */
-    function reportInteractiveRect(preserveGlass = false) {
+    function reportInteractiveRect() {
       if (destroyed) return;
       if (transitionSurface) {
         reportGlassRect(transitionSurface.rect, transitionSurface.presentation, true);
@@ -96,13 +96,8 @@
       lastRect = rect;
       lastGlassRect = visible ? rect : null;
       lastPresentation = undefined;
-      if (visible) {
-        if (preserveGlass) api.send('updateInteractiveRect', rect, true, true);
-        else api.send('updateInteractiveRect', rect);
-      } else {
-        if (preserveGlass) api.send('updateInteractiveRect', rect, false, true);
-        else api.send('updateInteractiveRect', rect, false);
-      }
+      if (visible) api.send('updateInteractiveRect', rect);
+      else api.send('updateInteractiveRect', rect, false);
     }
 
     /** 复用拖动帧已有的坐标与尺寸，避免为玻璃额外测量布局。 */
@@ -124,17 +119,14 @@
       else if (active) reportGlassRect(readRect());
     }
 
-    /** 过渡期间保留原生资源并暂停交互矩形写入，防止旧交互消息重置背景。 */
+    /** 过渡期间暂停交互矩形写入，收尾时销毁已退场的面板。 */
     function setTransitionSurface(surface) {
       if (destroyed) return;
       transitionSurface = surface;
       if (surface) reportInteractiveRect();
       else {
-        const rect = readRect();
-        // 模式切换结束后只隐藏面板并保留句柄，下一次进入 mini 可直接复用首帧资源。
-        // 页面真正隐藏或避让时，reportGlassRect 仍会发送空矩形并由主进程释放资源。
-        reportGlassRect(rect || lastRect, rect ? undefined : { visible: false, durationMs: 0 }, true);
-        reportInteractiveRect(!rect);
+        reportGlassRect(readRect(), undefined, true);
+        reportInteractiveRect();
       }
     }
 
@@ -154,7 +146,12 @@
       unsubscribe();
     }
 
-    return { reportInteractiveRect, reportDragPosition, setDragging, setTransitionSurface, destroy };
+    /** 只有已呈现的面板参与原位淡出。 */
+    function getReportedRect() {
+      return active ? lastGlassRect : null;
+    }
+
+    return { reportInteractiveRect, reportDragPosition, setDragging, setTransitionSurface, getReportedRect, destroy };
   }
 
   if (typeof module === 'object' && module.exports) {

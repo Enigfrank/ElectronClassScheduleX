@@ -201,7 +201,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         lastIgnoreMouseEvents = ignoreMouseEvents;
     });
 
-    ipcMain.on('updateInteractiveRect', (event, rect, glassVisible = true, preserveGlass = false) => {
+    ipcMain.on('updateInteractiveRect', (event, rect, glassVisible = true) => {
         const mainWindow = windowManager.getWindow('main');
         if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
 
@@ -209,9 +209,7 @@ function registerWindowIpc({ ipcMain, windowManager, screen, log }) {
         if (!mainWindow.isVisible()) rect = null;
         interactiveRect = rect;
         // 指针避让期间仍按原矩形处理交互，仅阻止不可见文字下的原生背景。
-        if (preserveGlass !== true) {
-            windowManager.updateMiniCountdownGlass?.(glassVisible === false ? null : rect);
-        }
+        windowManager.updateMiniCountdownGlass?.(glassVisible === false ? null : rect);
         windowManager.updateTouchDragOverlay?.(rect);
         if (rect) {
             if (!checkTimer) checkTimer = setInterval(checkMousePosition, 25);

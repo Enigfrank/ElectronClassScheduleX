@@ -341,19 +341,15 @@ class WindowManager {
         ], enabled);
     }
 
-    /** 返回当前设备性能档位，供主窗口调整玻璃动画更新频率。 */
+    /** 返回当前设备性能档位。 */
     getGlassPerformance() {
         return { ...this.glassPerformance };
     }
 
-    /** 保存并广播设备性能档位；样式模糊度由设置页面按当前样式单独提交。 */
+    /** 保存设备性能档位；样式模糊度由设置页面按当前样式单独提交。 */
     setGlassPerformance(value) {
         this.glassPerformance = normalizeGlassPerformance(value);
         this.configManager.set('glassPerformance', this.glassPerformance);
-        const main = this.windows.main;
-        if (main && !main.isDestroyed() && !main.webContents.isDestroyed()) {
-            main.webContents.send('mini-countdown-glass-performance', this.getGlassPerformance());
-        }
         return this.getGlassPerformance();
     }
 
@@ -418,18 +414,9 @@ class WindowManager {
     sendMiniCountdownGlassState(state) {
         const win = this.windows.main;
         if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-            this.sendMiniCountdownGlassPerformance();
             win.webContents.send('mini-countdown-glass-state', {
                 enabled: state.enabled, active: state.active, style: this.getMiniCountdownGlassStyle()
             });
-        }
-    }
-
-    /** 将设备性能档位发送给主课表 renderer。 */
-    sendMiniCountdownGlassPerformance() {
-        const win = this.windows.main;
-        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-            win.webContents.send('mini-countdown-glass-performance', this.getGlassPerformance());
         }
     }
 

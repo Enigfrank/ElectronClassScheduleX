@@ -110,16 +110,12 @@
     onSettled(state) {
       if (state.mode !== 'mini' && miniCountdownHasMoved) resetMiniCountdownPosition();
     } });
-  const unsubscribeGlassPerformance = ipcRenderer.on('mini-countdown-glass-performance', (_event, profile) => {
-    toolbarTransition.setPerformance(profile);
-  });
   window.addEventListener('beforeunload', cleanupToolbarInteraction, { once: true });
   window.addEventListener('pagehide', cleanupToolbarInteraction);
   document.addEventListener('visibilitychange', handleToolbarVisibilityChange);
   window.addEventListener('beforeunload', toolbarTransition.destroy, { once: true });
   window.addEventListener('beforeunload', miniCountdownGlass.destroy, { once: true });
   window.addEventListener('beforeunload', toolbarGlass.destroy, { once: true });
-  window.addEventListener('beforeunload', unsubscribeGlassPerformance, { once: true });
 
   /** 用文本节点构造课程、分隔线与高亮，避免将配置内容解释为 HTML。 */
   function setScheduleClass() {

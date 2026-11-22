@@ -18,6 +18,7 @@
     const active = new Set();
     const transitionSurfaces = new Map();
     const previousPresentations = new Map();
+    const root = container.ownerDocument.documentElement;
     let frame = null;
     let destroyed = false;
 
@@ -40,7 +41,7 @@
       if (destroyed) return;
       for (const [id, element] of Object.entries(elements)) {
         const surface = transitionSurfaces.get(id);
-        const avoided = container.ownerDocument.documentElement.style.opacity === '0';
+        const avoided = root.style.opacity === '0';
         const rect = surface ? (avoided ? null : surface.rect) : readRect(element);
         const presentation = rect ? surface?.presentation : undefined;
         const previous = previousPresentations.get(id);
@@ -69,9 +70,12 @@
       });
     }
 
-    /** 忽略玻璃外观和首帧标记，尺寸变化仍由 ResizeObserver 上报。 */
+    /** 忽略动画逐帧样式和玻璃标记，尺寸变化仍由 ResizeObserver 上报。 */
     function handleMutations(records) {
       const hasLayoutChange = records.some(record => {
+        if (record.target.id === 'toolbarTransitionSurface') return false;
+        if (record.attributeName === 'style' && root.classList.contains('toolbar-transition-running') &&
+          (record.target === container || record.target.id === 'miniCountdown')) return false;
         if (record.type === 'attributes' && record.attributeName === 'class') {
           const stripGlass = value => (value || '').split(/\s+/)
             .filter(name => name && name !== 'liquidGlass' && name !== 'liquidGlassEnabled').join(' ');
@@ -116,7 +120,12 @@
       scope.removeEventListener?.('resize', scheduleReport);
     }
 
-    return { reportRects, setTransitionSurface, destroy };
+    /** 淡出时复用已呈现的矩形，避免因课程文字刷新而重设面板尺寸。 */
+    function getReportedRect(id) {
+      return active.has(id) ? previousRects.get(id) : null;
+    }
+
+    return { reportRects, setTransitionSurface, getReportedRect, destroy };
   }
 
   if (typeof module === 'object' && module.exports) module.exports = { createToolbarGlass };
