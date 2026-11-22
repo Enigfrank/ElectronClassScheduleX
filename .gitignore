@@ -129,9 +129,13 @@ agent.md
 !/tests/toolbarTransition.test.js
 !/tests/glassTransition.test.js
 /docs
-/.agents
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/grill-me/
+!/.agents/skills/grilling/
+!/.agents/skills/MATT-POCOCK-LICENSE
 /.codex
-/.trellis
 AGENTS.md
 /.codegraph
 /plans
