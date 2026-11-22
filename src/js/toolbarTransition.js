@@ -2,7 +2,7 @@
   const DURATION_MS = 300;
   const EXIT_MS = 70;
   const ARRIVE_MS = 240;
-  const DEFAULT_GLASS_UPDATE_INTERVAL_MS = 33;
+  const TOOLBAR_GLASS_IDS = ['classContainer', 'countdownSidebar', 'countdowner'];
 
   /** 将阶段时间夹取到透明度和插值使用的范围。 */
   function clamp(value) { return Math.max(0, Math.min(1, value)); }
@@ -24,24 +24,17 @@
     getStyle = target => scope.getComputedStyle(target),
     reducedMotion = () => scope.matchMedia('(prefers-reduced-motion: reduce)').matches,
     requestFrame = callback => scope.requestAnimationFrame(callback),
-    cancelFrame = id => scope.cancelAnimationFrame(id), now = () => scope.performance.now(),
-    glassUpdateIntervalMs = DEFAULT_GLASS_UPDATE_INTERVAL_MS }) {
+    cancelFrame = id => scope.cancelAnimationFrame(id), now = () => scope.performance.now() }) {
     const document = container.ownerDocument;
     const root = document.documentElement;
     const surface = document.createElement('div');
     surface.id = 'toolbarTransitionSurface';
     surface.setAttribute('aria-hidden', 'true');
-    const sheet = document.createElement('style');
-    sheet.id = 'toolbar-transition-geometry';
     document.body.appendChild(surface);
-    document.head.appendChild(sheet);
     let state = null;
     let run = null;
     let visual = null;
     let frame = null;
-    let glassInterval = glassUpdateIntervalMs;
-    let lastGlassReportAt = -Infinity;
-    let lastGlassPhase = '';
     let destroyed = false;
 
     /** 读取相对 renderer 的 DIP 矩形，原生和 CSS 使用同一份快照。 */
@@ -63,7 +56,7 @@
 
     /** 清空临时几何覆盖后由 reporter 恢复稳定态，不留下空闲帧循环。 */
     function releaseSurfaces() {
-      for (const id of ['classContainer', 'countdownSidebar', 'countdowner']) {
+      for (const id of TOOLBAR_GLASS_IDS) {
         toolbarGlass.setTransitionSurface(id, null, false);
       }
       toolbarGlass.reportRects();
@@ -77,92 +70,102 @@
       run = null;
       visual = null;
       applyStable(state);
-      root.classList.remove('toolbar-transition-running');
-      sheet.textContent = '';
+      clearVisual();
       onSettled(state);
       releaseSurfaces();
     }
 
-    /** 按外观偏好选择材质，目标等待首帧时不混入原版黑底。 */
+    /** 清除动画专用透明度，回到 DOM 元素自身的材质和可见性。 */
+    function clearVisual() {
+      root.classList.remove('toolbar-transition-running');
+      container.style.removeProperty('--toolbar-content-opacity');
+      miniCountdown.style.removeProperty('--toolbar-content-opacity');
+    }
+
+    /** 按外观偏好选择材质，目标等待首帧时继续使用玻璃 tint。 */
     function appearance(element) {
       const glass = element.classList.contains('liquidGlassEnabled') || element.classList.contains('liquidGlass');
       const mini = element === miniCountdown;
       return {
         color: glass ? 'var(--color-mini-glass-tint)' : 'var(--toolbar-original-background)',
         border: glass ? 'var(--color-mini-glass-edge)' : mini ? 'var(--toolbar-mini-border)' : 'transparent',
-        width: glass || mini ? Number.parseFloat(getStyle(miniCountdown).borderTopWidth) || 0 : 0,
-        blur: glass ? 0 : Number.parseFloat(getStyle(root).getPropertyValue('--countdown-original-blur')) || 0
+        width: glass || mini ? Number.parseFloat(getStyle(element).borderTopWidth) || 0 : 0
       };
     }
 
-    /** 显式驱动原生几何与展示；旁路 reporter 不依赖 WAAPI 的观察器回调。 */
-    function reportSurfaces(rect, elapsed, force = false) {
-      const arrived = elapsed >= ARRIVE_MS;
-      const phase = `${arrived}:${state.mode}:${run.detour}`;
-      if (!force && phase === lastGlassPhase && elapsed - lastGlassReportAt < glassInterval) return;
-      lastGlassPhase = phase;
-      lastGlassReportAt = elapsed;
-      const destination = state.mode === 'mini' ? 'miniCountdown' : 'classContainer';
-      for (const id of ['miniCountdown', 'classContainer']) {
-        const visible = run.detour ? arrived && id === destination
-          : arrived ? id === destination : id === run.owner;
-        const durationMs = arrived ? DURATION_MS - ARRIVE_MS : run.detour ? EXIT_MS : 0;
-        const element = id === 'miniCountdown' ? miniCountdown : classContainer;
-        const override = { rect: visible || element.classList.contains('liquidGlass') ? rect : null,
-          presentation: { visible, durationMs } };
-        if (id === 'miniCountdown') miniCountdownGlass.setTransitionSurface(override);
-        else toolbarGlass.setTransitionSurface(id, override, false);
+    /** 已呈现的面板在原处淡出，并保留到新面板创建，避免中途重启共享捕获。 */
+    function getOutgoingSurfaces(previousMode) {
+      const ids = previousMode === 'mini' ? ['miniCountdown'] : TOOLBAR_GLASS_IDS;
+      const surfaces = {};
+      for (const id of ids) {
+        const rect = id === 'miniCountdown' ? miniCountdownGlass.getReportedRect() : toolbarGlass.getReportedRect(id);
+        if (rect) surfaces[id] = { rect, presentation: { visible: false, durationMs: EXIT_MS } };
       }
-      for (const [id, element] of [['countdownSidebar', countdownSidebar], ['countdowner', countdowner]]) {
-        const visible = arrived && state.mode === 'full' && (id !== 'countdowner' || state.showCountdown);
-        toolbarGlass.setTransitionSurface(id, {
-          rect: (!visible && !element.classList.contains('liquidGlass')) || element.style.display === 'none' ||
-            (id === 'countdowner' && countdownContainer.style.display === 'none') ? null : readRect(element),
-          presentation: { visible, durationMs: arrived ? DURATION_MS - ARRIVE_MS : EXIT_MS }
-        }, false);
+      return surfaces;
+    }
+
+    /** 只在阶段边界上报固定矩形，避免动画反复调整原生交换链的尺寸。 */
+    function reportSurfaces(arrived) {
+      const incoming = { visible: true, durationMs: DURATION_MS - ARRIVE_MS };
+      const hidden = { rect: null };
+      const full = arrived && state.mode === 'full';
+      const mini = arrived && state.mode === 'mini';
+      miniCountdownGlass.setTransitionSurface(mini ? { rect: run.to, presentation: incoming }
+        : run.outgoing.miniCountdown ?? hidden);
+      const incomingRects = full ? {
+        classContainer: run.to,
+        countdownSidebar: getStyle(countdownSidebar).display !== 'none' ? readRect(countdownSidebar) : null,
+        countdowner: state.showCountdown ? readRect(countdowner) : null
+      } : {};
+      for (const id of TOOLBAR_GLASS_IDS) {
+        const rect = incomingRects[id];
+        toolbarGlass.setTransitionSurface(id, rect ? { rect, presentation: incoming } : run.outgoing[id] ?? hidden, false);
       }
       toolbarGlass.reportRects();
     }
 
-    /** 将一次快照写入独立样式元素，运行时不写 inline 颜色、间距或字排。 */
+    /** 更新局部过渡图层，不重建样式表，也不在逐帧写入后同步读取布局。 */
     function render(timestamp) {
       const elapsed = Math.max(0, timestamp - run.started);
       const exit = clamp(elapsed / EXIT_MS);
       const morph = clamp((elapsed - EXIT_MS) / (ARRIVE_MS - EXIT_MS));
       const eased = 1 - Math.pow(1 - morph, 3);
       const enter = clamp((elapsed - ARRIVE_MS) / (DURATION_MS - ARRIVE_MS));
-      // 首帧握手可能给目标增加玻璃边框，终点使用最新布局而不重新启动时间轴。
-      run.to = readRect(state.mode === 'mini' ? miniCountdown : classContainer);
+      if (!run.arrived && elapsed >= ARRIVE_MS) {
+        const target = state.mode === 'mini' ? miniCountdown : classContainer;
+        run.to = readRect(target);
+        run.endAppearance = appearance(target);
+        run.arrived = true;
+        reportSurfaces(true);
+      }
       let from = run.from;
       let opacity = run.opacity + (1 - run.opacity) * morph;
       if (run.detour) {
         if (elapsed < EXIT_MS) opacity *= 1 - exit;
         else {
-          from = run.arrival;
+          from = { ...from, x: run.to.x + (run.to.width - from.width) / 2, y: run.to.y };
           opacity = morph;
         }
       }
       const rect = interpolateRect(from, run.to, eased);
       const mainOpacity = state.mode === 'full' ? enter : 0;
       const miniOpacity = state.mode === 'mini' ? enter : 0;
+      const start = run.startAppearance;
+      const end = run.endAppearance;
+      const mix = eased * 100;
+      const color = start.color === end.color ? end.color : `color-mix(in srgb, ${start.color} ${100 - mix}%, ${end.color})`;
+      const border = start.border === end.border ? end.border : `color-mix(in srgb, ${start.border} ${100 - mix}%, ${end.border})`;
       visual = { rect, opacity,
         mainOpacity: run.mainOpacity * (1 - exit) + mainOpacity,
-        miniOpacity: run.miniOpacity * (1 - exit) + miniOpacity };
-      const start = run.startAppearance;
-      const end = appearance(state.mode === 'mini' ? miniCountdown : classContainer);
-      const mix = eased * 100;
-      const color = `color-mix(in srgb, ${start.color} ${100 - mix}%, ${end.color})`;
-      const border = `color-mix(in srgb, ${start.border} ${100 - mix}%, ${end.border})`;
-      visual.appearance = { color, border, width: start.width + (end.width - start.width) * eased,
-        blur: start.blur + (end.blur - start.blur) * eased };
-      sheet.textContent = `:root { --toolbar-main-opacity: ${visual.mainOpacity}; --toolbar-mini-opacity: ${visual.miniOpacity}; }
-        #toolbarTransitionSurface { --toolbar-surface-x: ${rect.x}px; --toolbar-surface-y: ${rect.y}px;
-          --toolbar-surface-width: ${rect.width}px; --toolbar-surface-height: ${rect.height}px;
-          --toolbar-surface-radius: ${rect.cornerRadius}px; --toolbar-surface-opacity: ${opacity};
-          --toolbar-surface-color: ${color}; --toolbar-surface-border-color: ${border};
-          --toolbar-surface-border-width: ${visual.appearance.width}px;
-          --toolbar-surface-blur: ${visual.appearance.blur}px; }`;
-      reportSurfaces(rect, elapsed);
+        miniOpacity: run.miniOpacity * (1 - exit) + miniOpacity,
+        appearance: { color, border, width: start.width + (end.width - start.width) * eased } };
+      container.style.setProperty('--toolbar-content-opacity', visual.mainOpacity);
+      miniCountdown.style.setProperty('--toolbar-content-opacity', visual.miniOpacity);
+      Object.assign(surface.style, {
+        transform: `translate(${rect.x}px, ${rect.y}px)`,
+        width: `${rect.width}px`, height: `${rect.height}px`, borderRadius: `${rect.cornerRadius}px`,
+        opacity, backgroundColor: color, borderColor: border, borderWidth: `${visual.appearance.width}px`
+      });
       if (elapsed >= DURATION_MS) settle();
       else frame = requestFrame(render);
     }
@@ -176,7 +179,7 @@
         if (!run) applyStable(next);
         else {
           countdownContainer.style.display = next.showCountdown ? 'block' : 'none';
-          reportSurfaces(visual.rect, Math.max(0, now() - run.started), true);
+          if (run.arrived) reportSurfaces(true);
         }
         return;
       }
@@ -189,11 +192,9 @@
       }
       if (frame !== null) cancelFrame(frame);
       frame = null;
-      lastGlassReportAt = -Infinity;
-      lastGlassPhase = '';
       const source = previous.mode === 'mini' ? miniCountdown : classContainer;
       const from = visual?.rect || readRect(source);
-      const owner = run?.owner || (previous.mode === 'mini' ? 'miniCountdown' : 'classContainer');
+      const outgoing = run ? {} : getOutgoingSurfaces(previous.mode);
       const startAppearance = visual?.appearance || appearance(source);
       container.classList.remove('toolbar-main-hidden');
       miniCountdown.style.display = 'block';
@@ -202,12 +203,12 @@
       const target = next.mode === 'mini' ? miniCountdown : classContainer;
       const to = readRect(target);
       const detour = next.mode === 'full' && next.moved;
-      run = { started: now(), owner, from, to, detour, startAppearance,
+      run = { started: now(), outgoing, from, to, detour, startAppearance, endAppearance: appearance(target),
         opacity: visual?.opacity ?? 1,
         mainOpacity: visual?.mainOpacity ?? (previous.mode === 'full' ? 1 : 0),
-        miniOpacity: visual?.miniOpacity ?? (previous.mode === 'mini' ? 1 : 0),
-        arrival: { ...from, x: to.x + (to.width - from.width) / 2, y: to.y } };
+        miniOpacity: visual?.miniOpacity ?? (previous.mode === 'mini' ? 1 : 0), arrived: false };
       root.classList.add('toolbar-transition-running');
+      reportSurfaces(false);
       render(run.started);
     }
 
@@ -222,19 +223,11 @@
       }
       run = null;
       destroyed = true;
-      root.classList.remove('toolbar-transition-running');
-      sheet.remove();
+      clearVisual();
       surface.remove();
     }
 
-    /** 应用设备性能测试结果，降低慢设备上的原生玻璃更新频率。 */
-    function setPerformance(profile) {
-      if (Number.isFinite(profile?.transitionFrameIntervalMs)) {
-        glassInterval = Math.min(100, Math.max(16, Math.round(profile.transitionFrameIntervalMs)));
-      }
-    }
-
-    return { setState, setPerformance, isRunning: () => run !== null, destroy };
+    return { setState, isRunning: () => run !== null, destroy };
   }
 
   if (typeof module === 'object' && module.exports) module.exports = { createToolbarTransition };

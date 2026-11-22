@@ -408,7 +408,7 @@ test('mini过渡覆盖保留presentation并去重，避让立即发送null且恢
     h.sync.destroy();
 });
 
-test('mini从全屏模式退场时隐藏并保留原生矩形，下一次进入无需重新创建面板', () => {
+test('mini退场时清空原生矩形，再进场时提交新面板的矩形', () => {
     const h = createFixture();
     h.element.style.display = 'block';
     h.sync.reportInteractiveRect();
@@ -419,7 +419,7 @@ test('mini从全屏模式退场时隐藏并保留原生矩形，下一次进入�
     h.element.style.display = 'none';
     h.sync.setTransitionSurface(null);
     assert.deepEqual(h.messages.findLast(message => message.channel === 'mini-countdown-glass-rect'), {
-        channel: 'mini-countdown-glass-rect', value: rect, args: [{ visible: false, durationMs: 0 }]
+        channel: 'mini-countdown-glass-rect', value: null
     });
     h.element.style.display = 'block';
     h.sync.setTransitionSurface({ rect, presentation: { visible: true, durationMs: 60 } });
@@ -429,7 +429,7 @@ test('mini从全屏模式退场时隐藏并保留原生矩形，下一次进入�
     h.sync.destroy();
 });
 
-test('形态切换先结束拖动并取消排队帧，动画期间锁定手势，退场后不重建玻璃', () => {
+test('形态切换先结束拖动并取消排队帧，动画期间锁定手势', () => {
     const fixture = createPageFixture();
     fixture.page.startMiniCountdownDrag(1, 100, 8);
     fixture.page.updateMiniCountdownDragPosition(140, 20);
@@ -710,7 +710,7 @@ test('多次内容和尺寸变化合并一帧，上报新位置，卸载取消�
     h.elements.countdowner.bounds.x = 240;
     h.resize();
     h.resize();
-    h.mutate([{ type: 'childList' }]);
+    h.mutate([{ type: 'childList', target: h.elements.classContainer }]);
     h.flush();
     assert.equal(h.counts.measurements, baseline + 4);
     assert.equal(h.messages.length, 5);

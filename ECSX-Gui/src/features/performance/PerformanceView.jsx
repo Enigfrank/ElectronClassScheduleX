@@ -85,7 +85,7 @@ export default function PerformanceView({ ipcRenderer }) {
   return (
     <Box>
       <Heading as="h2" size="md" mb={2}>设备性能测试</Heading>
-      <Text color="gray.500" mb={5}>测试当前设备的动画帧率，并自动调整液态玻璃切换频率和模糊度。</Text>
+      <Text color="gray.500" mb={5}>测试当前设备的动画帧率，并自动调整液态玻璃模糊度。</Text>
       <Card>
         <CardBody>
           <Flex align="center" gap={3} mb={4}>
